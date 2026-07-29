@@ -1,7 +1,7 @@
 import Navbar from "./components/Navbar";
 import Hero from "./components/Hero";
-import TransportModes from "./components/TransportModes";
 import RouteSelection from "./components/RouteSelection";
+import TransportModes from "./components/TransportModes";
 import CargoClass from "./components/CargoClass";
 import ShipmentForm from "./components/ShipmentForm";
 import QuoteResult from "./components/QuoteResult";
@@ -14,8 +14,8 @@ function App() {
     <>
       <Navbar />
       <Hero />
-      <TransportModes />
       <RouteSelection />
+      <TransportModes />
       <CargoClass />
       <ShipmentForm />
       <QuoteResult />

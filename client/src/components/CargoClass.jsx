@@ -1,57 +1,39 @@
 function CargoClass() {
   return (
-    <section className="py-16 bg-gray-100">
-      <div className="max-w-7xl mx-auto px-6">
+    <section className="py-12 bg-white">
+      <div className="max-w-6xl mx-auto px-6">
 
-        <h2 className="text-3xl font-bold text-center mb-10">
+        <h2 className="text-3xl font-bold text-center mb-8">
           Cargo Handling Class
         </h2>
 
-        <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className="grid md:grid-cols-4 gap-5">
 
-          <div className="bg-white p-6 rounded-xl shadow-lg">
-            <h3 className="text-xl font-bold">📦 General Cargo</h3>
-            <p className="mt-2 text-gray-600">
-              Standard dry goods & electronics
-            </p>
-            <p className="mt-3 font-semibold text-blue-700">
-              1.0x Base
+          <div className="bg-white border rounded-xl p-4 shadow-md text-center hover:shadow-xl transition">
+            <h3 className="font-bold">📦 General</h3>
+            <p className="text-sm text-gray-600 mt-2">
+              Standard Cargo
             </p>
           </div>
 
-          <div className="bg-blue-700 text-white p-6 rounded-xl shadow-lg">
-            <h3 className="text-xl font-bold">
-              💎 Express Fragile
-            </h3>
-            <p className="mt-2">
-              Glass, High-Tech & Textiles
-            </p>
-            <p className="mt-3 font-semibold">
-              1.3x Risk (Selected)
+          <div className="bg-black text-white rounded-xl p-4 shadow-md text-center hover:shadow-xl transition">
+            <h3 className="font-bold">💎 Fragile</h3>
+            <p className="text-sm mt-2">
+              Glass & Electronics
             </p>
           </div>
 
-          <div className="bg-white p-6 rounded-xl shadow-lg">
-            <h3 className="text-xl font-bold">
-              ❄ Cold Chain
-            </h3>
-            <p className="mt-2 text-gray-600">
-              Pharma & Fresh Produce
-            </p>
-            <p className="mt-3 font-semibold text-blue-700">
-              1.4x Climate
+          <div className="bg-white border rounded-xl p-4 shadow-md text-center hover:shadow-xl transition">
+            <h3 className="font-bold">❄ Cold Chain</h3>
+            <p className="text-sm text-gray-600 mt-2">
+              Pharma & Food
             </p>
           </div>
 
-          <div className="bg-white p-6 rounded-xl shadow-lg">
-            <h3 className="text-xl font-bold">
-              ☣ Hazardous
-            </h3>
-            <p className="mt-2 text-gray-600">
-              Batteries & Chemicals
-            </p>
-            <p className="mt-3 font-semibold text-blue-700">
-              1.6x Hazmat
+          <div className="bg-white border rounded-xl p-4 shadow-md text-center hover:shadow-xl transition">
+            <h3 className="font-bold">☣ Hazardous</h3>
+            <p className="text-sm text-gray-600 mt-2">
+              Chemicals
             </p>
           </div>
 

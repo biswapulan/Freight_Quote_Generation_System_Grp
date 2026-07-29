@@ -1,19 +1,33 @@
 function CustomerPortal() {
   return (
-    <section className="py-16">
-      <div className="max-w-5xl mx-auto text-center">
+    <section className="py-12 bg-gray-100">
+      <div className="max-w-6xl mx-auto px-6">
 
-        <h2 className="text-3xl font-bold">
+        <h2 className="text-3xl font-bold text-center mb-8">
           Customer Portal
         </h2>
 
-        <p className="mt-5 text-gray-600">
-          Login to track shipments, generate quotes and manage bookings.
-        </p>
+        <div className="grid md:grid-cols-3 gap-6">
 
-        <button className="mt-8 bg-blue-700 text-white px-8 py-3 rounded-lg">
-          Login Portal
-        </button>
+          <div className="bg-white rounded-xl shadow-lg p-6 text-center">
+            <h3 className="font-bold">🏢 Main Branch</h3>
+          </div>
+
+          <div className="bg-white rounded-xl shadow-lg p-6 text-center">
+            <h3 className="font-bold">🌍 Other Branches</h3>
+          </div>
+
+          <div className="bg-white rounded-xl shadow-lg p-6 text-center">
+            <h3 className="font-bold">👥 Team</h3>
+          </div>
+
+        </div>
+
+        <div className="text-center mt-8">
+          <button className="bg-black text-white px-8 py-3 rounded-lg">
+            Login Portal
+          </button>
+        </div>
 
       </div>
     </section>

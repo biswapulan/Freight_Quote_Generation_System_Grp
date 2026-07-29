@@ -1,14 +1,14 @@
 function Footer() {
   return (
-    <footer className="bg-blue-900 text-white py-8">
+    <footer className="bg-black text-white py-8">
       <div className="text-center">
 
-        <h2 className="text-xl font-bold">
-          AERO-FREIGHT AI
+        <h2 className="text-2xl font-bold text-orange-500">
+          Intelligent Logistics Management System
         </h2>
 
-        <p className="mt-3">
-          © 2026 Intelligent Freight Quote Generation System
+        <p className="mt-3 text-gray-400">
+          © 2026 Intelligent Logistics Management System
         </p>
 
       </div>
