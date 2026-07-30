@@ -1,40 +1,185 @@
-function Hero() {
-  return (
-    <section className="bg-black text-white py-20">
-      <div className="max-w-7xl mx-auto px-6 flex flex-col md:flex-row items-center justify-between">
+import React from "react";
+import "./Hero.css";
+import freight from "../assets/freight.png";
+import { FaArrowRight, FaPlane, FaShip, FaTruck, FaTrain } from "react-icons/fa";
 
-        <div className="md:w-1/2">
-          <p className="text-orange-500 font-semibold uppercase">
-            AI Powered Enterprise Logistics Platform
+function Hero() {
+
+  return (
+
+    <section
+      className="hero"
+      style={{
+        backgroundImage: `url(${freight})`
+      }}
+    >
+
+      <div className="hero-overlay"></div>
+
+
+      <div className="hero-container">
+
+
+        <div className="hero-left">
+
+
+          <p className="hero-tag">
+            AI POWERED ENTERPRISE LOGISTICS PLATFORM
           </p>
 
-          <h1 className="text-4xl font-bold mt-3 leading-tight">
-            Intelligent Logistics
-            <br />
-            Management System
+
+          <h1>
+            Intelligent Freight
+            <br/>
+            Quote Generation
+            <br/>
+            System
           </h1>
 
-          <p className="mt-5 text-gray-300">
-            Smart freight management solution for fast and reliable cargo
-            transportation.
+
+          <p className="hero-description">
+
+            Transform your logistics operations with
+            AI-powered freight quotation, shipment tracking,
+            and smart supply chain management for global businesses.
+
           </p>
 
-          <button className="mt-8 bg-orange-500 hover:bg-orange-600 px-8 py-3 rounded-lg">
-            Generate Quotation
-          </button>
+
+
+          <div className="hero-buttons">
+
+            <button className="primary-btn">
+              Get Started
+            </button>
+
+
+            <button className="secondary-btn">
+
+              Get Quote
+              <FaArrowRight/>
+
+            </button>
+
+
+          </div>
+
+
+
+          <div className="transport-icons">
+
+
+            <div>
+              <FaPlane/>
+              <span>Air</span>
+            </div>
+
+
+            <div>
+              <FaShip/>
+              <span>Ocean</span>
+            </div>
+
+
+            <div>
+              <FaTruck/>
+              <span>Road</span>
+            </div>
+
+
+            <div>
+              <FaTrain/>
+              <span>Rail</span>
+            </div>
+
+
+          </div>
+
+
         </div>
 
-        <div className="md:w-1/2 flex justify-center mt-10 md:mt-0">
-          <img
-            src="https://images.unsplash.com/photo-1578575437130-527eed3abbec?w=800"
-            alt="Cargo"
-            className="rounded-xl shadow-2xl w-full max-w-lg"
-          />
+
+
+
+        <div className="hero-card">
+
+
+          <h3>
+            Instant Freight Quote
+          </h3>
+
+
+          <p>
+            Generate AI based pricing instantly
+          </p>
+
+
+          <div className="quote-item">
+            <span>Origin</span>
+            <b>New York</b>
+          </div>
+
+
+          <div className="quote-item">
+            <span>Destination</span>
+            <b>London</b>
+          </div>
+
+
+          <div className="quote-item">
+            <span>Delivery</span>
+            <b>Express</b>
+          </div>
+
+
+
+          <button className="generate-btn">
+            Generate Quote
+          </button>
+
+
         </div>
+
 
       </div>
+
+
+
+
+      <div className="hero-stats">
+
+
+        <div>
+          <h2>10K+</h2>
+          <p>Shipments</p>
+        </div>
+
+
+        <div>
+          <h2>120+</h2>
+          <p>Countries</p>
+        </div>
+
+
+        <div>
+          <h2>99.8%</h2>
+          <p>Success Rate</p>
+        </div>
+
+
+        <div>
+          <h2>24/7</h2>
+          <p>Support</p>
+        </div>
+
+
+      </div>
+
+
     </section>
-  );
+
+  )
+
 }
 
 export default Hero;

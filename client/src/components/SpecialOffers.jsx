@@ -1,55 +1,178 @@
-function SpecialOffers() {
-  return (
-    <section className="py-12 bg-white">
-      <div className="max-w-7xl mx-auto px-6">
+import React from "react";
+import "./SpecialOffers.css";
 
-        <h2 className="text-3xl font-bold text-center mb-8">
-          Special Offers
-        </h2>
+import {
+  FaBolt,
+  FaGlobe,
+  FaDollarSign
+} from "react-icons/fa";
 
-        <div className="grid md:grid-cols-3 gap-6">
 
-          <div className="bg-white rounded-xl shadow-lg overflow-hidden">
-            <img
-              src="https://images.unsplash.com/photo-1436491865332-7a61a109cc05?w=800"
-              alt="Air Cargo"
-              className="w-full h-48 object-cover"
-            />
-            <div className="p-5">
-              <h3 className="font-bold">✈ Air Cargo</h3>
-              <p>20% Discount on Express Shipping</p>
-            </div>
-          </div>
+function SpecialOffers(){
 
-          <div className="bg-white rounded-xl shadow-lg overflow-hidden">
-            <img
-              src="https://images.unsplash.com/photo-1500375592092-40eb2168fd21?w=800"
-              alt="Ocean Freight"
-              className="w-full h-48 object-cover"
-            />
-            <div className="p-5">
-              <h3 className="font-bold">🚢 Ocean Freight</h3>
-              <p>Free Insurance Available</p>
-            </div>
-          </div>
+return(
 
-          <div className="bg-white rounded-xl shadow-lg overflow-hidden">
-            <img
-              src="https://images.unsplash.com/photo-1519003722824-194d4455a60c?w=800"
-              alt="Road Transport"
-              className="w-full h-48 object-cover"
-            />
-            <div className="p-5">
-              <h3 className="font-bold">🚛 Road Express</h3>
-              <p>Free Pickup Service</p>
-            </div>
-          </div>
+<section className="offers-section">
 
-        </div>
 
-      </div>
-    </section>
-  );
+<div className="offers-header">
+
+<p>
+SPECIAL OFFERS
+</p>
+
+<h2>
+Exclusive Logistics Benefits
+</h2>
+
+<span>
+Save time and cost with our intelligent freight solutions.
+</span>
+
+</div>
+
+
+
+
+<div className="offers-container">
+
+
+
+<div className="offer-card">
+
+
+<div className="offer-icon">
+
+<FaBolt/>
+
+</div>
+
+
+<h3>
+Fast Delivery
+</h3>
+
+
+<p>
+Priority shipment handling with
+optimized delivery routes.
+</p>
+
+
+<h4>
+Up to 40% Faster
+</h4>
+
+
+</div>
+
+
+
+
+
+
+<div className="offer-card">
+
+
+<div className="offer-icon">
+
+<FaGlobe/>
+
+</div>
+
+
+<h3>
+Global Coverage
+</h3>
+
+
+<p>
+Connect your business with
+international logistics networks.
+</p>
+
+
+<h4>
+120+ Countries
+</h4>
+
+
+</div>
+
+
+
+
+
+
+
+<div className="offer-card">
+
+
+<div className="offer-icon">
+
+<FaDollarSign/>
+
+</div>
+
+
+<h3>
+Cost Optimization
+</h3>
+
+
+<p>
+AI based pricing helps reduce
+unnecessary transportation costs.
+</p>
+
+
+<h4>
+Smart Pricing
+</h4>
+
+
+</div>
+
+
+
+
+</div>
+
+
+
+
+<div className="offer-banner">
+
+
+<div>
+
+<h2>
+Ready to Optimize Your Shipment?
+</h2>
+
+
+<p>
+Generate your AI-powered freight quote today.
+</p>
+
+</div>
+
+
+
+<button>
+Get Started →
+</button>
+
+
+</div>
+
+
+
+</section>
+
+)
+
 }
+
 
 export default SpecialOffers;

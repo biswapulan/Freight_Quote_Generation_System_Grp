@@ -1,61 +1,103 @@
-function ShipmentForm() {
+import { useState } from "react";
+import {
+  FaPlane,
+  FaShip,
+  FaTruck,
+  FaTrain,
+} from "react-icons/fa";
+
+export default function ShipmentForm() {
+  const [mode, setMode] = useState("Air");
+
+  const transportModes = [
+    { name: "Air", icon: <FaPlane /> },
+    { name: "Ocean", icon: <FaShip /> },
+    { name: "Road", icon: <FaTruck /> },
+    { name: "Rail", icon: <FaTrain /> },
+  ];
+
   return (
-    <section className="py-12 bg-gray-100">
-      <div className="max-w-5xl mx-auto px-6">
+    <section className="bg-gray-100 py-16 -mt-20 relative z-20">
+      <div className="max-w-7xl mx-auto px-6">
 
-        <h2 className="text-3xl font-bold text-center mb-8">
-          Shipment Details
-        </h2>
+        <div className="bg-[#0B1E3F] rounded-3xl shadow-2xl p-10">
 
-        <div className="bg-white rounded-xl shadow-lg p-8">
+          <h2 className="text-3xl text-white font-bold mb-8">
+            Get Instant Freight Quote
+          </h2>
 
-          <div className="grid md:grid-cols-2 gap-6">
+          {/* Transport Tabs */}
 
-            {/* Weight */}
-            <div>
-              <label className="font-semibold">
-                Weight
-              </label>
+          <div className="flex flex-wrap gap-4 mb-8">
 
-              <input
-                type="number"
-                placeholder="Enter Weight"
-                className="w-full mt-2 border rounded-lg p-3"
-              />
-            </div>
+            {transportModes.map((item) => (
 
-            {/* Quantity */}
-            <div>
-              <label className="font-semibold">
-                Quantity
-              </label>
+              <button
+                key={item.name}
+                onClick={() => setMode(item.name)}
+                className={`flex items-center gap-2 px-6 py-3 rounded-xl transition ${
+                  mode === item.name
+                    ? "bg-orange-500 text-white"
+                    : "bg-white text-gray-700"
+                }`}
+              >
+                {item.icon}
+                {item.name}
+              </button>
 
-              <input
-                type="number"
-                placeholder="Enter Quantity"
-                className="w-full mt-2 border rounded-lg p-3"
-              />
-            </div>
-
-            {/* Kilo Quantity */}
-            <div className="md:col-span-2">
-              <label className="font-semibold">
-                Kilo Quantity (kg)
-              </label>
-
-              <input
-                type="number"
-                placeholder="Enter Kilo Quantity"
-                className="w-full mt-2 border rounded-lg p-3"
-              />
-            </div>
+            ))}
 
           </div>
 
-          <div className="text-center mt-8">
-            <button className="bg-black hover:bg-gray-800 text-white px-8 py-3 rounded-lg">
-              Generate Quotation
+          {/* Form */}
+
+          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
+
+            <input
+              type="text"
+              placeholder="Origin"
+              className="p-4 rounded-xl outline-none"
+            />
+
+            <input
+              type="text"
+              placeholder="Destination"
+              className="p-4 rounded-xl outline-none"
+            />
+
+            <select className="p-4 rounded-xl outline-none">
+              <option>General Cargo</option>
+              <option>Express Cargo</option>
+              <option>Cold Chain</option>
+              <option>Hazardous Cargo</option>
+            </select>
+
+            <input
+              type="number"
+              placeholder="Weight (KG)"
+              className="p-4 rounded-xl outline-none"
+            />
+
+            <input
+              type="number"
+              placeholder="Quantity"
+              className="p-4 rounded-xl outline-none"
+            />
+
+            <input
+              type="date"
+              className="p-4 rounded-xl outline-none"
+            />
+
+            <select className="p-4 rounded-xl outline-none">
+              <option>Standard Delivery</option>
+              <option>Express Delivery</option>
+            </select>
+
+            <button className="bg-orange-500 hover:bg-orange-600 text-white rounded-xl font-bold text-lg">
+              Generate Quote
             </button>
+
           </div>
 
         </div>
@@ -64,5 +106,3 @@ function ShipmentForm() {
     </section>
   );
 }
-
-export default ShipmentForm;
