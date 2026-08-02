@@ -56,6 +56,15 @@ font-size: 16px;
 line-height: 1.6;
 }
 
+.team-message {
+background: white;
+color: #0c2140;
+border-radius: 8px;
+padding: 14px 16px;
+margin-top: 14px;
+font-weight: 600;
+}
+
 .dashboard-logout {
 background: #ff9800;
 border: none;

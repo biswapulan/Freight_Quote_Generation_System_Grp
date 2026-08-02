@@ -35,6 +35,7 @@ return (
 <p className="dashboard-kicker">Account dashboard</p>
 <h1>Welcome, {user.fullName}</h1>
 <p>This is your dashboard.</p>
+<p className="team-message">hey team start building form here. Authentication done.</p>
 </div>
 
 <button type="button" className="dashboard-logout" onClick={handleLogout}>

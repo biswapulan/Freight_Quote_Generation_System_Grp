@@ -332,6 +332,12 @@ font-size: 14.5px;
 
 width: 100%;
 
+display: flex;
+
+align-items: center;
+
+justify-content: center;
+
 background: #ff9800;
 
 border: none;
@@ -363,6 +369,12 @@ transform: translateY(-1px);
 .secondary-btn {
 
 flex: 1;
+
+display: flex;
+
+align-items: center;
+
+justify-content: center;
 
 background: transparent;
 
