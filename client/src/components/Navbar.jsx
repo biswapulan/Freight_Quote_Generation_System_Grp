@@ -33,6 +33,10 @@ Freight<span>AI</span>
 
 <li><a href="#">Contact</a></li>
 
+<li className="mobile-login-item">
+<Link to="/login" className="mobile-login-link">Login</Link>
+</li>
+
 </ul>
 
 <div className="nav-right">
