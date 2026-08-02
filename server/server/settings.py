@@ -13,6 +13,12 @@ https://docs.djangoproject.com/en/6.0/ref/settings/
 from decouple import config
 from pathlib import Path
 
+
+def csv_config(name, default=''):
+    """Read a comma-separated env var into a clean list."""
+    return [item.strip() for item in config(name, default=default).split(',') if item.strip()]
+
+
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -26,7 +32,7 @@ SECRET_KEY = config('SECRET_KEY')
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = config('DEBUG', default=False, cast=bool)
 
-ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='').split(',')
+ALLOWED_HOSTS = csv_config('ALLOWED_HOSTS')
 
 
 # Application definition
@@ -130,10 +136,14 @@ MONGO_URI = config('MONGO_URI')
 MONGO_DB_NAME = config('MONGO_DB_NAME')
 
 # Allow the local React/Vite dev server to call this API.
-CORS_ALLOWED_ORIGINS = config(
+CORS_ALLOWED_ORIGINS = csv_config(
     'CORS_ALLOWED_ORIGINS',
-    default='http://localhost:5173'
-).split(',')
+    default='http://localhost:5173',
+)
+
+CSRF_TRUSTED_ORIGINS = csv_config('CSRF_TRUSTED_ORIGINS')
+
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 
 # DRF uses our stateless Mongo-backed JWT auth instead of Django's User model.
 REST_FRAMEWORK = {

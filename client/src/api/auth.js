@@ -1,9 +1,13 @@
 // client/src/api/auth.js
 
-const BASE_URL = "https://freight-quote-generation-system-grp.onrender.com/api/auth";
+const API_BASE_URL =
+  import.meta.env.VITE_API_BASE_URL ||
+  "https://freight-quote-generation-system-grp.onrender.com/api";
+
+const AUTH_URL = `${API_BASE_URL.replace(/\/$/, "")}/auth`;
 
 async function request(endpoint, data) {
-  const res = await fetch(`${BASE_URL}${endpoint}`, {
+  const res = await fetch(`${AUTH_URL}${endpoint}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data),
