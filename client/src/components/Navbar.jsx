@@ -1,5 +1,6 @@
 import "./Navbar.css";
 import React, { useState } from "react";
+import { Link } from "react-router-dom";
 import { FaBars, FaTimes, FaShip } from "react-icons/fa";
 
 function Navbar() {
@@ -10,7 +11,7 @@ return(
 
 <nav className="navbar">
 
-<div className="logo">
+<Link to="/" className="logo">
 
 <FaShip className="ship"/>
 
@@ -18,7 +19,7 @@ return(
 Freight<span>AI</span>
 </h2>
 
-</div>
+</Link>
 
 <ul className={menu?"nav-links active":"nav-links"}>
 
@@ -44,11 +45,15 @@ Freight<span>AI</span>
 
 </select>
 
+<Link to="/login">
+
 <button>
 
 Login
 
 </button>
+
+</Link>
 
 </div>
 

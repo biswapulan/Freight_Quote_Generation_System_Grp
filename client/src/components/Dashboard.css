@@ -1,0 +1,85 @@
+.dashboard-page {
+min-height: 100vh;
+display: flex;
+align-items: center;
+justify-content: center;
+padding: 40px 20px;
+background: linear-gradient(160deg, #03102b 0%, #08162d 45%, #0c2140 100%);
+color: white;
+}
+
+.dashboard-panel {
+width: 100%;
+max-width: 720px;
+padding: 42px 40px;
+border: 1px solid rgba(255, 255, 255, 0.1);
+border-radius: 18px;
+background: rgba(255, 255, 255, 0.03);
+box-shadow: 0 25px 60px rgba(0, 0, 0, 0.45);
+}
+
+.dashboard-brand {
+display: flex;
+align-items: center;
+gap: 12px;
+margin-bottom: 42px;
+font-size: 24px;
+font-weight: 700;
+}
+
+.dashboard-ship {
+color: #ff9800;
+font-size: 28px;
+}
+
+.dashboard-content {
+margin-bottom: 34px;
+}
+
+.dashboard-kicker {
+margin-bottom: 10px;
+color: #ff9800;
+font-size: 13px;
+font-weight: 700;
+text-transform: uppercase;
+}
+
+.dashboard-content h1 {
+margin-bottom: 10px;
+font-size: 34px;
+font-weight: 700;
+}
+
+.dashboard-content p {
+color: rgba(255, 255, 255, 0.66);
+font-size: 16px;
+line-height: 1.6;
+}
+
+.dashboard-logout {
+background: #ff9800;
+border: none;
+border-radius: 10px;
+color: white;
+cursor: pointer;
+font-size: 15.5px;
+font-weight: 700;
+padding: 14px 24px;
+transition: 0.25s;
+}
+
+.dashboard-logout:hover {
+background: #ffb020;
+transform: translateY(-1px);
+}
+
+@media (max-width: 560px) {
+.dashboard-panel {
+padding: 32px 22px;
+border-radius: 14px;
+}
+
+.dashboard-content h1 {
+font-size: 26px;
+}
+}
