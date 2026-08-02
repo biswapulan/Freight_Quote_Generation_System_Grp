@@ -1,6 +1,6 @@
 // client/src/api/auth.js
 
-const BASE_URL = "http://127.0.0.1:8000/api/auth";
+const BASE_URL = "https://freight-quote-generation-system-grp.onrender.com/api/auth";
 
 async function request(endpoint, data) {
   const res = await fetch(`${BASE_URL}${endpoint}`, {
