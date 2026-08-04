@@ -10,6 +10,9 @@ from .mongo import users_collection
 from .tokens import decode_token
 
 
+class MongoUser(dict):
+    is_authenticated = True
+
 class MongoJWTAuthentication(BaseAuthentication):
     """Authenticate requests by loading the Mongo user referenced by a JWT."""
 
@@ -42,4 +45,4 @@ class MongoJWTAuthentication(BaseAuthentication):
             raise AuthenticationFailed('User not found')
 
         user.pop('password', None)
-        return (user, token)
+        return (MongoUser(user), token)
