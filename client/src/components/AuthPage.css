@@ -366,6 +366,24 @@ transform: translateY(-1px);
 
 }
 
+.button-loader {
+
+margin-right: 8px;
+
+animation: button-spin 0.75s linear infinite;
+
+}
+
+@keyframes button-spin {
+
+to {
+
+transform: rotate(360deg);
+
+}
+
+}
+
 .secondary-btn {
 
 flex: 1;

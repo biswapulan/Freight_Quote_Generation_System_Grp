@@ -1,7 +1,7 @@
 import "./AuthPage.css";
 import React, { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { FaShip, FaEye, FaEyeSlash, FaCheck, FaEnvelope, FaLock, FaUser, FaArrowLeft } from "react-icons/fa";
+import { FaShip, FaEye, FaEyeSlash, FaCheck, FaEnvelope, FaLock, FaUser, FaArrowLeft, FaSpinner } from "react-icons/fa";
 import { login as loginRequest, signup, forgotPassword } from "../api/auth";
 import { useAuth } from "../context/AuthContext";
 
@@ -193,8 +193,8 @@ Forgot password?
 </button>
 </div>
 
-<button type="submit" className="primary-btn" disabled={loading}>
-{loading ? "Please wait..." : "Log In"}
+<button type="submit" className="primary-btn" disabled={loading} aria-busy={loading}>
+{loading ? <><FaSpinner className="button-loader" /> Logging in...</> : "Log In"}
 </button>
 
 </form>
@@ -239,8 +239,8 @@ onChange={(e) => setForgotEmail(e.target.value)}
 
 {errorMsg && <p className="error-text">{errorMsg}</p>}
 
-<button type="submit" className="primary-btn" disabled={loading}>
-{loading ? "Please wait..." : "Send Reset Link"}
+<button type="submit" className="primary-btn" disabled={loading} aria-busy={loading}>
+{loading ? <><FaSpinner className="button-loader" /> Sending...</> : "Send Reset Link"}
 </button>
 
 </form>
@@ -436,8 +436,8 @@ Back
 </button>
 )}
 
-<button type="submit" className="primary-btn" disabled={loading}>
-{loading ? "Please wait..." : step === 3 ? "Create Account" : "Continue"}
+<button type="submit" className="primary-btn" disabled={loading} aria-busy={loading}>
+{loading ? <><FaSpinner className="button-loader" /> Creating account...</> : step === 3 ? "Create Account" : "Continue"}
 </button>
 </div>
 

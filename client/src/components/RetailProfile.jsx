@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { FaCheckCircle, FaEnvelope, FaLock, FaUser } from "react-icons/fa";
+import { FaCheckCircle, FaEnvelope, FaLock, FaSpinner, FaUser } from "react-icons/fa";
 import { updateProfile } from "../api/auth";
 import { useAuth } from "../context/AuthContext";
 import "./RetailProfile.css";
@@ -96,7 +96,7 @@ export default function RetailProfile() {
             <input id="profile-email" type="email" value={email} onChange={(event) => setEmail(event.target.value)} required autoComplete="email" />
             {emailError && <p className="retail-profile__message retail-profile__message--error">{emailError}</p>}
             {emailStatus && <p className="retail-profile__message retail-profile__message--success"><FaCheckCircle /> {emailStatus}</p>}
-            <button type="submit" disabled={savingEmail}>{savingEmail ? "Saving..." : "Save email address"}</button>
+            <button type="submit" disabled={savingEmail} aria-busy={savingEmail}>{savingEmail ? <><FaSpinner className="retail-profile__loader" /> Saving...</> : "Save email address"}</button>
           </form>
 
           <form className="retail-profile__card" onSubmit={savePassword}>
@@ -109,7 +109,7 @@ export default function RetailProfile() {
             <input id="profile-confirm-password" type="password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} minLength="8" required autoComplete="new-password" />
             {passwordError && <p className="retail-profile__message retail-profile__message--error">{passwordError}</p>}
             {passwordStatus && <p className="retail-profile__message retail-profile__message--success"><FaCheckCircle /> {passwordStatus}</p>}
-            <button type="submit" disabled={savingPassword}>{savingPassword ? "Updating..." : "Update password"}</button>
+            <button type="submit" disabled={savingPassword} aria-busy={savingPassword}>{savingPassword ? <><FaSpinner className="retail-profile__loader" /> Updating...</> : "Update password"}</button>
           </form>
         </div>
       </div>
