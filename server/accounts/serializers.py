@@ -2,13 +2,38 @@
 
 from rest_framework import serializers
 
+# Roles a user may hold. Admin is deliberately excluded from the public
+# signup choices below — admins are promoted via the create_admin management
+# command, never self-registered.
+ACCOUNT_ROLES = ("retail", "business", "admin")
+SELF_SIGNUP_ROLES = ("retail", "business")
+
 
 class SignupSerializer(serializers.Serializer):
-    """Validate the payload needed to create a Mongo user document."""
+    """Validate the payload needed to create a Mongo user document.
+
+    Retail accounts only need name/email/password. Business accounts also
+    require a company name; GST/tax id is optional. Role is restricted to
+    the values in SELF_SIGNUP_ROLES — nobody can sign themselves up as admin.
+    """
 
     full_name = serializers.CharField(min_length=2, max_length=150)
     email = serializers.EmailField()
     password = serializers.CharField(min_length=8, write_only=True)
+    role = serializers.ChoiceField(choices=SELF_SIGNUP_ROLES, default="retail")
+    company_name = serializers.CharField(
+        max_length=150, required=False, allow_blank=True, default=""
+    )
+    gst_number = serializers.CharField(
+        max_length=30, required=False, allow_blank=True, default=""
+    )
+
+    def validate(self, attrs):
+        if attrs.get("role") == "business" and not attrs.get("company_name", "").strip():
+            raise serializers.ValidationError(
+                {"company_name": "Company name is required for a business account."}
+            )
+        return attrs
 
 
 class LoginSerializer(serializers.Serializer):

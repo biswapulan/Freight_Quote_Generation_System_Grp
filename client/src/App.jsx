@@ -1,26 +1,56 @@
 import { Routes, Route } from "react-router-dom";
 import ProfessionalLanding from "./components/ProfessionalLanding";
 import AuthPage from "./components/AuthPage";
-import Dashboard from "./components/Dashboard";
+import DashboardShell from "./components/DashboardShell";
+import QuotePage from "./components/QuotePage";
+import QuoteGenerator from "./components/QuoteGenerator";
+import AdminRateConfig from "./components/AdminRateConfig";
+import ProtectedRoute from "./components/ProtectedRoute";
 
+function App() {
+  return (
+    <Routes>
+      <Route path="/" element={<ProfessionalLanding />} />
+      <Route path="/login" element={<AuthPage />} />
+      <Route path="/services" element={<QuoteGenerator />} />
 
-function App(){
+      <Route
+        path="/dashboard"
+        element={
+          <ProtectedRoute>
+            <DashboardShell />
+          </ProtectedRoute>
+        }
+      />
 
-return(
+      <Route
+        path="/dashboard/:section"
+        element={
+          <ProtectedRoute>
+            <DashboardShell />
+          </ProtectedRoute>
+        }
+      />
 
-<Routes>
+      <Route
+        path="/quote"
+        element={
+          <ProtectedRoute>
+            <QuotePage />
+          </ProtectedRoute>
+        }
+      />
 
-<Route path="/" element={<ProfessionalLanding/>}/>
-
-<Route path="/login" element={<AuthPage/>}/>
-
-<Route path="/dashboard" element={<Dashboard/>}/>
-
-</Routes>
-
-)
-
+      <Route
+        path="/admin"
+        element={
+          <ProtectedRoute requiredRole="admin">
+            <AdminRateConfig />
+          </ProtectedRoute>
+        }
+      />
+    </Routes>
+  );
 }
-
 
 export default App;

@@ -6,11 +6,14 @@ const API_BASE_URL =
 
 const AUTH_URL = `${API_BASE_URL.replace(/\/$/, "")}/auth`;
 
-async function request(endpoint, data) {
+async function request(endpoint, data, { method = "POST", token } = {}) {
+  const headers = { "Content-Type": "application/json" };
+  if (token) headers.Authorization = `Bearer ${token}`;
+
   const res = await fetch(`${AUTH_URL}${endpoint}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(data),
+    method,
+    headers,
+    body: method === "GET" ? undefined : JSON.stringify(data),
   });
 
   const body = await res.json().catch(() => ({}));
@@ -22,8 +25,15 @@ async function request(endpoint, data) {
   return body;
 }
 
-export function signup({ fullName, email, password }) {
-  return request("/signup/", { full_name: fullName, email, password });
+export function signup({ fullName, email, password, role, companyName, gstNumber }) {
+  return request("/signup/", {
+    full_name: fullName,
+    email,
+    password,
+    role,
+    company_name: companyName,
+    gst_number: gstNumber,
+  });
 }
 
 export function login({ email, password }) {
@@ -36,4 +46,8 @@ export function forgotPassword({ email }) {
 
 export function resetPassword({ token, newPassword }) {
   return request("/reset-password/", { token, new_password: newPassword });
+}
+
+export function getMe(token) {
+  return request("/me/", null, { method: "GET", token });
 }

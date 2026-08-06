@@ -711,3 +711,32 @@ font-size: 14px;
 }
 
 }
+
+/* Signup role toggle (retail / business) */
+.role-toggle {
+display: flex;
+gap: 10px;
+}
+
+.role-option {
+flex: 1;
+padding: 12px 14px;
+border-radius: 10px;
+border: 1px solid rgba(255, 255, 255, 0.15);
+background: rgba(255, 255, 255, 0.05);
+color: rgba(255, 255, 255, 0.75);
+font-size: 14px;
+font-weight: 600;
+cursor: pointer;
+transition: 0.2s;
+}
+
+.role-option:hover {
+border-color: rgba(255, 152, 0, 0.5);
+}
+
+.role-option.active {
+background: #ff9800;
+border-color: #ff9800;
+color: #0B1E3F;
+}

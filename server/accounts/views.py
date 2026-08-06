@@ -9,6 +9,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from .mongo import users_collection
+from .permissions import IsAuthenticatedMongoUser
 from .serializers import (
     ForgotPasswordSerializer,
     LoginSerializer,
@@ -16,6 +17,22 @@ from .serializers import (
     SignupSerializer,
 )
 from .tokens import create_token
+
+
+def public_profile(user_doc):
+    """Shape a Mongo user document into the profile payload sent to clients.
+
+    Never includes password/reset-token fields.
+    """
+
+    return {
+        "id": str(user_doc["_id"]),
+        "full_name": user_doc.get("full_name", ""),
+        "email": user_doc.get("email", ""),
+        "role": user_doc.get("role", "retail"),
+        "company_name": user_doc.get("company_name", ""),
+        "gst_number": user_doc.get("gst_number", ""),
+    }
 
 
 class SignupView(APIView):
@@ -39,13 +56,19 @@ class SignupView(APIView):
             'full_name': data['full_name'],
             'email': email,
             'password': make_password(data['password']),
+            # role is restricted by SignupSerializer to retail/business —
+            # admin accounts are never created through public signup.
+            'role': data.get('role', 'retail'),
+            'company_name': data.get('company_name', ''),
+            'gst_number': data.get('gst_number', ''),
             'created_at': datetime.utcnow(),
         }
         result = users_collection.insert_one(user_doc)
+        user_doc['_id'] = result.inserted_id
         token = create_token(result.inserted_id)
 
         return Response(
-            {'token': token, 'full_name': user_doc['full_name']},
+            {'token': token, **public_profile(user_doc)},
             status=status.HTTP_201_CREATED,
         )
 
@@ -68,7 +91,16 @@ class LoginView(APIView):
             )
 
         token = create_token(user['_id'])
-        return Response({'token': token, 'full_name': user.get('full_name', '')})
+        return Response({'token': token, **public_profile(user)})
+
+
+class MeView(APIView):
+    """Return the authenticated user's profile (used to rehydrate a session)."""
+
+    permission_classes = [IsAuthenticatedMongoUser]
+
+    def get(self, request):
+        return Response(public_profile(request.user))
 
 
 class ForgotPasswordView(APIView):

@@ -23,9 +23,9 @@ Freight<span>AI</span>
 
 <ul className={menu?"nav-links active":"nav-links"}>
 
-<li><a href="#">Home</a></li>
+<li><Link to="/">Home</Link></li>
 
-<li><a href="#">Services</a></li>
+<li><Link to="/services">Services</Link></li>
 
 <li><a href="#">Tracking</a></li>
 

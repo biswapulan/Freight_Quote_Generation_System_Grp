@@ -26,7 +26,10 @@ const [signupData, setSignupData] = useState({
 fullName: "",
 email: "",
 password: "",
-confirmPassword: ""
+confirmPassword: "",
+role: "retail",
+companyName: "",
+gstNumber: "",
 });
 
 const [signupDone, setSignupDone] = useState(false);
@@ -48,7 +51,7 @@ setLoading(true);
 
 try {
 const data = await loginRequest(loginData);
-auth.login({ token: data.token, fullName: data.full_name });
+auth.login(data);
 navigate("/dashboard");
 } catch (error) {
 setErrorMsg(error.message || "Unable to log in. Please try again.");
@@ -76,6 +79,10 @@ function goNextStep(e) {
 e.preventDefault();
 setErrorMsg("");
 if (step === 1 && signupData.fullName.trim().length < 2) return;
+if (step === 1 && signupData.role === "business" && signupData.companyName.trim().length < 2) {
+setErrorMsg("Company name is required for a business account.");
+return;
+}
 if (step === 2 && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(signupData.email)) return;
 setStep((s) => Math.min(s + 1, 3));
 }
@@ -94,10 +101,13 @@ setErrorMsg("");
 setLoading(true);
 
 try {
-const data = await signup({
+await signup({
 fullName: signupData.fullName,
 email: signupData.email,
 password: signupData.password,
+role: signupData.role,
+companyName: signupData.companyName,
+gstNumber: signupData.gstNumber,
 });
 setSignupDone(true);
 } catch (error) {
@@ -284,6 +294,7 @@ onSubmit={step === 3 ? handleSignupSubmit : goNextStep}
 >
 
 {step === 1 && (
+<>
 <label className="field">
 <span className="field-label">Full name</span>
 <div className="input-wrap">
@@ -297,6 +308,60 @@ onChange={(e) => setSignupData({ ...signupData, fullName: e.target.value })}
 />
 </div>
 </label>
+
+<div className="field">
+<span className="field-label">Account type</span>
+<div className="role-toggle">
+<button
+type="button"
+className={`role-option ${signupData.role === "retail" ? "active" : ""}`}
+onClick={() => setSignupData({ ...signupData, role: "retail" })}
+>
+Retail
+</button>
+<button
+type="button"
+className={`role-option ${signupData.role === "business" ? "active" : ""}`}
+onClick={() => setSignupData({ ...signupData, role: "business" })}
+>
+Business
+</button>
+</div>
+</div>
+
+{signupData.role === "business" && (
+<>
+<label className="field">
+<span className="field-label">Company name</span>
+<div className="input-wrap">
+<FaUser className="input-icon" />
+<input
+type="text"
+placeholder="Acme Logistics Pvt Ltd"
+required
+value={signupData.companyName}
+onChange={(e) => setSignupData({ ...signupData, companyName: e.target.value })}
+/>
+</div>
+</label>
+
+<label className="field">
+<span className="field-label">GST number (optional)</span>
+<div className="input-wrap">
+<FaUser className="input-icon" />
+<input
+type="text"
+placeholder="22AAAAA0000A1Z5"
+value={signupData.gstNumber}
+onChange={(e) => setSignupData({ ...signupData, gstNumber: e.target.value })}
+/>
+</div>
+</label>
+</>
+)}
+
+{errorMsg && <p className="error-text">{errorMsg}</p>}
+</>
 )}
 
 {step === 2 && (
