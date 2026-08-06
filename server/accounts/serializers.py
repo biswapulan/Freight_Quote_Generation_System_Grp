@@ -54,3 +54,25 @@ class ResetPasswordSerializer(serializers.Serializer):
 
     token = serializers.CharField()
     new_password = serializers.CharField(min_length=8, write_only=True)
+
+
+class ProfileUpdateSerializer(serializers.Serializer):
+    """Validate the account details a signed-in user may change."""
+
+    email = serializers.EmailField(required=False)
+    current_password = serializers.CharField(required=False, write_only=True)
+    new_password = serializers.CharField(required=False, min_length=8, write_only=True)
+
+    def validate(self, attrs):
+        has_current_password = bool(attrs.get("current_password"))
+        has_new_password = bool(attrs.get("new_password"))
+
+        if has_current_password != has_new_password:
+            raise serializers.ValidationError(
+                {"current_password": "Enter your current password and a new password."}
+            )
+
+        if not attrs:
+            raise serializers.ValidationError("Provide an email address or password change.")
+
+        return attrs

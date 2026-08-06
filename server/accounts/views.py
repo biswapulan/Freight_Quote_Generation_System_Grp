@@ -13,6 +13,7 @@ from .permissions import IsAuthenticatedMongoUser
 from .serializers import (
     ForgotPasswordSerializer,
     LoginSerializer,
+    ProfileUpdateSerializer,
     ResetPasswordSerializer,
     SignupSerializer,
 )
@@ -101,6 +102,36 @@ class MeView(APIView):
 
     def get(self, request):
         return Response(public_profile(request.user))
+
+    def patch(self, request):
+        serializer = ProfileUpdateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+        user_id = request.user["_id"]
+        updates = {}
+
+        if "email" in data:
+            email = data["email"].lower()
+            existing_user = users_collection.find_one({"email": email})
+            if existing_user and existing_user["_id"] != user_id:
+                return Response(
+                    {"detail": "Email is already registered"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            updates["email"] = email
+
+        if "new_password" in data:
+            user = users_collection.find_one({"_id": user_id})
+            if not user or not check_password(data["current_password"], user.get("password", "")):
+                return Response(
+                    {"detail": "Your current password is incorrect"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            updates["password"] = make_password(data["new_password"])
+
+        users_collection.update_one({"_id": user_id}, {"$set": updates})
+        updated_user = users_collection.find_one({"_id": user_id})
+        return Response(public_profile(updated_user))
 
 
 class ForgotPasswordView(APIView):

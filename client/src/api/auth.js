@@ -51,3 +51,7 @@ export function resetPassword({ token, newPassword }) {
 export function getMe(token) {
   return request("/me/", null, { method: "GET", token });
 }
+
+export function updateProfile(token, data) {
+  return request("/me/", data, { method: "PATCH", token });
+}

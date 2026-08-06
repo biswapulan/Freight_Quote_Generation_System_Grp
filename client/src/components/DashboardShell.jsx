@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import QuoteCalculator from "./QuoteCalculator";
+import RetailProfile from "./RetailProfile";
 import "./DashboardShell.css";
 
 // Sidebar section labels per account type. These are placeholders only —
@@ -142,6 +143,8 @@ export default function DashboardShell() {
       <main className={`dash-content${activeItem.slug === "new-quote" ? " dash-content-flush" : ""}`}>
         {activeItem.slug === "new-quote" ? (
           <QuoteCalculator />
+        ) : activeItem.slug === "profile" && user.role === "retail" ? (
+          <RetailProfile />
         ) : (
           <div className="dash-placeholder">
             <h1>{activeItem.label}</h1>
