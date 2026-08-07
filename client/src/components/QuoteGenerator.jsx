@@ -10,7 +10,7 @@ import QuoteCalculator from "./QuoteCalculator";
 export default function QuoteGenerator() {
   return (
     <div style={{ paddingTop: 80 }}>
-      <Navbar />
+      <Navbar forceSolid />
       <QuoteCalculator />
       <Footer />
     </div>
