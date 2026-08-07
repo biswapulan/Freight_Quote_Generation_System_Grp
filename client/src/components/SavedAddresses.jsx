@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { createSavedAddress, deleteSavedAddress, getSavedAddresses } from "../api/auth";
+import { createSavedAddress, deleteSavedAddress, getSavedAddresses, updateSavedAddress } from "../api/auth";
 import { useAuth } from "../context/AuthContext";
 import "./SavedAddresses.css";
 
@@ -23,6 +23,7 @@ export default function SavedAddresses() {
   const { token } = useAuth();
   const [addresses, setAddresses] = useState([]);
   const [modalOpen, setModalOpen] = useState(false);
+  const [editingAddressId, setEditingAddressId] = useState("");
   const [form, setForm] = useState(EMPTY_FORM);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -51,13 +52,15 @@ export default function SavedAddresses() {
     setForm((f) => ({ ...f, [field]: value }));
   }
 
-  function openModal() {
-    setForm(EMPTY_FORM);
+  function openModal(address = null) {
+    setEditingAddressId(address?.id || "");
+    setForm(address ? { ...address, isDefault: address.isDefault } : EMPTY_FORM);
     setModalOpen(true);
   }
 
   function closeModal() {
     setModalOpen(false);
+    setEditingAddressId("");
   }
 
   async function handleDelete(id) {
@@ -75,12 +78,17 @@ export default function SavedAddresses() {
     setSaving(true);
     setError("");
     try {
-      const newAddress = await createSavedAddress(token, {
+      const addressPayload = {
         ...form,
         is_default: form.isDefault,
-      });
+      };
+      const newAddress = editingAddressId
+        ? await updateSavedAddress(token, editingAddressId, addressPayload)
+        : await createSavedAddress(token, addressPayload);
       setAddresses((list) =>
-        newAddress.isDefault ? [newAddress, ...list.map((address) => ({ ...address, isDefault: false }))] : [newAddress, ...list]
+        editingAddressId
+          ? list.map((address) => address.id === newAddress.id ? newAddress : { ...address, isDefault: newAddress.isDefault ? false : address.isDefault })
+          : newAddress.isDefault ? [newAddress, ...list.map((address) => ({ ...address, isDefault: false }))] : [newAddress, ...list]
       );
       closeModal();
     } catch (requestError) {
@@ -139,6 +147,9 @@ export default function SavedAddresses() {
                   </div>
                 </div>
                 <div className="addr-card-footer">
+                  <button type="button" className="addr-btn-ghost" onClick={() => openModal(a)}>
+                    Edit
+                  </button>
                   <button type="button" className="addr-btn-ghost" onClick={() => handleDelete(a.id)}>
                     Delete
                   </button>
@@ -153,7 +164,7 @@ export default function SavedAddresses() {
         <div className="addr-modal-backdrop open" onClick={closeModal}>
           <div className="addr-modal" onClick={(e) => e.stopPropagation()}>
             <div className="addr-modal-header">
-              <h3>Add Saved Address</h3>
+              <h3>{editingAddressId ? "Edit Saved Address" : "Add Saved Address"}</h3>
               <button type="button" className="addr-modal-close" onClick={closeModal} aria-label="Close">&times;</button>
             </div>
             <div className="addr-modal-body">
@@ -235,7 +246,7 @@ export default function SavedAddresses() {
                 <div className="addr-form-actions">
                   <button type="button" className="addr-btn-ghost" onClick={closeModal}>Cancel</button>
                   <button type="submit" className="addr-btn-primary" disabled={saving}>
-                    {saving ? "Saving..." : "Save Address"}
+                    {saving ? "Saving..." : editingAddressId ? "Save Changes" : "Save Address"}
                   </button>
                 </div>
               </form>

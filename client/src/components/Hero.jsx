@@ -4,7 +4,6 @@ import { Link } from "react-router-dom";
 import freight from "../assets/freight.png";
 import { FaArrowRight, FaMapMarkerAlt, FaLocationArrow } from "react-icons/fa";
 import { useUserLocation } from "../context/LocationContext";
-import { openSupportChat } from "./TawkChat";
 
 function Hero() {
   const { status, location } = useUserLocation();
@@ -42,9 +41,6 @@ function Hero() {
             <Link to="/login" className="fa-btn fa-btn-ghost">
               Get Started
             </Link>
-            <button type="button" className="fa-btn fa-btn-ghost" onClick={openSupportChat}>
-              Chat now
-            </button>
           </div>
         </div>
 

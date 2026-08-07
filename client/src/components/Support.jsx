@@ -1,8 +1,7 @@
 import { useEffect, useState } from "react";
-import { FaEnvelope, FaPhoneAlt, FaRegClock, FaCommentDots } from "react-icons/fa";
+import { FaEnvelope, FaPhoneAlt, FaRegClock } from "react-icons/fa";
 import { createSupportTicket, getSupportTickets } from "../api/auth";
 import { useAuth } from "../context/AuthContext";
-import { openSupportChat } from "./TawkChat";
 import "./Support.css";
 
 const FAQS = [
@@ -40,7 +39,6 @@ export default function Support() {
   const [tickets, setTickets] = useState([]);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
-  const [chatOpen, setChatOpen] = useState(false);
 
   useEffect(() => {
     getSupportTickets(token)
@@ -90,7 +88,7 @@ export default function Support() {
           <span>Support</span>
         </div>
         <h1 id="sup-title" className="sup-h1">Support</h1>
-        <p className="sup-sub">Find an answer below, submit a ticket, or chat with the team — whatever gets you moving fastest.</p>
+        <p className="sup-sub">Find an answer below or submit a ticket and our team will follow up by email.</p>
 
         <div className="sup-contact-strip">
           <div className="sup-contact-card">
@@ -256,29 +254,6 @@ export default function Support() {
         </div>
       </div>
 
-      <button type="button" className="sup-chat-fab" onClick={openSupportChat}>
-        <FaCommentDots />
-        <span>Chat with support</span>
-      </button>
-
-      {chatOpen && (
-        <div className="sup-chat-panel open">
-          <div className="sup-chat-header">
-            <div>
-              <strong>FreightAI Support</strong>
-              <span>Usually replies in a few minutes</span>
-            </div>
-            <button type="button" className="sup-chat-close" onClick={() => setChatOpen(false)} aria-label="Close chat">&times;</button>
-          </div>
-          <div className="sup-chat-body">
-            Live chat UI placeholder — wire this up to your chat/WebSocket provider of choice. This panel and its open/close state are already functional.
-          </div>
-          <div className="sup-chat-input-row">
-            <input type="text" placeholder="Type a message..." disabled />
-            <button type="button" className="sup-btn-ghost" disabled>Send</button>
-          </div>
-        </div>
-      )}
     </section>
   );
 }

@@ -188,21 +188,49 @@ class SavedAddressesView(APIView):
 
 
 class SavedAddressDetailView(APIView):
-    """Delete an address only when it belongs to the signed-in user."""
+    """Update or delete an address only when it belongs to the signed-in user."""
 
     permission_classes = [IsAuthenticatedMongoUser]
 
-    def delete(self, request, address_id):
+    def _get_address(self, request, address_id):
         from bson import ObjectId
         from bson.errors import InvalidId
 
         try:
             object_id = ObjectId(address_id)
         except InvalidId:
+            return None
+
+        return saved_addresses_collection.find_one(
+            {"_id": object_id, "user_id": request.user["_id"]}
+        )
+
+    def patch(self, request, address_id):
+        address = self._get_address(request, address_id)
+        if not address:
+            return Response({"detail": "Address not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        serializer = SavedAddressSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        updates = serializer.validated_data
+        updates["is_default"] = updates.pop("is_default")
+
+        if updates["is_default"]:
+            saved_addresses_collection.update_many(
+                {"user_id": request.user["_id"], "_id": {"$ne": address["_id"]}},
+                {"$set": {"is_default": False}},
+            )
+
+        saved_addresses_collection.update_one({"_id": address["_id"]}, {"$set": updates})
+        return Response(public_address(saved_addresses_collection.find_one({"_id": address["_id"]})))
+
+    def delete(self, request, address_id):
+        address = self._get_address(request, address_id)
+        if not address:
             return Response({"detail": "Address not found."}, status=status.HTTP_404_NOT_FOUND)
 
         result = saved_addresses_collection.delete_one(
-            {"_id": object_id, "user_id": request.user["_id"]}
+            {"_id": address["_id"], "user_id": request.user["_id"]}
         )
         if not result.deleted_count:
             return Response({"detail": "Address not found."}, status=status.HTTP_404_NOT_FOUND)

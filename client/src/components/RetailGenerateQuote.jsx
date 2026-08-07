@@ -6,7 +6,7 @@ import "leaflet/dist/leaflet.css";
 import html2pdf from "html2pdf.js";
 import { Ship, Plane, Truck, Zap, Plus, Trash2, X, CheckCircle, FileText, Check } from "lucide-react";
 import { PORTS_MASTER } from "../context/RetailQuotesContext";
-import { getSavedAddresses } from "../api/auth";
+import { createSavedAddress, getSavedAddresses } from "../api/auth";
 import { confirmQuote, estimateQuote } from "../api/quotes";
 import { useAuth } from "../context/AuthContext";
 import "./RetailGenerateQuote.css";
@@ -33,34 +33,44 @@ const CONTAINER_TYPES = [
   { value: "45HC", label: "45HC — 45ft Reefer" },
 ];
 
-const DEFAULT_ITEMS = [
-  { id: 1, type: "Container", containerType: "40HC", count: 2, weight: 18400, desc: "Cotton textile rolls, unbleached", hs: "5208.11" },
-];
+const EMPTY_ITEM = { id: 1, type: "", containerType: "", count: "", weight: "", desc: "", hs: "" };
+
+const EMPTY_ADDRESS = {
+  label: "", type: "Pickup (Origin)", contact: "", phone: "", email: "", street: "",
+  city: "", state: "", postal: "", country: "", hours: "", notes: "", isDefault: false,
+};
 
 const initialFormState = {
-  originId: "INNSA",
-  destId: "AEJEA",
+  originId: "",
+  destId: "",
   pickupAddr: "",
   deliveryAddr: "",
-  readyDate: "2026-08-12",
+  readyDate: "",
   deliveryDate: "",
-  mode: "ocean",
-  loadType: "fcl",
-  incoterm: "FOB",
-  declaredVal: 2000000,
-  currency: "INR",
+  mode: "",
+  loadType: "",
+  incoterm: "",
+  declaredVal: "",
+  currency: "",
   specialInst: "",
   chkFragile: false,
-  chkHazardous: true,
+  chkHazardous: false,
   chkTemp: false,
-  chkInsurance: true,
-  unNumber: "UN1234",
-  imoClass: "3",
-  custName: "Sharma Textiles",
-  custCompany: "Mumbai",
-  custEmail: "sharma@textiles.in",
-  custCountry: "India",
+  chkInsurance: false,
+  unNumber: "",
+  imoClass: "",
+  custName: "",
+  custCompany: "",
+  custEmail: "",
+  custCountry: "",
 };
+
+function dayAfter(date) {
+  if (!date) return "";
+  const nextDate = new Date(`${date}T00:00:00Z`);
+  nextDate.setUTCDate(nextDate.getUTCDate() + 1);
+  return nextDate.toISOString().slice(0, 10);
+}
 
 function money(n) {
   return `₹ ${Math.round(n).toLocaleString("en-IN")}`;
@@ -68,10 +78,10 @@ function money(n) {
 
 export default function RetailGenerateQuote() {
   const navigate = useNavigate();
-  const { token } = useAuth();
+  const { token, user } = useAuth();
 
   const [form, setForm] = useState(initialFormState);
-  const [items, setItems] = useState(DEFAULT_ITEMS);
+  const [items, setItems] = useState([EMPTY_ITEM]);
   const [savedAddresses, setSavedAddresses] = useState([]);
   const [addressesError, setAddressesError] = useState("");
   const [quoteError, setQuoteError] = useState("");
@@ -81,6 +91,9 @@ export default function RetailGenerateQuote() {
   const [showQuoteModal, setShowQuoteModal] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [bookingRef, setBookingRef] = useState("");
+  const [addressModalType, setAddressModalType] = useState("");
+  const [addressForm, setAddressForm] = useState(EMPTY_ADDRESS);
+  const [savingAddress, setSavingAddress] = useState(false);
 
   const mapElRef = useRef(null);
   const mapInstanceRef = useRef(null);
@@ -93,6 +106,35 @@ export default function RetailGenerateQuote() {
 
   function setField(key, val) {
     setForm((f) => ({ ...f, [key]: val }));
+  }
+
+  function updateReadyDate(value) {
+    setForm((current) => ({
+      ...current,
+      readyDate: value,
+      deliveryDate: current.deliveryDate && current.deliveryDate <= value ? "" : current.deliveryDate,
+    }));
+  }
+
+  function openAddressModal(type) {
+    setAddressForm({ ...EMPTY_ADDRESS, type: type === "pickup" ? "Pickup (Origin)" : "Delivery (Destination)", contact: user?.full_name || "", email: user?.email || "" });
+    setAddressModalType(type);
+  }
+
+  async function saveAddress(event) {
+    event.preventDefault();
+    setSavingAddress(true);
+    setAddressesError("");
+    try {
+      const address = await createSavedAddress(token, { ...addressForm, is_default: addressForm.isDefault });
+      setSavedAddresses((list) => address.isDefault ? [address, ...list.map((item) => ({ ...item, isDefault: false }))] : [address, ...list]);
+      setField(addressModalType === "pickup" ? "pickupAddr" : "deliveryAddr", address.id);
+      setAddressModalType("");
+    } catch (error) {
+      setAddressesError(error.message || "Unable to save this address.");
+    } finally {
+      setSavingAddress(false);
+    }
   }
 
   useEffect(() => {
@@ -114,7 +156,7 @@ export default function RetailGenerateQuote() {
   function addItem() {
     setItems((list) => [
       ...list,
-      { id: Date.now(), type: "Container", containerType: "40HC", count: 1, weight: 9200, desc: "Machinery parts", hs: "8431.49" },
+      { id: Date.now(), type: "", containerType: "", count: "", weight: "", desc: "", hs: "" },
     ]);
   }
 
@@ -128,15 +170,15 @@ export default function RetailGenerateQuote() {
 
   function clearForm() {
     setForm(initialFormState);
-    setItems(DEFAULT_ITEMS);
+    setItems([EMPTY_ITEM]);
   }
 
   function saveDraft() {
     window.alert("Draft saved. You can continue editing this enquiry anytime.");
   }
 
-  const oPort = PORTS_MASTER.find((p) => p.id === form.originId) || PORTS_MASTER[0];
-  const dPort = PORTS_MASTER.find((p) => p.id === form.destId) || PORTS_MASTER[1];
+  const oPort = PORTS_MASTER.find((p) => p.id === form.originId);
+  const dPort = PORTS_MASTER.find((p) => p.id === form.destId);
 
   // ---- Rate calculation (ported as-is from the reference calculator) ----
   const quote = useMemo(() => {
@@ -197,7 +239,7 @@ export default function RetailGenerateQuote() {
   // ---- Leaflet map: update markers/route on port change ----
   useEffect(() => {
     const map = mapInstanceRef.current;
-    if (!map) return;
+    if (!map || !oPort || !dPort) return;
 
     if (originMarkerRef.current) map.removeLayer(originMarkerRef.current);
     if (destMarkerRef.current) map.removeLayer(destMarkerRef.current);
@@ -257,6 +299,11 @@ export default function RetailGenerateQuote() {
   );
 
   async function handleGenerateQuote() {
+    if (!form.originId || !form.destId || !form.readyDate || !form.mode || !form.loadType || !form.incoterm) {
+      setQuoteError("Select the required route, date, and service details before generating a quote.");
+      return;
+    }
+
     setGenerating(true);
     setQuoteError("");
     const cityByPort = {
@@ -346,6 +393,7 @@ export default function RetailGenerateQuote() {
               <div className="form-group">
                 <label>Origin port / airport <span className="req">*</span></label>
                 <select className="form-select" value={form.originId} onChange={(e) => setField("originId", e.target.value)}>
+                  <option value="" disabled>Select an origin port / airport</option>
                   {PORTS_MASTER.map((p) => (
                     <option key={p.id} value={p.id}>{p.code} — {p.name}, {p.country}</option>
                   ))}
@@ -355,6 +403,7 @@ export default function RetailGenerateQuote() {
               <div className="form-group">
                 <label>Destination port / airport <span className="req">*</span></label>
                 <select className="form-select" value={form.destId} onChange={(e) => setField("destId", e.target.value)}>
+                  <option value="" disabled>Select a destination port / airport</option>
                   {PORTS_MASTER.map((p) => (
                     <option key={p.id} value={p.id}>{p.code} — {p.name}, {p.country}</option>
                   ))}
@@ -365,15 +414,15 @@ export default function RetailGenerateQuote() {
             <div className="form-row">
               <div className="form-group">
                 <label>Pickup address <span className="hint">(door pickup only)</span></label>
-                <select className="form-select" value={form.pickupAddr} onChange={(e) => setField("pickupAddr", e.target.value)}>
-                  <option value="">Select a saved pickup address</option>
+                <select className="form-select" value={form.pickupAddr} onFocus={() => savedAddresses.length === 0 && openAddressModal("pickup")} onChange={(e) => setField("pickupAddr", e.target.value)}>
+                  <option value="">{savedAddresses.length === 0 ? "Enter a pickup address" : "Select a saved pickup address"}</option>
                   {pickupAddresses.map((address) => <option key={address.id} value={address.id}>{address.label} — {address.city}, {address.country}</option>)}
                 </select>
               </div>
               <div className="form-group">
                 <label>Delivery address <span className="hint">(door delivery only)</span> <span className="badge-new">NEW</span></label>
-                <select className="form-select" value={form.deliveryAddr} onChange={(e) => setField("deliveryAddr", e.target.value)}>
-                  <option value="">Select a saved delivery address</option>
+                <select className="form-select" value={form.deliveryAddr} onFocus={() => savedAddresses.length === 0 && openAddressModal("delivery")} onChange={(e) => setField("deliveryAddr", e.target.value)}>
+                  <option value="">{savedAddresses.length === 0 ? "Enter a delivery address" : "Select a saved delivery address"}</option>
                   {deliveryAddresses.map((address) => <option key={address.id} value={address.id}>{address.label} — {address.city}, {address.country}</option>)}
                 </select>
               </div>
@@ -383,11 +432,11 @@ export default function RetailGenerateQuote() {
             <div className="form-row">
               <div className="form-group">
                 <label>Ready date <span className="req">*</span></label>
-                <input type="date" className="form-input" value={form.readyDate} onChange={(e) => setField("readyDate", e.target.value)} />
+                <input type="date" className="form-input" value={form.readyDate} onChange={(e) => updateReadyDate(e.target.value)} />
               </div>
               <div className="form-group">
                 <label>Required delivery date <span className="hint">(optional)</span></label>
-                <input type="date" className="form-input" value={form.deliveryDate} onChange={(e) => setField("deliveryDate", e.target.value)} />
+                <input type="date" className="form-input" min={dayAfter(form.readyDate)} disabled={!form.readyDate} value={form.deliveryDate} onChange={(e) => setField("deliveryDate", e.target.value)} />
               </div>
             </div>
           </div>
@@ -422,6 +471,7 @@ export default function RetailGenerateQuote() {
                 <div className="form-group">
                   <label>Load type <span className="req">*</span> <span className="badge-new">NEW</span></label>
                   <select className="form-select" value={form.loadType} onChange={(e) => setField("loadType", e.target.value)}>
+                    <option value="" disabled>Select load type</option>
                     <option value="fcl">FCL — Full container</option>
                     <option value="lcl">LCL — Consolidated</option>
                   </select>
@@ -429,6 +479,7 @@ export default function RetailGenerateQuote() {
                 <div className="form-group">
                   <label>Incoterm <span className="req">*</span> <span className="badge-new">NEW</span></label>
                   <select className="form-select" value={form.incoterm} onChange={(e) => setField("incoterm", e.target.value)}>
+                    <option value="" disabled>Select an Incoterm</option>
                     <option value="FOB">FOB — Free On Board</option>
                     <option value="EXW">EXW — Ex Works</option>
                     <option value="CIF">CIF — Cost Insurance Freight</option>
@@ -464,6 +515,7 @@ export default function RetailGenerateQuote() {
                   <div className="form-group">
                     <label>Package type <span className="req">*</span></label>
                     <select className="form-select" value={item.type} onChange={(e) => updateItem(idx, "type", e.target.value)}>
+                      <option value="" disabled>Select package type</option>
                       <option value="Container">Container</option>
                       <option value="Pallet">Pallet</option>
                       <option value="Box">Box</option>
@@ -472,6 +524,7 @@ export default function RetailGenerateQuote() {
                   <div className="form-group">
                     <label>Container type <span className="req">*</span> <span className="badge-new">NEW</span></label>
                     <select className="form-select" value={item.containerType} onChange={(e) => updateItem(idx, "containerType", e.target.value)}>
+                      <option value="" disabled>Select container type</option>
                       {CONTAINER_TYPES.map((c) => (
                         <option key={c.value} value={c.value}>{c.label}</option>
                       ))}
@@ -533,6 +586,7 @@ export default function RetailGenerateQuote() {
               <div className="form-group">
                 <label>Currency <span className="req">*</span> <span className="badge-new">NEW</span></label>
                 <select className="form-select" value={form.currency} onChange={(e) => setField("currency", e.target.value)}>
+                  <option value="" disabled>Select currency</option>
                   <option value="INR">INR — Indian Rupee</option>
                   <option value="USD">USD — US Dollar</option>
                   <option value="EUR">EUR — Euro</option>
@@ -571,6 +625,7 @@ export default function RetailGenerateQuote() {
                   <div className="form-group">
                     <label>IMO class <span className="req">*</span> <span className="badge-new">NEW</span></label>
                     <select className="form-select" value={form.imoClass} onChange={(e) => setField("imoClass", e.target.value)}>
+                      <option value="" disabled>Select IMO class</option>
                       <option value="3">Class 3 — Flammable Liquid</option>
                       <option value="2">Class 2 — Gases</option>
                       <option value="8">Class 8 — Corrosives</option>
@@ -614,6 +669,7 @@ export default function RetailGenerateQuote() {
               <div className="form-group">
                 <label>Country <span className="req">*</span> <span className="badge-new">NEW</span></label>
                 <select className="form-select" value={form.custCountry} onChange={(e) => setField("custCountry", e.target.value)}>
+                  <option value="" disabled>Select country</option>
                   <option value="India">India</option>
                   <option value="UAE">United Arab Emirates</option>
                   <option value="USA">United States</option>
@@ -677,6 +733,33 @@ export default function RetailGenerateQuote() {
           </button>
         </div>
       </div>
+
+      {addressModalType && (
+        <div className="modal-overlay" onClick={() => setAddressModalType("")}>
+          <div className="modal-content address-modal-content" onClick={(event) => event.stopPropagation()}>
+            <button type="button" className="modal-close" onClick={() => setAddressModalType("")} aria-label="Close"><X size={18} /></button>
+            <h2>Enter {addressModalType} address</h2>
+            <p className="address-modal-description">This address will be saved to your Saved Addresses automatically.</p>
+            <form className="address-entry-form" onSubmit={saveAddress}>
+              <div className="address-entry-grid">
+                <label>Location label<input className="form-input" placeholder="e.g. Main warehouse" required value={addressForm.label} onChange={(event) => setAddressForm((current) => ({ ...current, label: event.target.value }))} /></label>
+                <label>Contact person<input className="form-input" required value={addressForm.contact} onChange={(event) => setAddressForm((current) => ({ ...current, contact: event.target.value }))} /></label>
+                <label>Phone<input type="tel" className="form-input" placeholder="Enter phone number" required value={addressForm.phone} onChange={(event) => setAddressForm((current) => ({ ...current, phone: event.target.value }))} /></label>
+                <label>Email<input type="email" className="form-input" required value={addressForm.email} onChange={(event) => setAddressForm((current) => ({ ...current, email: event.target.value }))} /></label>
+                <label className="address-entry-wide">Street address<input className="form-input" placeholder="Street, building, unit" required value={addressForm.street} onChange={(event) => setAddressForm((current) => ({ ...current, street: event.target.value }))} /></label>
+                <label>City<input className="form-input" required value={addressForm.city} onChange={(event) => setAddressForm((current) => ({ ...current, city: event.target.value }))} /></label>
+                <label>State / province<input className="form-input" required value={addressForm.state} onChange={(event) => setAddressForm((current) => ({ ...current, state: event.target.value }))} /></label>
+                <label>Postal code<input className="form-input" required value={addressForm.postal} onChange={(event) => setAddressForm((current) => ({ ...current, postal: event.target.value }))} /></label>
+                <label>Country<input className="form-input" required value={addressForm.country} onChange={(event) => setAddressForm((current) => ({ ...current, country: event.target.value }))} /></label>
+              </div>
+              <div className="modal-prompt-actions">
+                <button type="button" className="btn-secondary-light" onClick={() => setAddressModalType("")}>Cancel</button>
+                <button type="submit" className="btn-orange-primary" disabled={savingAddress}>{savingAddress ? "Saving address..." : "Save address"}</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* QUOTE OFFER MODAL */}
       {showQuoteModal && (

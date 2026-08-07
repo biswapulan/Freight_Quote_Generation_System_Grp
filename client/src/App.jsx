@@ -13,7 +13,6 @@ import ShipmentPage from "./components/ShipmentPage";
 import ContactPage from "./components/ContactPage";
 import PageLoader from "./components/PageLoader";
 import CookieConsent from "./components/CookieConsent";
-import TawkChat from "./components/TawkChat";
 import { LocationProvider } from "./context/LocationContext";
 
 const INITIAL_LOAD_MS = 5000;
@@ -37,7 +36,6 @@ function App() {
 
   return (
     <LocationProvider>
-      <TawkChat />
       <PageLoader visible={loading} />
 
       {!loading && <CookieConsent onResolved={setCookiesResolved} />}

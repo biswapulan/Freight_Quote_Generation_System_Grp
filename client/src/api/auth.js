@@ -68,6 +68,10 @@ export function deleteSavedAddress(token, addressId) {
   return request(`/saved-addresses/${addressId}/`, null, { method: "DELETE", token });
 }
 
+export function updateSavedAddress(token, addressId, data) {
+  return request(`/saved-addresses/${addressId}/`, data, { method: "PATCH", token });
+}
+
 export function getSupportTickets(token) {
   return request("/support-tickets/", null, { method: "GET", token });
 }

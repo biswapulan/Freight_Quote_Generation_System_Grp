@@ -393,6 +393,12 @@
   position: relative;
 }
 
+.enquiryView .address-modal-content { max-width: 680px; }
+.enquiryView .address-modal-description { color: #64748b; font-size: 14px; margin: 8px 0 20px; }
+.enquiryView .address-entry-form label { display: flex; flex-direction: column; gap: 6px; font-size: 13px; font-weight: 700; color: #1e293b; }
+.enquiryView .address-entry-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; }
+.enquiryView .address-entry-wide { grid-column: 1 / -1; }
+
 .enquiryView .modal-close {
   position: absolute;
   top: 20px;
@@ -458,4 +464,6 @@
   .enquiryView .live-card { padding: 18px 16px; border-radius: 12px; }
   .enquiryView .est-total-price { font-size: 26px; }
   .enquiryView .modal-content { padding: 20px 16px; border-radius: 14px; }
+  .enquiryView .address-entry-grid { grid-template-columns: 1fr; }
+  .enquiryView .address-entry-wide { grid-column: auto; }
 }
