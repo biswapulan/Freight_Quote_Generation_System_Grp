@@ -185,9 +185,20 @@ export default function RetailGenerateQuote() {
     let totalContainers = 0;
     let totalWeight = 0;
     let containerSummaryStr = "";
+    const hasEstimateDetails = form.originId && form.destId && form.mode && form.loadType && form.incoterm
+      && items.length > 0
+      && items.every((item) => item.type && item.containerType && Number(item.count) > 0 && Number(item.weight) > 0);
+
+    if (!hasEstimateDetails) {
+      return {
+        id: "", totalContainers: 0, totalWeight: 0, containerSummaryStr: "Not selected",
+        baseFreight: 0, thcCost: 0, customsCost: 0, bafCost: 0, hazmatCost: 0,
+        insuranceCost: 0, surchargesTotal: 0, grandTotal: 0, formattedPrice: money(0),
+      };
+    }
 
     items.forEach((item) => {
-      totalContainers += parseInt(item.count, 10) || 1;
+      totalContainers += parseInt(item.count, 10) || 0;
       totalWeight += parseFloat(item.weight) || 0;
       containerSummaryStr += `${item.count} × ${item.containerType} `;
     });
@@ -299,8 +310,12 @@ export default function RetailGenerateQuote() {
   );
 
   async function handleGenerateQuote() {
-    if (!form.originId || !form.destId || !form.readyDate || !form.mode || !form.loadType || !form.incoterm) {
-      setQuoteError("Select the required route, date, and service details before generating a quote.");
+    const hasValidItems = items.length > 0 && items.every((item) =>
+      item.type && item.containerType && Number(item.count) > 0 && Number(item.weight) > 0 && item.desc.trim()
+    );
+    if (!form.originId || !form.destId || !form.readyDate || !form.mode || !form.loadType || !form.incoterm || !hasValidItems) {
+      setQuoteError("Complete the required route, date, service, and shipment details before generating a quote.");
+      window.scrollTo({ top: 0, behavior: "smooth" });
       return;
     }
 

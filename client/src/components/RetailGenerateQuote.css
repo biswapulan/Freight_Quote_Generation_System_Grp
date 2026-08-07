@@ -27,6 +27,19 @@
 .enquiryView .page-title { font-size: 26px; font-weight: 800; color: #0f172a; }
 .enquiryView .action-btns { display: flex; gap: 10px; }
 
+.enquiryView .quote-api-error {
+  max-width: 1320px;
+  margin: 0 auto 20px;
+  padding: 13px 18px;
+  color: #991b1b;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-left: 5px solid #dc2626;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 700;
+}
+
 .enquiryView .btn-secondary-light {
   background: #ffffff;
   border: 1px solid #cbd5e1;
