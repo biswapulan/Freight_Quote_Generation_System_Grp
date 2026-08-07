@@ -44,8 +44,10 @@ function Footer() {
         <div className="fa-footer-links">
           <h3>Support</h3>
           <p>support@freightai.com</p>
-          <p>+1 800 123 4567</p>
-          <p>Global Logistics Center</p>
+          <p>+91 88959 80998</p>
+          <p>FreightAI Pvt Ltd.</p>
+          <p>Ghatikia, Bhubaneswar</p>
+          <p>Odisha, 751024</p>
         </div>
       </div>
 
