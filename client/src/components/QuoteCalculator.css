@@ -532,6 +532,193 @@
   background: #1e293b;
 }
 
+.qg-calculator .qg-btn-ship {
+  background: linear-gradient(135deg, #ff9800, #e65100);
+  color: #ffffff;
+  border: none;
+  padding: 12px;
+  border-radius: 10px;
+  font-weight: 700;
+  font-size: 14px;
+  cursor: pointer;
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition: all 0.2s;
+  box-shadow: 0 10px 24px rgba(255, 152, 0, 0.3);
+}
+
+.qg-calculator .qg-btn-ship svg {
+  width: 18px;
+  height: 18px;
+}
+
+.qg-calculator .qg-btn-ship:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 14px 30px rgba(255, 152, 0, 0.4);
+}
+
+/* Floating "ship this quote" sign-up modal */
+.qg-ship-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  background: rgba(15, 23, 42, 0.6);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  animation: qg-modal-fade 0.25s ease;
+}
+
+@keyframes qg-modal-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.qg-ship-modal {
+  position: relative;
+  width: 100%;
+  max-width: 420px;
+  background: #ffffff;
+  border-radius: 22px;
+  padding: 40px 32px 32px;
+  text-align: center;
+  box-shadow: 0 30px 70px rgba(0, 0, 0, 0.35);
+  animation: qg-modal-rise 0.3s ease;
+}
+
+@keyframes qg-modal-rise {
+  from {
+    transform: translateY(24px) scale(0.97);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0) scale(1);
+    opacity: 1;
+  }
+}
+
+.qg-ship-modal-close {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  background: #f1f5f9;
+  border: none;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: #64748b;
+  transition: 0.2s ease;
+}
+
+.qg-ship-modal-close:hover {
+  background: #e2e8f0;
+  color: #0f172a;
+}
+
+.qg-ship-modal-close svg {
+  width: 16px;
+  height: 16px;
+}
+
+.qg-ship-modal-icon {
+  width: 64px;
+  height: 64px;
+  margin: 0 auto 20px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #ff9800, #e65100);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 14px 28px rgba(255, 152, 0, 0.3);
+}
+
+.qg-ship-modal-icon svg {
+  width: 28px;
+  height: 28px;
+}
+
+.qg-ship-modal h3 {
+  font-size: 21px;
+  font-weight: 800;
+  color: #0f172a;
+  margin: 0 0 12px;
+}
+
+.qg-ship-modal p {
+  font-size: 14px;
+  line-height: 1.65;
+  color: #475569;
+  margin: 0 0 26px;
+}
+
+.qg-ship-modal p strong {
+  color: #0f172a;
+}
+
+.qg-btn-signup {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  padding: 15px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #ff9800, #ffb74d);
+  color: #fff;
+  font-weight: 800;
+  font-size: 15px;
+  text-decoration: none;
+  box-shadow: 0 14px 30px rgba(255, 152, 0, 0.32);
+  transition: 0.2s ease;
+}
+
+.qg-btn-signup svg {
+  width: 18px;
+  height: 18px;
+}
+
+.qg-btn-signup:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 18px 36px rgba(255, 152, 0, 0.4);
+}
+
+.qg-ship-modal-later {
+  display: block;
+  margin: 14px auto 0;
+  background: none;
+  border: none;
+  color: #94a3b8;
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.qg-ship-modal-later:hover {
+  color: #64748b;
+  text-decoration: underline;
+}
+
+@media (max-width: 600px) {
+  .qg-calculator .qg-action-row {
+    flex-direction: column;
+  }
+}
+
+
 .qg-calculator .qg-pdf-export-container {
   padding: 20px;
   font-family: sans-serif;

@@ -1,0 +1,70 @@
+.fa-page-header {
+  position: relative;
+  background: linear-gradient(150deg, #0b1526 0%, var(--fa-navy) 50%, #0c2140 100%);
+  padding: 168px 8% 70px;
+  overflow: hidden;
+  color: #fff;
+}
+
+.fa-page-header-glow {
+  position: absolute;
+  top: -140px;
+  right: -100px;
+  width: 420px;
+  height: 420px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255, 152, 0, 0.16), transparent 70%);
+}
+
+.fa-page-header-inner {
+  position: relative;
+  z-index: 2;
+  max-width: 900px;
+}
+
+.fa-breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.5);
+  margin-bottom: 20px;
+  font-weight: 600;
+}
+
+.fa-breadcrumb a {
+  color: rgba(255, 255, 255, 0.7);
+  text-decoration: none;
+}
+
+.fa-breadcrumb a:hover {
+  color: var(--fa-orange);
+}
+
+.fa-page-eyebrow {
+  margin-bottom: 14px;
+}
+
+.fa-page-header h1 {
+  font-size: 42px;
+  font-weight: 800;
+  letter-spacing: -0.5px;
+  margin: 0 0 16px;
+}
+
+.fa-page-subtitle {
+  color: rgba(255, 255, 255, 0.62);
+  font-size: 16.5px;
+  line-height: 1.7;
+  max-width: 620px;
+}
+
+@media (max-width: 600px) {
+  .fa-page-header {
+    padding: 140px 6% 50px;
+  }
+
+  .fa-page-header h1 {
+    font-size: 30px;
+  }
+}

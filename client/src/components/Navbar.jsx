@@ -1,82 +1,86 @@
+import "./Logo.css";
 import "./Navbar.css";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { FaBars, FaTimes, FaShip } from "react-icons/fa";
+import { FaBars, FaTimes } from "react-icons/fa";
+import Logo from "./Logo";
 
-function Navbar() {
+const NAV_LINKS = [
+  { label: "Home", to: "/", type: "route" },
+  { label: "Services", to: "/services", type: "route" },
+  { label: "Tracking", to: "/tracking", type: "route" },
+  { label: "Shipment", to: "/shipment", type: "route" },
+  { label: "Contact", to: "/contact", type: "route" },
+];
 
-const [menu,setMenu]=useState(false);
+function Navbar({ forceSolid = false }) {
+  const [menu, setMenu] = useState(false);
+  const [scrolled, setScrolled] = useState(forceSolid);
 
-return(
+  useEffect(() => {
+    if (forceSolid) return;
+    function onScroll() {
+      setScrolled(window.scrollY > 64);
+    }
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, [forceSolid]);
 
-<nav className="navbar">
+  useEffect(() => {
+    document.body.style.overflow = menu ? "hidden" : "";
+    return () => {
+      document.body.style.overflow = "";
+    };
+  }, [menu]);
 
-<Link to="/" className="logo">
+  return (
+    <nav className={`fa-navbar ${scrolled ? "is-solid" : "is-transparent"}`}>
+      <div className="fa-navbar-inner">
+        <Logo variant={scrolled ? "navy" : "white"} size={36} className="fa-navbar-logo" />
 
-<FaShip className="ship"/>
+        <ul className={menu ? "fa-nav-links active" : "fa-nav-links"}>
+          {NAV_LINKS.map((link) =>
+            link.type === "route" ? (
+              <li key={link.label}>
+                <Link to={link.to} onClick={() => setMenu(false)}>
+                  {link.label}
+                </Link>
+              </li>
+            ) : (
+              <li key={link.label}>
+                <a href={link.to} onClick={() => setMenu(false)}>
+                  {link.label}
+                </a>
+              </li>
+            )
+          )}
 
-<h2>
-Freight<span>AI</span>
-</h2>
+          <li className="fa-mobile-only">
+            <Link to="/login" className="fa-mobile-login-link" onClick={() => setMenu(false)}>
+              Login
+            </Link>
+          </li>
+        </ul>
 
-</Link>
+        <div className="fa-nav-right">
+          <Link to="/login" className="fa-login-pill">
+            Login
+          </Link>
+        </div>
 
-<ul className={menu?"nav-links active":"nav-links"}>
-
-<li><Link to="/">Home</Link></li>
-
-<li><Link to="/services">Services</Link></li>
-
-<li><a href="#">Tracking</a></li>
-
-<li><a href="#">Shipment</a></li>
-
-<li><a href="#">Contact</a></li>
-
-<li className="mobile-login-item">
-<Link to="/login" className="mobile-login-link">Login</Link>
-</li>
-
-</ul>
-
-<div className="nav-right">
-
-<select>
-
-<option>USD</option>
-<option>INR</option>
-<option>EUR</option>
-
-</select>
-
-<Link to="/login">
-
-<button>
-
-Login
-
-</button>
-
-</Link>
-
-</div>
-
-<div
-className="menu"
-
-onClick={()=>setMenu(!menu)}
->
-
-{
-menu?<FaTimes/>:<FaBars/>
-}
-
-</div>
-
-</nav>
-
-)
-
+        <button
+          type="button"
+          className="fa-menu-toggle"
+          onClick={() => setMenu(!menu)}
+          aria-label={menu ? "Close menu" : "Open menu"}
+          aria-expanded={menu}
+        >
+          {menu ? <FaTimes /> : <FaBars />}
+        </button>
+      </div>
+    </nav>
+  );
 }
 
 export default Navbar;

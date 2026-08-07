@@ -1,0 +1,43 @@
+/* =========================================================
+   FreightAI — Slate Navy & Signal Orange design tokens
+   Shared across landing page, auth pages, and dashboard UI.
+   ========================================================= */
+
+:root {
+  /* Primary / Ink */
+  --fa-navy: #0F172A;
+  --fa-navy-light: #1E293B;
+  --fa-navy-soft: #142238;
+
+  /* Accents */
+  --fa-orange: #FF9800;
+  --fa-orange-light: #FFB74D;
+  --fa-amber: #E65100;
+
+  --fa-orange-tint: #FFF8F0;
+  --fa-orange-tint-2: #FFF3E0;
+  --fa-orange-border: #FFE0B2;
+
+  /* Neutrals */
+  --fa-white: #FFFFFF;
+  --fa-cloud: #F8FAFC;
+  --fa-mist: #F1F5F9;
+  --fa-border: #E2E8F0;
+  --fa-input-border: #CBD5E1;
+  --fa-muted: #64748B;
+  --fa-body: #334155;
+  --fa-heading: #0F172A;
+
+  /* Semantic */
+  --fa-success: #16A34A;
+  --fa-error: #DC2626;
+
+  /* Shape */
+  --fa-radius-sm: 10px;
+  --fa-radius-lg: 20px;
+  --fa-shadow-card: 0 10px 30px rgba(15, 23, 42, 0.07);
+  --fa-shadow-card-hover: 0 20px 45px rgba(15, 23, 42, 0.14);
+  --fa-shadow-navy: 0 20px 45px rgba(15, 23, 42, 0.28);
+
+  --fa-font: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+}

@@ -1,15 +1,20 @@
+import "./Logo.css";
 import "./AuthPage.css";
 import React, { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
-import { FaShip, FaEye, FaEyeSlash, FaCheck, FaEnvelope, FaLock, FaUser, FaArrowLeft, FaSpinner } from "react-icons/fa";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { FaEye, FaEyeSlash, FaCheck, FaEnvelope, FaLock, FaUser, FaArrowLeft, FaSpinner, FaShieldAlt, FaBoxes, FaGlobeAmericas } from "react-icons/fa";
 import { login as loginRequest, signup, forgotPassword } from "../api/auth";
 import { useAuth } from "../context/AuthContext";
+import Logo from "./Logo";
 
 function AuthPage() {
 const navigate = useNavigate();
 const auth = useAuth();
+const [searchParams] = useSearchParams();
 
-const [mode, setMode] = useState("login"); // login | forgot | signup
+const [mode, setMode] = useState(
+  searchParams.get("mode") === "signup" ? "signup" : "login"
+); // login | forgot | signup
 
 const [showPassword, setShowPassword] = useState(false);
 const [loading, setLoading] = useState(false);
@@ -122,13 +127,39 @@ const stepLabels = ["Details", "Email", "Password"];
 return (
 <div className="auth-page">
 
-<div className="auth-overlay"></div>
+<div className="auth-brand-panel">
 
-<Link to="/" className="auth-logo">
-<FaShip className="ship" />
-<h2>
-Freight<span>AI</span>
-</h2>
+<div className="auth-brand-overlay"></div>
+
+<Link to="/" className="auth-brand-logo">
+<Logo variant="white" size={40} />
+</Link>
+
+<div className="auth-brand-copy">
+<p className="auth-brand-eyebrow">Enterprise Logistics Platform</p>
+<h1>Ship smarter with AI-powered freight quotes.</h1>
+<p className="auth-brand-sub">
+Join thousands of businesses managing global shipments, instant
+quotes and live tracking from one intelligent dashboard.
+</p>
+
+<ul className="auth-brand-points">
+<li><FaBoxes /> Instant AI freight quotations</li>
+<li><FaGlobeAmericas /> 120+ countries supported</li>
+<li><FaShieldAlt /> Secure, enterprise-grade access</li>
+</ul>
+</div>
+
+<Link to="/" className="auth-brand-back">
+&larr; Back to homepage
+</Link>
+
+</div>
+
+<div className="auth-form-panel">
+
+<Link to="/" className="auth-logo-mobile">
+<Logo variant="navy" size={34} />
 </Link>
 
 <div className="auth-container">
@@ -464,6 +495,8 @@ Go to Login
 )}
 </>
 )}
+
+</div>
 
 </div>
 

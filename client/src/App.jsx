@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { Routes, Route } from "react-router-dom";
 import ProfessionalLanding from "./components/ProfessionalLanding";
 import AuthPage from "./components/AuthPage";
@@ -6,50 +7,94 @@ import QuotePage from "./components/QuotePage";
 import QuoteGenerator from "./components/QuoteGenerator";
 import AdminRateConfig from "./components/AdminRateConfig";
 import ProtectedRoute from "./components/ProtectedRoute";
+import TransportDetail from "./components/TransportDetail";
+import TrackingPage from "./components/TrackingPage";
+import ShipmentPage from "./components/ShipmentPage";
+import ContactPage from "./components/ContactPage";
+import PageLoader from "./components/PageLoader";
+import CookieConsent from "./components/CookieConsent";
+import { LocationProvider } from "./context/LocationContext";
+
+const INITIAL_LOAD_MS = 5000;
 
 function App() {
+  const [loading, setLoading] = useState(true);
+  const [cookiesResolved, setCookiesResolved] = useState(false);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setLoading(false), INITIAL_LOAD_MS);
+    return () => clearTimeout(timer);
+  }, []);
+
+  useEffect(() => {
+    const shouldLock = loading || !cookiesResolved;
+    document.body.style.overflow = shouldLock ? "hidden" : "";
+    return () => {
+      document.body.style.overflow = "";
+    };
+  }, [loading, cookiesResolved]);
+
   return (
-    <Routes>
-      <Route path="/" element={<ProfessionalLanding />} />
-      <Route path="/login" element={<AuthPage />} />
-      <Route path="/services" element={<QuoteGenerator />} />
+    <LocationProvider>
+      <PageLoader visible={loading} />
 
-      <Route
-        path="/dashboard"
-        element={
-          <ProtectedRoute>
-            <DashboardShell />
-          </ProtectedRoute>
-        }
-      />
+      {!loading && <CookieConsent onResolved={setCookiesResolved} />}
 
-      <Route
-        path="/dashboard/:section"
-        element={
-          <ProtectedRoute>
-            <DashboardShell />
-          </ProtectedRoute>
+      <div
+        aria-hidden={!cookiesResolved}
+        style={
+          !cookiesResolved
+            ? { filter: "blur(2px)", pointerEvents: "none", userSelect: "none" }
+            : undefined
         }
-      />
+      >
+      <Routes>
+        <Route path="/" element={<ProfessionalLanding />} />
+        <Route path="/login" element={<AuthPage />} />
+        <Route path="/services" element={<QuoteGenerator />} />
+        <Route path="/transport/:mode" element={<TransportDetail />} />
+        <Route path="/tracking" element={<TrackingPage />} />
+        <Route path="/shipment" element={<ShipmentPage />} />
+        <Route path="/contact" element={<ContactPage />} />
 
-      <Route
-        path="/quote"
-        element={
-          <ProtectedRoute>
-            <QuotePage />
-          </ProtectedRoute>
-        }
-      />
+        <Route
+          path="/dashboard"
+          element={
+            <ProtectedRoute>
+              <DashboardShell />
+            </ProtectedRoute>
+          }
+        />
 
-      <Route
-        path="/admin"
-        element={
-          <ProtectedRoute requiredRole="admin">
-            <AdminRateConfig />
-          </ProtectedRoute>
-        }
-      />
-    </Routes>
+        <Route
+          path="/dashboard/:section"
+          element={
+            <ProtectedRoute>
+              <DashboardShell />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/quote"
+          element={
+            <ProtectedRoute>
+              <QuotePage />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/admin"
+          element={
+            <ProtectedRoute requiredRole="admin">
+              <AdminRateConfig />
+            </ProtectedRoute>
+          }
+        />
+      </Routes>
+      </div>
+    </LocationProvider>
   );
 }
 

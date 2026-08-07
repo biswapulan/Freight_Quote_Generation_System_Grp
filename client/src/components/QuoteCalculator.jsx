@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { Link } from "react-router-dom";
 import {
   Ship,
   Box,
@@ -12,6 +13,9 @@ import {
   Cloud,
   FileText,
   IndianRupee,
+  PackageCheck,
+  X,
+  UserPlus,
 } from "lucide-react";
 import Chart from "chart.js/auto";
 import L from "leaflet";
@@ -127,6 +131,8 @@ export default function QuoteCalculator() {
   const [promoInput, setPromoInput] = useState("");
   const [activePromo, setActivePromo] = useState(null);
   const [promoMsg, setPromoMsg] = useState({ text: "", ok: false });
+
+  const [showShipModal, setShowShipModal] = useState(false);
 
   const mapElRef = useRef(null);
   const mapInstanceRef = useRef(null);
@@ -661,10 +667,70 @@ export default function QuoteCalculator() {
               <button className="qg-btn-dark" onClick={exportPDF}>
                 <FileText /> Export PDF Quote
               </button>
+              <button
+                type="button"
+                className="qg-btn-ship"
+                onClick={() => setShowShipModal(true)}
+              >
+                <PackageCheck /> Ship This Quote
+              </button>
             </div>
           </div>
         </div>
       </div>
+
+      {showShipModal && (
+        <div
+          className="qg-ship-modal-overlay"
+          onClick={() => setShowShipModal(false)}
+        >
+          <div
+            className="qg-ship-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Create an account to ship this quote"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              type="button"
+              className="qg-ship-modal-close"
+              onClick={() => setShowShipModal(false)}
+              aria-label="Close"
+            >
+              <X />
+            </button>
+
+            <div className="qg-ship-modal-icon">
+              <PackageCheck />
+            </div>
+
+            <h3>Ready to ship this quote?</h3>
+            <p>
+              Create a free FreightAI account to lock in{" "}
+              <strong>{quote.formattedTotal}</strong> for{" "}
+              {quote.oPort.name} &rarr; {quote.dPort.name}, track your
+              shipment in real time, and manage everything from one
+              dashboard.
+            </p>
+
+            <Link
+              to="/login?mode=signup"
+              className="qg-btn-signup"
+              onClick={() => setShowShipModal(false)}
+            >
+              <UserPlus /> Sign Up to Continue
+            </Link>
+
+            <button
+              type="button"
+              className="qg-ship-modal-later"
+              onClick={() => setShowShipModal(false)}
+            >
+              Maybe later
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Hidden PDF Print Template */}
       <div ref={pdfContainerRef} className="qg-pdf-export-container hidden">

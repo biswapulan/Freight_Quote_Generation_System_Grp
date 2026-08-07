@@ -1,0 +1,27 @@
+.fa-logo {
+  display: inline-flex;
+  align-items: center;
+  gap: 11px;
+  text-decoration: none;
+  line-height: 1;
+}
+
+.fa-logo-svg {
+  flex-shrink: 0;
+  filter: drop-shadow(0 6px 14px rgba(255, 152, 0, 0.18));
+}
+
+.fa-logo-word {
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: -0.4px;
+  white-space: nowrap;
+}
+
+.fa-logo-accent {
+  color: var(--fa-orange, #ff9800);
+}
+
+.fa-logo-tag {
+  display: none;
+}

@@ -1,0 +1,166 @@
+.fa-shipment-steps {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 70px 6% 20px;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 26px;
+}
+
+.fa-shipment-step {
+  position: relative;
+  background: var(--fa-white);
+  border: 1px solid var(--fa-border);
+  padding: 34px 24px;
+  border-radius: var(--fa-radius-lg);
+  box-shadow: var(--fa-shadow-card);
+  transition: 0.3s ease;
+}
+
+.fa-shipment-step:hover {
+  transform: translateY(-8px);
+  box-shadow: var(--fa-shadow-card-hover);
+}
+
+.fa-shipment-step-num {
+  position: absolute;
+  top: 20px;
+  right: 22px;
+  font-size: 34px;
+  font-weight: 800;
+  color: var(--fa-mist);
+}
+
+.fa-shipment-step-icon {
+  width: 58px;
+  height: 58px;
+  border-radius: 16px;
+  background: var(--fa-orange-tint);
+  border: 1px solid var(--fa-orange-border);
+  color: var(--fa-orange);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  margin-bottom: 18px;
+}
+
+.fa-shipment-step h3 {
+  color: var(--fa-heading);
+  font-size: 18px;
+  font-weight: 700;
+  margin-bottom: 10px;
+}
+
+.fa-shipment-step p {
+  color: var(--fa-muted);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.fa-shipment-extras {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 50px 6%;
+}
+
+.fa-shipment-extras-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 24px;
+}
+
+.fa-shipment-extra-card {
+  display: flex;
+  gap: 18px;
+  align-items: flex-start;
+  background: var(--fa-cloud);
+  border: 1px solid var(--fa-border);
+  border-radius: var(--fa-radius-lg);
+  padding: 28px;
+}
+
+.fa-shipment-extra-icon {
+  flex-shrink: 0;
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  background: var(--fa-navy);
+  color: var(--fa-orange);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+}
+
+.fa-shipment-extra-card h3 {
+  color: var(--fa-heading);
+  font-size: 16.5px;
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+
+.fa-shipment-extra-card p {
+  color: var(--fa-muted);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.fa-shipment-cta {
+  max-width: 1180px;
+  margin: 20px auto 90px;
+  padding: 0 6%;
+  background: transparent;
+}
+
+.fa-shipment-cta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 24px;
+  background: var(--fa-navy);
+  border-radius: var(--fa-radius-lg);
+  padding: 44px 48px;
+  margin-left: 6%;
+  margin-right: 6%;
+  width: 88%;
+  color: #fff;
+  box-shadow: var(--fa-shadow-navy);
+}
+
+.fa-shipment-cta h2 {
+  font-size: 27px;
+  font-weight: 800;
+  margin-bottom: 8px;
+}
+
+.fa-shipment-cta p {
+  color: rgba(255, 255, 255, 0.65);
+  font-size: 15px;
+}
+
+@media (max-width: 1000px) {
+  .fa-shipment-steps {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 700px) {
+  .fa-shipment-extras-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .fa-shipment-cta {
+    flex-direction: column;
+    text-align: center;
+    padding: 34px 26px;
+  }
+}
+
+@media (max-width: 500px) {
+  .fa-shipment-steps {
+    grid-template-columns: 1fr;
+    padding: 50px 6% 10px;
+  }
+}

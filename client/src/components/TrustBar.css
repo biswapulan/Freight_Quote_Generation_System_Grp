@@ -1,0 +1,72 @@
+.fa-trustbar {
+  background: var(--fa-navy, #0f172a);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.fa-trustbar-inner {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 34px 6%;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 24px;
+}
+
+.fa-trustbar-item {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  justify-content: center;
+}
+
+.fa-trustbar-icon {
+  flex-shrink: 0;
+  width: 46px;
+  height: 46px;
+  border-radius: 12px;
+  background: rgba(255, 152, 0, 0.14);
+  color: var(--fa-orange, #ff9800);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 19px;
+}
+
+.fa-trustbar-item h3 {
+  color: #fff;
+  font-size: 24px;
+  font-weight: 800;
+  margin: 0 0 2px;
+  letter-spacing: -0.3px;
+}
+
+.fa-trustbar-item p {
+  color: rgba(255, 255, 255, 0.55);
+  font-size: 13px;
+  margin: 0;
+  font-weight: 600;
+}
+
+@media (max-width: 768px) {
+  .fa-trustbar-inner {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 26px 16px;
+    padding: 30px 6%;
+  }
+
+  .fa-trustbar-item {
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 480px) {
+  .fa-trustbar-icon {
+    width: 40px;
+    height: 40px;
+    font-size: 16px;
+  }
+
+  .fa-trustbar-item h3 {
+    font-size: 20px;
+  }
+}
