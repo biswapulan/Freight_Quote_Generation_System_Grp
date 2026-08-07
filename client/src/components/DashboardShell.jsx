@@ -1,18 +1,23 @@
 import { useEffect, useState } from "react";
 import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
+import Logo from "./Logo";
 import QuoteCalculator from "./QuoteCalculator";
 import RetailProfile from "./RetailProfile";
+import ShipmentsHistory from "./ShipmentsHistory";
+import SavedAddresses from "./SavedAddresses";
+import Carriers from "./Carriers";
+import Support from "./Support";
+import "./Logo.css";
 import "./DashboardShell.css";
 
-// Sidebar section labels per account type. These are placeholders only —
-// each renders as a blank page with just the section name until someone
-// builds the real content for it.
+// Sidebar section labels per account type. "Routes", "Port Congestion" and
+// "Overview" are still placeholders — everything else below renders real
+// UI (see the slug switch in <main> further down).
 const RETAIL_SECTIONS = [
   "Overview",
-  "New Quote",
-  "My Shipments",
-  "Quote History",
+  "Generate Quote",
+  "Shipments History",
   "Saved Addresses",
   "Routes",
   "Port Congestion",
@@ -109,7 +114,7 @@ export default function DashboardShell() {
 
       <aside className={`dash-sidebar${sidebarOpen ? " open" : ""}`}>
         <div className="dash-logo">
-          Freight<span>AI</span>
+          <Logo to="/dashboard" variant="white" size={32} />
         </div>
 
         <nav className="dash-nav">
@@ -140,9 +145,21 @@ export default function DashboardShell() {
         </div>
       </aside>
 
-      <main className={`dash-content${activeItem.slug === "new-quote" ? " dash-content-flush" : ""}`}>
-        {activeItem.slug === "new-quote" ? (
+      <main
+        className={`dash-content${
+          activeItem.slug === "generate-quote" || activeItem.slug === "new-quote" ? " dash-content-flush" : ""
+        }`}
+      >
+        {activeItem.slug === "generate-quote" || activeItem.slug === "new-quote" ? (
           <QuoteCalculator />
+        ) : activeItem.slug === "shipments-history" ? (
+          <ShipmentsHistory />
+        ) : activeItem.slug === "saved-addresses" ? (
+          <SavedAddresses />
+        ) : activeItem.slug === "carriers" ? (
+          <Carriers />
+        ) : activeItem.slug === "support" ? (
+          <Support />
         ) : activeItem.slug === "profile" && user.role === "retail" ? (
           <RetailProfile />
         ) : (
