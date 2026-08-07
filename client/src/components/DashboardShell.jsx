@@ -5,7 +5,10 @@ import { RetailQuotesProvider } from "../context/RetailQuotesContext";
 import Logo from "./Logo";
 import QuoteCalculator from "./QuoteCalculator";
 import RetailGenerateQuote from "./RetailGenerateQuote";
+import RetailOverview from "./RetailOverview";
 import RetailProfile from "./RetailProfile";
+import RetailRoutes from "./RetailRoutes";
+import RetailPortCongestion from "./RetailPortCongestion";
 import RetailShipmentsHistory from "./RetailShipmentsHistory";
 import SavedAddresses from "./SavedAddresses";
 import Carriers from "./Carriers";
@@ -13,9 +16,10 @@ import Support from "./Support";
 import "./Logo.css";
 import "./DashboardShell.css";
 
-// Sidebar section labels per account type. "Routes", "Port Congestion" and
-// "Overview" are still placeholders — everything else below renders real
-// UI (see the slug switch in <main> further down).
+// Sidebar section labels per account type — see the slug switch in <main>
+// further down for what each renders. "Overview", "Routes" and
+// "Port Congestion" render real UI for retail accounts; the business
+// account versions of these sections are still placeholders.
 const RETAIL_SECTIONS = [
   "Overview",
   "Generate Quote",
@@ -155,7 +159,13 @@ export default function DashboardShell() {
         }`}
       >
         <RetailQuotesProvider>
-          {activeItem.slug === "generate-quote" && user.role !== "business" ? (
+          {activeItem.slug === "overview" && user.role !== "business" ? (
+            <RetailOverview />
+          ) : activeItem.slug === "routes" && user.role !== "business" ? (
+            <RetailRoutes />
+          ) : activeItem.slug === "port-congestion" && user.role !== "business" ? (
+            <RetailPortCongestion />
+          ) : activeItem.slug === "generate-quote" && user.role !== "business" ? (
             <RetailGenerateQuote />
           ) : activeItem.slug === "new-quote" ? (
             <QuoteCalculator />

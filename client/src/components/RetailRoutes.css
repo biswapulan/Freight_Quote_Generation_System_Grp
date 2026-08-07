@@ -1,0 +1,368 @@
+/* ==========================================================================
+   Retail Routes — trade lane directory
+   All visual rules for the Routes section live here so the UI can be
+   restyled without touching the component. Scoped under .rt-page.
+   ========================================================================== */
+
+.rt-page * {
+  box-sizing: border-box;
+}
+
+.rt-page {
+  max-width: 1320px;
+  margin: 0 auto;
+  padding: 40px 20px 60px;
+  color: var(--fa-heading);
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+/* ---------- top bar ---------- */
+
+.rt-top-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.rt-breadcrumb {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.rt-bc-path {
+  font-size: 13px;
+  color: var(--fa-muted);
+  font-weight: 500;
+}
+
+.rt-page-title {
+  font-size: 26px;
+  font-weight: 800;
+  color: var(--fa-heading);
+}
+
+.rt-page-sub {
+  font-size: 13.5px;
+  color: var(--fa-muted);
+  font-weight: 500;
+  margin-top: 2px;
+}
+
+.rt-btn-orange {
+  background: var(--fa-orange);
+  color: #fff;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 8px;
+  font-weight: 800;
+  font-size: 13px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  box-shadow: 0 4px 12px rgba(255, 152, 0, 0.25);
+  text-decoration: none;
+  transition: 0.2s ease;
+  white-space: nowrap;
+}
+
+.rt-btn-orange:hover {
+  background: var(--fa-orange-light);
+  transform: translateY(-1px);
+}
+
+/* ---------- KPI row ---------- */
+
+.rt-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 20px;
+}
+
+.rt-kpi-card {
+  background: var(--fa-white);
+  border: 1px solid var(--fa-border);
+  border-radius: 14px;
+  padding: 20px 22px;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.02);
+}
+
+.rt-kpi-title { font-size: 12.5px; color: var(--fa-muted); font-weight: 600; margin-bottom: 8px; }
+.rt-kpi-value { font-size: 28px; font-weight: 800; color: var(--fa-heading); line-height: 1; }
+.rt-kpi-sub { font-size: 11.5px; font-weight: 700; margin-top: 8px; }
+.rt-kpi-sub.green { color: var(--fa-success); }
+.rt-kpi-sub.red { color: var(--fa-error); }
+.rt-kpi-sub.slate { color: var(--fa-muted); }
+.rt-kpi-sub.amber { color: #b45309; }
+
+/* ---------- map card ---------- */
+
+.rt-map-card {
+  background: var(--fa-white);
+  border: 1px solid var(--fa-border);
+  border-radius: 16px;
+  padding: 20px 22px;
+  box-shadow: var(--fa-shadow-card);
+}
+
+.rt-card-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+  flex-wrap: wrap;
+}
+
+.rt-card-title {
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--fa-heading);
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.rt-card-title svg { color: var(--fa-orange); }
+
+.rt-map-legend {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.rt-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--fa-muted);
+}
+
+.rt-legend-swatch {
+  width: 16px;
+  height: 3px;
+  border-radius: 2px;
+}
+
+.rt-map-el {
+  height: 320px;
+  width: 100%;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #eef2f7;
+}
+
+/* leaflet divIcon markers */
+.rt-marker {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid #fff;
+  box-shadow: 0 0 0 1px rgba(15, 23, 42, 0.25), 0 3px 8px rgba(0, 0, 0, 0.25);
+}
+
+.rt-marker.hub {
+  width: 18px;
+  height: 18px;
+}
+
+.rt-popup-title { font-weight: 800; font-size: 13px; color: var(--fa-heading); }
+.rt-popup-sub { font-size: 11.5px; color: var(--fa-muted); margin-top: 2px; }
+
+/* ---------- filter card ---------- */
+
+.rt-filter-card {
+  background: var(--fa-white);
+  border: 1px solid var(--fa-border);
+  border-radius: 16px;
+  padding: 20px 24px;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.03);
+}
+
+.rt-filter-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.rt-search-wrap {
+  position: relative;
+  flex: 1;
+  min-width: 220px;
+}
+
+.rt-search-wrap svg {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #94a3b8;
+  width: 16px;
+  height: 16px;
+}
+
+.rt-input,
+.rt-select {
+  padding: 10px 14px;
+  background: #ffffff;
+  border: 1px solid var(--fa-input-border);
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--fa-heading);
+  outline: none;
+  transition: 0.2s ease;
+}
+
+.rt-input:focus,
+.rt-select:focus {
+  border-color: var(--fa-orange);
+  box-shadow: 0 0 0 3px rgba(255, 152, 0, 0.15);
+}
+
+.rt-search-wrap .rt-input {
+  width: 100%;
+  padding-left: 36px;
+}
+
+.rt-select { width: auto; }
+
+.rt-btn-clear {
+  background: #ffffff;
+  border: 1px solid var(--fa-input-border);
+  color: var(--fa-heading);
+  padding: 8px 18px;
+  border-radius: 8px;
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+  transition: 0.2s ease;
+  white-space: nowrap;
+}
+
+.rt-btn-clear:hover { background: var(--fa-mist); border-color: #94a3b8; }
+
+.rt-results-count {
+  margin-left: auto;
+  font-size: 12px;
+  color: #94a3b8;
+  font-weight: 600;
+}
+
+/* ---------- lane table ---------- */
+
+.rt-table-wrap { overflow-x: auto; }
+
+.rt-table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 920px;
+}
+
+.rt-table th {
+  text-align: left;
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--fa-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 12px 14px;
+  border-bottom: 2px solid var(--fa-mist);
+}
+
+.rt-table td {
+  padding: 14px;
+  font-size: 13px;
+  color: #1e293b;
+  border-bottom: 1px solid var(--fa-mist);
+  vertical-align: middle;
+}
+
+.rt-lane-code { font-weight: 800; color: var(--fa-heading); display: block; }
+.rt-lane-sub { font-size: 11px; color: var(--fa-muted); display: block; margin-top: 1px; }
+
+.rt-mode-badges { display: flex; gap: 5px; flex-wrap: wrap; }
+
+.rt-mode-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: 20px;
+  font-size: 10.5px;
+  font-weight: 700;
+  background: var(--fa-mist);
+  color: var(--fa-body);
+}
+
+.rt-mode-badge.ocean { background: #e0f2fe; color: #0369a1; }
+.rt-mode-badge.air { background: #ffedd5; color: #c2410c; }
+
+.rt-status-badge {
+  display: inline-block;
+  padding: 4px 12px;
+  border-radius: 12px;
+  font-size: 11.5px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.rt-status-badge.active { background: #dcfce7; color: #15803d; }
+.rt-status-badge.new { background: #e0f2fe; color: #0369a1; }
+.rt-status-badge.delayed { background: #fef3c7; color: #b45309; }
+.rt-status-badge.suspended { background: #fee2e2; color: #b91c1c; }
+
+.rt-note { color: var(--fa-muted); font-size: 12px; max-width: 240px; }
+
+.rt-quote-count { font-weight: 800; color: var(--fa-heading); }
+.rt-quote-count.zero { color: #cbd5e1; font-weight: 600; }
+
+.rt-btn-quote {
+  background: #ffffff;
+  border: 1px solid var(--fa-input-border);
+  color: var(--fa-heading);
+  padding: 5px 14px;
+  border-radius: 6px;
+  font-weight: 700;
+  font-size: 12px;
+  cursor: pointer;
+  text-decoration: none;
+  display: inline-block;
+  transition: 0.2s;
+  white-space: nowrap;
+}
+
+.rt-btn-quote:hover { background: var(--fa-mist); border-color: #94a3b8; }
+
+.rt-btn-quote.disabled {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+/* ---------- responsive ---------- */
+
+@media (max-width: 1080px) {
+  .rt-kpi-grid { grid-template-columns: repeat(2, 1fr); }
+}
+
+@media (max-width: 768px) {
+  .rt-page { padding: 24px 16px 40px; gap: 18px; }
+  .rt-page-title { font-size: 20px; }
+  .rt-kpi-grid { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+  .rt-kpi-card { padding: 14px 12px; }
+  .rt-kpi-value { font-size: 20px; }
+  .rt-filter-card { padding: 16px 14px; border-radius: 12px; }
+  .rt-filter-controls { flex-direction: column; align-items: stretch; }
+  .rt-filter-controls select, .rt-filter-controls button { width: 100% !important; }
+  .rt-search-wrap { width: 100%; }
+  .rt-map-el { height: 240px; }
+}
