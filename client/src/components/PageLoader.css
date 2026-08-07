@@ -20,20 +20,23 @@
 
 .fa-loader-glow {
   position: absolute;
+  top: 50%;
+  left: 50%;
   width: 520px;
   height: 520px;
   border-radius: 50%;
   background: radial-gradient(circle, rgba(255, 152, 0, 0.18), transparent 70%);
+  transform: translate(-50%, -50%) scale(0.9);
   animation: fa-loader-pulse 2.6s ease-in-out infinite;
 }
 
 @keyframes fa-loader-pulse {
   0%, 100% {
-    transform: scale(0.9);
+    transform: translate(-50%, -50%) scale(0.9);
     opacity: 0.7;
   }
   50% {
-    transform: scale(1.08);
+    transform: translate(-50%, -50%) scale(1.08);
     opacity: 1;
   }
 }
@@ -102,6 +105,11 @@
 }
 
 @media (max-width: 480px) {
+  .fa-loader-glow {
+    width: 320px;
+    height: 320px;
+  }
+
   .fa-loader-bar {
     width: 170px;
   }
