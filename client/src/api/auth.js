@@ -55,3 +55,27 @@ export function getMe(token) {
 export function updateProfile(token, data) {
   return request("/me/", data, { method: "PATCH", token });
 }
+
+export function getSavedAddresses(token) {
+  return request("/saved-addresses/", null, { method: "GET", token });
+}
+
+export function createSavedAddress(token, data) {
+  return request("/saved-addresses/", data, { token });
+}
+
+export function deleteSavedAddress(token, addressId) {
+  return request(`/saved-addresses/${addressId}/`, null, { method: "DELETE", token });
+}
+
+export function getSupportTickets(token) {
+  return request("/support-tickets/", null, { method: "GET", token });
+}
+
+export function createSupportTicket(token, data) {
+  return request("/support-tickets/", data, { token });
+}
+
+export function getTawkIdentity(token) {
+  return request("/tawk-identity/", null, { method: "GET", token });
+}

@@ -1,26 +1,73 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { Search, Download } from "lucide-react";
-import { useRetailQuotes } from "../context/RetailQuotesContext";
+import { listQuotes } from "../api/quotes";
+import { useAuth } from "../context/AuthContext";
 import "./RetailShipmentsHistory.css";
 
 const MODE_CLASS = { ocean_fcl: "ocean-fcl", air: "air-freight", ocean_lcl: "ocean-lcl" };
 const STATUS_CLASS = { Draft: "draft", Issued: "issued", Booked: "booked", "No routing": "norouting" };
 
-const LANE_OPTIONS = [
-  { value: "all", label: "All lanes" },
-  { value: "INNSA-AEJEA", label: "INNSA → AEJEA" },
-  { value: "INNSA-NLRTM", label: "INNSA → NLRTM" },
-  { value: "BOM-DXB", label: "BOM → DXB" },
-  { value: "INNSA-SGSIN", label: "INNSA → SGSIN" },
-];
+const MODE_LABELS = { ocean: "Ocean Freight", air: "Air Freight", road: "Road Freight", rail: "Rail Freight" };
+
+function formatDate(iso) {
+  return new Date(iso).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+}
+
+function formatMoney(amount, currency) {
+  return new Intl.NumberFormat("en-IN", { style: "currency", currency: currency || "INR", maximumFractionDigits: 0 }).format(amount || 0);
+}
 
 export default function RetailShipmentsHistory() {
-  const { quotations } = useRetailQuotes();
+  const { token, user } = useAuth();
+  const [quotations, setQuotations] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
   const [search, setSearch] = useState("");
   const [laneFilter, setLaneFilter] = useState("all");
   const [modeFilter, setModeFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
+
+  useEffect(() => {
+    let cancelled = false;
+
+    listQuotes(token)
+      .then((data) => {
+        if (cancelled) return;
+        const records = Array.isArray(data) ? data : data?.results || [];
+        setQuotations(records.map((quote) => ({
+          id: quote.id,
+          quoteNo: `QT-${quote.id.slice(-8).toUpperCase()}`,
+          customerName: user?.full_name || "Retail customer",
+          customerCity: quote.origin,
+          laneCode: `${quote.origin} → ${quote.destination}`,
+          laneSub: `${quote.origin} → ${quote.destination}`,
+          mode: quote.mode,
+          modeLabel: MODE_LABELS[quote.mode] || quote.mode,
+          basis: `${quote.weight_kg} kg / ${quote.volume_m3} m³`,
+          transit: quote.transit_days ? `${quote.transit_days} d` : "—",
+          totalFormatted: formatMoney(quote.breakdown?.total, quote.currency),
+          totalNum: quote.breakdown?.total || 0,
+          status: quote.status === "confirmed" ? "Booked" : "Draft",
+          created: formatDate(quote.created_at),
+        })));
+      })
+      .catch((requestError) => {
+        if (!cancelled) setError(requestError.message || "Unable to load shipment history.");
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [token, user?.full_name]);
+
+  const laneOptions = useMemo(() => [
+    { value: "all", label: "All lanes" },
+    ...Array.from(new Set(quotations.map((quote) => quote.laneCode))).map((lane) => ({ value: lane, label: lane })),
+  ], [quotations]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -30,7 +77,7 @@ export default function RetailShipmentsHistory() {
         item.quoteNo.toLowerCase().includes(q) ||
         item.customerName.toLowerCase().includes(q) ||
         item.laneCode.toLowerCase().includes(q);
-      const matchesLane = laneFilter === "all" || item.laneCode.includes(laneFilter.replace("-", " → "));
+      const matchesLane = laneFilter === "all" || item.laneCode === laneFilter;
       const matchesMode = modeFilter === "all" || item.mode === modeFilter;
       const matchesStatus = statusFilter === "all" || item.status === statusFilter;
       return matchesSearch && matchesLane && matchesMode && matchesStatus;
@@ -111,7 +158,7 @@ export default function RetailShipmentsHistory() {
             />
           </div>
           <select className="form-select" style={{ width: "auto" }} value={laneFilter} onChange={(e) => setLaneFilter(e.target.value)}>
-            {LANE_OPTIONS.map((o) => (
+            {laneOptions.map((o) => (
               <option key={o.value} value={o.value}>
                 {o.label}
               </option>
@@ -119,9 +166,10 @@ export default function RetailShipmentsHistory() {
           </select>
           <select className="form-select" style={{ width: "auto" }} value={modeFilter} onChange={(e) => setModeFilter(e.target.value)}>
             <option value="all">All modes</option>
-            <option value="ocean_fcl">Ocean FCL</option>
-            <option value="ocean_lcl">Ocean LCL</option>
+            <option value="ocean">Ocean Freight</option>
             <option value="air">Air Freight</option>
+            <option value="road">Road Freight</option>
+            <option value="rail">Rail Freight</option>
           </select>
           <select className="form-select" style={{ width: "auto" }} value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
             <option value="all">All statuses</option>
@@ -143,6 +191,7 @@ export default function RetailShipmentsHistory() {
         </div>
 
         <div className="table-container">
+          {error && <p className="dashboard-error">{error}</p>}
           <table className="dash-table">
             <thead>
               <tr>
@@ -159,7 +208,13 @@ export default function RetailShipmentsHistory() {
               </tr>
             </thead>
             <tbody>
-              {filtered.length === 0 ? (
+              {loading ? (
+                <tr>
+                  <td colSpan={10} style={{ textAlign: "center", padding: 30, color: "#94a3b8" }}>
+                    Loading shipment history...
+                  </td>
+                </tr>
+              ) : filtered.length === 0 ? (
                 <tr>
                   <td colSpan={10} style={{ textAlign: "center", padding: 30, color: "#94a3b8" }}>
                     No matching quotations found.

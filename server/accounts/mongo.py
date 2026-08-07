@@ -10,9 +10,14 @@ client = MongoClient(settings.MONGO_URI, serverSelectionTimeoutMS=5000)
 db = client[settings.MONGO_DB_NAME]
 
 users_collection = db["users"]
+saved_addresses_collection = db["saved_addresses"]
+support_tickets_collection = db["support_tickets"]
 
 try:
     users_collection.create_index("email", unique=True)
+    saved_addresses_collection.create_index([("user_id", 1), ("is_default", 1)])
+    support_tickets_collection.create_index([("user_id", 1), ("created_at", -1)])
+    support_tickets_collection.create_index("ticket_number", unique=True)
 except PyMongoError:
     # Mongo isn't reachable at import time (e.g. local dev without it
     # running yet, or a management command that doesn't need the DB).

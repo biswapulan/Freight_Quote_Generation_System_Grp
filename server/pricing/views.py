@@ -7,6 +7,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from accounts.permissions import IsAdminRole, IsAuthenticatedMongoUser
+from accounts.mongo import saved_addresses_collection
 
 from .engine import DEFAULT_RATE_CONFIG, UnservicedRouteError, calculate_quote
 from .mongo import (
@@ -51,9 +52,24 @@ def _serialize_quote(doc):
         "currency": doc["currency"],
         "breakdown": doc["breakdown"],
         "status": doc["status"],
+        "pickup_address_id": doc.get("pickup_address_id", ""),
+        "delivery_address_id": doc.get("delivery_address_id", ""),
         "created_at": doc["created_at"].isoformat(),
         "expires_at": doc["expires_at"].isoformat(),
     }
+
+
+def _validate_owned_address(address_id, user_id, field_name):
+    if not address_id:
+        return
+
+    try:
+        object_id = ObjectId(address_id)
+    except (InvalidId, TypeError):
+        raise ValueError(f"{field_name} is invalid.")
+
+    if not saved_addresses_collection.find_one({"_id": object_id, "user_id": user_id}):
+        raise ValueError(f"{field_name} was not found.")
 
 
 class EstimateQuoteView(APIView):
@@ -70,6 +86,12 @@ class EstimateQuoteView(APIView):
         serializer = QuoteRequestSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         payload = serializer.validated_data
+
+        try:
+            _validate_owned_address(payload.get("pickup_address_id"), request.user["_id"], "Pickup address")
+            _validate_owned_address(payload.get("delivery_address_id"), request.user["_id"], "Delivery address")
+        except ValueError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
 
         rate_config = get_active_rate_config()
 

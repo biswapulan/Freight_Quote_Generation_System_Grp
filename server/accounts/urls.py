@@ -7,6 +7,10 @@ from .views import (
     LoginView,
     MeView,
     ResetPasswordView,
+    SavedAddressDetailView,
+    SavedAddressesView,
+    SupportTicketsView,
+    TawkIdentityView,
     SignupView,
 )
 
@@ -16,4 +20,8 @@ urlpatterns = [
     path('forgot-password/', ForgotPasswordView.as_view(), name='forgot-password'),
     path('reset-password/', ResetPasswordView.as_view(), name='reset-password'),
     path('me/', MeView.as_view(), name='me'),
+    path('saved-addresses/', SavedAddressesView.as_view(), name='saved-addresses'),
+    path('saved-addresses/<str:address_id>/', SavedAddressDetailView.as_view(), name='saved-address-detail'),
+    path('support-tickets/', SupportTicketsView.as_view(), name='support-tickets'),
+    path('tawk-identity/', TawkIdentityView.as_view(), name='tawk-identity'),
 ]

@@ -1,5 +1,8 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { FaEnvelope, FaPhoneAlt, FaRegClock, FaCommentDots } from "react-icons/fa";
+import { createSupportTicket, getSupportTickets } from "../api/auth";
+import { useAuth } from "../context/AuthContext";
+import { openSupportChat } from "./TawkChat";
 import "./Support.css";
 
 const FAQS = [
@@ -28,30 +31,56 @@ const FAQS = [
 const EMPTY_TICKET = { name: "", email: "", category: "Quote issue", ref: "", subject: "", message: "" };
 
 export default function Support() {
+  const { token, user } = useAuth();
   const [openFaq, setOpenFaq] = useState(0);
   const [ticket, setTicket] = useState(EMPTY_TICKET);
   const [submitted, setSubmitted] = useState(false);
   const [trackInput, setTrackInput] = useState("");
   const [trackedId, setTrackedId] = useState("");
+  const [tickets, setTickets] = useState([]);
+  const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
+
+  useEffect(() => {
+    getSupportTickets(token)
+      .then((data) => setTickets(data?.results || []))
+      .catch((requestError) => setError(requestError.message || "Unable to load support tickets."));
+  }, [token]);
 
   function updateTicket(field, value) {
     setTicket((t) => ({ ...t, [field]: value }));
   }
 
-  function handleSubmit(event) {
+  async function handleSubmit(event) {
     event.preventDefault();
-    // TODO: replace with a real POST to the support-ticket endpoint once it exists
-    setSubmitted(true);
-    setTicket(EMPTY_TICKET);
+    setSaving(true);
+    setError("");
+    try {
+      const createdTicket = await createSupportTicket(token, {
+        category: ticket.category,
+        reference: ticket.ref,
+        subject: ticket.subject,
+        message: ticket.message,
+      });
+      setTickets((current) => [createdTicket, ...current]);
+      setTrackedId(createdTicket.ticket_number);
+      setSubmitted(true);
+      setTicket(EMPTY_TICKET);
+    } catch (requestError) {
+      setError(requestError.message || "Unable to submit this ticket.");
+    } finally {
+      setSaving(false);
+    }
   }
 
   function handleTrack() {
     const val = trackInput.trim();
     if (!val) return;
-    // TODO: replace with a real GET to the ticket-status endpoint once it exists
-    setTrackedId(val);
+    setTrackedId(tickets.find((ticket) => ticket.ticket_number.toLowerCase() === val.toLowerCase())?.ticket_number || "");
   }
+
+  const trackedTicket = tickets.find((ticket) => ticket.ticket_number === trackedId);
 
   return (
     <section className="sup-page" aria-labelledby="sup-title">
@@ -130,16 +159,16 @@ export default function Support() {
                 <button type="button" className="sup-btn-primary" onClick={handleTrack}>Check status</button>
               </div>
 
-              {trackedId && (
+              {trackedTicket && (
                 <div className="sup-tracker-result visible">
                   <div className="sup-tracker-meta">
                     <div>
                       <p className="sup-tracker-meta-label">Ticket</p>
-                      <p className="sup-tracker-meta-value">{trackedId}</p>
+                      <p className="sup-tracker-meta-value">{trackedTicket.ticket_number}</p>
                     </div>
                     <div>
                       <p className="sup-tracker-meta-label">Category</p>
-                      <p className="sup-tracker-meta-value">Shipment tracking</p>
+                      <p className="sup-tracker-meta-value">{trackedTicket.category}</p>
                     </div>
                   </div>
 
@@ -152,8 +181,8 @@ export default function Support() {
                     <div className="sup-route-line" />
                     <div className="sup-route-stop">
                       <div className="sup-route-dot" />
-                      <span className="sup-route-stop-label">In review</span>
-                      <span className="sup-route-stop-time">Aug 5, 10:41 AM</span>
+                      <span className="sup-route-stop-label">{trackedTicket.status === "pending" ? "Pending" : "In review"}</span>
+                      <span className="sup-route-stop-time">Awaiting support</span>
                     </div>
                     <div className="sup-route-line pending" />
                     <div className="sup-route-stop pending">
@@ -176,11 +205,11 @@ export default function Support() {
                 <div className="sup-form-row">
                   <div className="sup-form-group">
                     <label className="sup-label" htmlFor="sup-name">Full name</label>
-                    <input className="sup-input" type="text" id="sup-name" required value={ticket.name} onChange={(e) => updateTicket("name", e.target.value)} />
+                    <input className="sup-input" type="text" id="sup-name" required value={user?.full_name || ""} disabled />
                   </div>
                   <div className="sup-form-group">
                     <label className="sup-label" htmlFor="sup-email">Email</label>
-                    <input className="sup-input" type="email" id="sup-email" required value={ticket.email} onChange={(e) => updateTicket("email", e.target.value)} />
+                    <input className="sup-input" type="email" id="sup-email" required value={user?.email || ""} disabled />
                   </div>
                 </div>
 
@@ -211,7 +240,9 @@ export default function Support() {
                   <textarea className="sup-textarea" id="sup-message" required value={ticket.message} onChange={(e) => updateTicket("message", e.target.value)} />
                 </div>
 
-                <button type="submit" className="sup-btn-primary sup-btn-full">Submit ticket</button>
+                <button type="submit" className="sup-btn-primary sup-btn-full" disabled={saving}>{saving ? "Submitting..." : "Submit ticket"}</button>
+
+                {error && <p className="sup-error" role="alert">{error}</p>}
 
                 {submitted && (
                   <div className="sup-form-success visible">
@@ -225,7 +256,7 @@ export default function Support() {
         </div>
       </div>
 
-      <button type="button" className="sup-chat-fab" onClick={() => setChatOpen((v) => !v)}>
+      <button type="button" className="sup-chat-fab" onClick={openSupportChat}>
         <FaCommentDots />
         <span>Chat with support</span>
       </button>

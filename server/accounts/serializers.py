@@ -76,3 +76,30 @@ class ProfileUpdateSerializer(serializers.Serializer):
             raise serializers.ValidationError("Provide an email address or password change.")
 
         return attrs
+
+
+class SavedAddressSerializer(serializers.Serializer):
+    """Validate a saved pickup or delivery address."""
+
+    label = serializers.CharField(min_length=2, max_length=150)
+    type = serializers.ChoiceField(
+        choices=("Pickup (Origin)", "Delivery (Destination)", "Both (Origin & Destination)")
+    )
+    contact = serializers.CharField(min_length=2, max_length=150)
+    phone = serializers.CharField(min_length=5, max_length=40)
+    email = serializers.EmailField()
+    street = serializers.CharField(min_length=3, max_length=300)
+    city = serializers.CharField(min_length=2, max_length=120)
+    state = serializers.CharField(min_length=2, max_length=120)
+    postal = serializers.CharField(min_length=2, max_length=30)
+    country = serializers.CharField(min_length=2, max_length=120)
+    hours = serializers.CharField(required=False, allow_blank=True, max_length=150, default="")
+    notes = serializers.CharField(required=False, allow_blank=True, max_length=500, default="")
+    is_default = serializers.BooleanField(required=False, default=False)
+
+
+class SupportTicketSerializer(serializers.Serializer):
+    category = serializers.ChoiceField(choices=("Quote issue", "Shipment tracking", "Billing", "Account", "Other"))
+    reference = serializers.CharField(required=False, allow_blank=True, max_length=100, default="")
+    subject = serializers.CharField(min_length=3, max_length=200)
+    message = serializers.CharField(min_length=10, max_length=5000)

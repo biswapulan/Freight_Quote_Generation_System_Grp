@@ -5,7 +5,10 @@ import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import html2pdf from "html2pdf.js";
 import { Ship, Plane, Truck, Zap, Plus, Trash2, X, CheckCircle, FileText, Check } from "lucide-react";
-import { useRetailQuotes, PORTS_MASTER } from "../context/RetailQuotesContext";
+import { PORTS_MASTER } from "../context/RetailQuotesContext";
+import { getSavedAddresses } from "../api/auth";
+import { confirmQuote, estimateQuote } from "../api/quotes";
+import { useAuth } from "../context/AuthContext";
 import "./RetailGenerateQuote.css";
 
 // Fix default Leaflet marker icons (Vite asset URL issue)
@@ -65,10 +68,16 @@ function money(n) {
 
 export default function RetailGenerateQuote() {
   const navigate = useNavigate();
-  const { addQuotation } = useRetailQuotes();
+  const { token } = useAuth();
 
   const [form, setForm] = useState(initialFormState);
   const [items, setItems] = useState(DEFAULT_ITEMS);
+  const [savedAddresses, setSavedAddresses] = useState([]);
+  const [addressesError, setAddressesError] = useState("");
+  const [quoteError, setQuoteError] = useState("");
+  const [generatedQuote, setGeneratedQuote] = useState(null);
+  const [generating, setGenerating] = useState(false);
+  const [confirming, setConfirming] = useState(false);
   const [showQuoteModal, setShowQuoteModal] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [bookingRef, setBookingRef] = useState("");
@@ -85,6 +94,22 @@ export default function RetailGenerateQuote() {
   function setField(key, val) {
     setForm((f) => ({ ...f, [key]: val }));
   }
+
+  useEffect(() => {
+    let cancelled = false;
+
+    getSavedAddresses(token)
+      .then((addresses) => {
+        if (!cancelled) setSavedAddresses(addresses);
+      })
+      .catch((error) => {
+        if (!cancelled) setAddressesError(error.message || "Unable to load saved addresses.");
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [token]);
 
   function addItem() {
     setItems((list) => [
@@ -224,31 +249,63 @@ export default function RetailGenerateQuote() {
     chart.update();
   }, [quote.baseFreight, quote.surchargesTotal]);
 
-  function handleGenerateQuote() {
-    setShowQuoteModal(true);
+  const pickupAddresses = savedAddresses.filter((address) =>
+    ["Pickup (Origin)", "Both (Origin & Destination)"].includes(address.type)
+  );
+  const deliveryAddresses = savedAddresses.filter((address) =>
+    ["Delivery (Destination)", "Both (Origin & Destination)"].includes(address.type)
+  );
+
+  async function handleGenerateQuote() {
+    setGenerating(true);
+    setQuoteError("");
+    const cityByPort = {
+      INNSA: "Mumbai",
+      AEJEA: "Dubai",
+      SGSIN: "Singapore",
+      NLRTM: "Rotterdam",
+      CNSHA: "Shanghai",
+      DEL: "Delhi",
+    };
+    const apiMode = form.mode === "ground" ? "road" : form.mode === "express" ? "air" : form.mode;
+    const cargoType = form.chkHazardous ? "hazardous" : form.chkTemp ? "cold_chain" : form.mode === "express" ? "express" : "general";
+
+    try {
+      const result = await estimateQuote(token, {
+        origin: cityByPort[oPort.id],
+        destination: cityByPort[dPort.id],
+        weightKg: Math.max(quote.totalWeight, 1),
+        volumeM3: Math.max(quote.totalContainers * 20, 1),
+        cargoType,
+        mode: apiMode,
+        pickupAddressId: form.pickupAddr,
+        deliveryAddressId: form.deliveryAddr,
+      });
+      setGeneratedQuote(result);
+      setShowQuoteModal(true);
+    } catch (error) {
+      setQuoteError(error.message || "Unable to generate this quote.");
+    } finally {
+      setGenerating(false);
+    }
   }
 
-  function handleConfirmShipment() {
-    setShowQuoteModal(false);
+  async function handleConfirmShipment() {
+    if (!generatedQuote) return;
 
-    const newEntry = {
-      quoteNo: quote.id,
-      customerName: form.custName || "Sharma Textiles",
-      customerCity: form.custCompany || "Mumbai",
-      laneCode: `${oPort.id} → ${dPort.id}`,
-      laneSub: `${oPort.name.split(",")[0]} → ${dPort.name.split(",")[0]}`,
-      mode: "ocean_fcl",
-      modeLabel: "Ocean FCL",
-      basis: quote.containerSummaryStr,
-      transit: "6–10 d",
-      totalFormatted: quote.formattedPrice,
-      totalNum: quote.grandTotal,
-      status: "Booked",
-      created: "Just now",
-    };
-    addQuotation(newEntry);
-    setBookingRef(`BK-2026-${Math.floor(1000 + Math.random() * 9000)}`);
-    setShowSuccessModal(true);
+    setConfirming(true);
+    setQuoteError("");
+    try {
+      const confirmedQuote = await confirmQuote(token, generatedQuote.id);
+      setGeneratedQuote(confirmedQuote);
+      setShowQuoteModal(false);
+      setBookingRef(`BK-${confirmedQuote.id.slice(-8).toUpperCase()}`);
+      setShowSuccessModal(true);
+    } catch (error) {
+      setQuoteError(error.message || "Unable to book this shipment.");
+    } finally {
+      setConfirming(false);
+    }
   }
 
   function exportPDF() {
@@ -269,6 +326,8 @@ export default function RetailGenerateQuote() {
           <button type="button" className="btn-secondary-light" onClick={clearForm}>Clear</button>
         </div>
       </div>
+
+      {quoteError && <p className="quote-api-error" role="alert">{quoteError}</p>}
 
       <div className="main-grid">
         {/* LEFT FORM SECTIONS */}
@@ -306,13 +365,20 @@ export default function RetailGenerateQuote() {
             <div className="form-row">
               <div className="form-group">
                 <label>Pickup address <span className="hint">(door pickup only)</span></label>
-                <input type="text" className="form-input" placeholder="Street, city, PIN code" value={form.pickupAddr} onChange={(e) => setField("pickupAddr", e.target.value)} />
+                <select className="form-select" value={form.pickupAddr} onChange={(e) => setField("pickupAddr", e.target.value)}>
+                  <option value="">Select a saved pickup address</option>
+                  {pickupAddresses.map((address) => <option key={address.id} value={address.id}>{address.label} — {address.city}, {address.country}</option>)}
+                </select>
               </div>
               <div className="form-group">
                 <label>Delivery address <span className="hint">(door delivery only)</span> <span className="badge-new">NEW</span></label>
-                <input type="text" className="form-input" placeholder="Street, city, postal code" value={form.deliveryAddr} onChange={(e) => setField("deliveryAddr", e.target.value)} />
+                <select className="form-select" value={form.deliveryAddr} onChange={(e) => setField("deliveryAddr", e.target.value)}>
+                  <option value="">Select a saved delivery address</option>
+                  {deliveryAddresses.map((address) => <option key={address.id} value={address.id}>{address.label} — {address.city}, {address.country}</option>)}
+                </select>
               </div>
             </div>
+            {addressesError && <p className="quote-api-error" role="alert">{addressesError}</p>}
 
             <div className="form-row">
               <div className="form-group">
@@ -582,8 +648,8 @@ export default function RetailGenerateQuote() {
 
             <div className="rate-badge">◆ INDICATIVE — M1 FLAT RATE</div>
 
-            <button type="button" className="btn-generate" onClick={handleGenerateQuote}>
-              ➔ Generate full quotation
+            <button type="button" className="btn-generate" onClick={handleGenerateQuote} disabled={generating}>
+              {generating ? "Generating quotation..." : "➔ Generate full quotation"}
             </button>
 
             <p className="disclaimer">
@@ -677,8 +743,8 @@ export default function RetailGenerateQuote() {
                 Lock in this rate now. Clicking proceed will save this quotation to your Quotations Dashboard.
               </p>
               <div className="modal-prompt-actions">
-                <button type="button" className="btn-confirm-booking" onClick={handleConfirmShipment}>
-                  <CheckCircle size={16} /> Yes, Proceed to Book Shipment
+                <button type="button" className="btn-confirm-booking" onClick={handleConfirmShipment} disabled={confirming}>
+                  <CheckCircle size={16} /> {confirming ? "Booking shipment..." : "Yes, Proceed to Book Shipment"}
                 </button>
                 <button type="button" className="btn-secondary-light" onClick={exportPDF}>
                   <FileText size={14} /> Download PDF Only

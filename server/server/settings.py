@@ -135,6 +135,7 @@ STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 # MongoDB is used directly by the accounts app for user auth data.
 MONGO_URI = config('MONGO_URI')
 MONGO_DB_NAME = config('MONGO_DB_NAME')
+TAWK_API_KEY = config('TAWK_API_KEY', default='')
 
 # Allow the local React/Vite dev server to call this API.
 CORS_ALLOWED_ORIGINS = csv_config(

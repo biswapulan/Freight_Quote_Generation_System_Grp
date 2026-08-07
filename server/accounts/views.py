@@ -1,20 +1,25 @@
 """API views for Mongo-backed signup, login, and password reset."""
 
 from datetime import datetime, timedelta
+import hashlib
+import hmac
 import uuid
 
 from django.contrib.auth.hashers import check_password, make_password
+from django.conf import settings
 from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .mongo import users_collection
+from .mongo import saved_addresses_collection, support_tickets_collection, users_collection
 from .permissions import IsAuthenticatedMongoUser
 from .serializers import (
     ForgotPasswordSerializer,
     LoginSerializer,
     ProfileUpdateSerializer,
     ResetPasswordSerializer,
+    SavedAddressSerializer,
+    SupportTicketSerializer,
     SignupSerializer,
 )
 from .tokens import create_token
@@ -33,6 +38,27 @@ def public_profile(user_doc):
         "role": user_doc.get("role", "retail"),
         "company_name": user_doc.get("company_name", ""),
         "gst_number": user_doc.get("gst_number", ""),
+    }
+
+
+def public_address(address_doc):
+    """Shape an address document for the client without exposing ownership."""
+
+    return {
+        "id": str(address_doc["_id"]),
+        "label": address_doc["label"],
+        "type": address_doc["type"],
+        "contact": address_doc["contact"],
+        "phone": address_doc["phone"],
+        "email": address_doc["email"],
+        "street": address_doc["street"],
+        "city": address_doc["city"],
+        "state": address_doc["state"],
+        "postal": address_doc["postal"],
+        "country": address_doc["country"],
+        "hours": address_doc.get("hours", ""),
+        "notes": address_doc.get("notes", ""),
+        "isDefault": address_doc.get("is_default", False),
     }
 
 
@@ -132,6 +158,102 @@ class MeView(APIView):
         users_collection.update_one({"_id": user_id}, {"$set": updates})
         updated_user = users_collection.find_one({"_id": user_id})
         return Response(public_profile(updated_user))
+
+
+class SavedAddressesView(APIView):
+    """List and create addresses owned by the signed-in user."""
+
+    permission_classes = [IsAuthenticatedMongoUser]
+
+    def get(self, request):
+        addresses = saved_addresses_collection.find({"user_id": request.user["_id"]}).sort(
+            [("is_default", -1), ("created_at", -1)]
+        )
+        return Response([public_address(address) for address in addresses])
+
+    def post(self, request):
+        serializer = SavedAddressSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        address = {**serializer.validated_data, "user_id": request.user["_id"], "created_at": datetime.utcnow()}
+        address["is_default"] = address.pop("is_default")
+
+        if address["is_default"]:
+            saved_addresses_collection.update_many(
+                {"user_id": request.user["_id"]}, {"$set": {"is_default": False}}
+            )
+
+        result = saved_addresses_collection.insert_one(address)
+        address["_id"] = result.inserted_id
+        return Response(public_address(address), status=status.HTTP_201_CREATED)
+
+
+class SavedAddressDetailView(APIView):
+    """Delete an address only when it belongs to the signed-in user."""
+
+    permission_classes = [IsAuthenticatedMongoUser]
+
+    def delete(self, request, address_id):
+        from bson import ObjectId
+        from bson.errors import InvalidId
+
+        try:
+            object_id = ObjectId(address_id)
+        except InvalidId:
+            return Response({"detail": "Address not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        result = saved_addresses_collection.delete_one(
+            {"_id": object_id, "user_id": request.user["_id"]}
+        )
+        if not result.deleted_count:
+            return Response({"detail": "Address not found."}, status=status.HTTP_404_NOT_FOUND)
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+def public_ticket(ticket):
+    return {
+        "ticket_number": ticket["ticket_number"],
+        "category": ticket["category"],
+        "reference": ticket.get("reference", ""),
+        "subject": ticket["subject"],
+        "message": ticket["message"],
+        "status": ticket["status"],
+        "created_at": ticket["created_at"].isoformat(),
+    }
+
+
+class SupportTicketsView(APIView):
+    permission_classes = [IsAuthenticatedMongoUser]
+
+    def get(self, request):
+        tickets = support_tickets_collection.find({"user_id": request.user["_id"]}).sort("created_at", -1)
+        return Response({"results": [public_ticket(ticket) for ticket in tickets]})
+
+    def post(self, request):
+        serializer = SupportTicketSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        ticket = {
+            **serializer.validated_data,
+            "ticket_number": f"TCK-{uuid.uuid4().hex[:8].upper()}",
+            "user_id": request.user["_id"],
+            "user_name": request.user.get("full_name", ""),
+            "user_email": request.user.get("email", ""),
+            "status": "pending",
+            "created_at": datetime.utcnow(),
+        }
+        support_tickets_collection.insert_one(ticket)
+        return Response(public_ticket(ticket), status=status.HTTP_201_CREATED)
+
+
+class TawkIdentityView(APIView):
+    permission_classes = [IsAuthenticatedMongoUser]
+
+    def get(self, request):
+        api_key = getattr(settings, "TAWK_API_KEY", "")
+        if not api_key:
+            return Response({"detail": "Tawk secure identity is not configured."}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+        user_id = str(request.user["_id"])
+        signature = hmac.new(api_key.encode(), user_id.encode(), hashlib.sha256).hexdigest()
+        return Response({"userId": user_id, "name": request.user.get("full_name", ""), "email": request.user.get("email", ""), "hash": signature})
 
 
 class ForgotPasswordView(APIView):

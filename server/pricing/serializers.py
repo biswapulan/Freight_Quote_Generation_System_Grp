@@ -19,6 +19,8 @@ class QuoteRequestSerializer(serializers.Serializer):
     volume_m3 = serializers.FloatField(min_value=0)
     cargo_type = serializers.ChoiceField(choices=tuple(DEFAULT_CARGO_MULTIPLIERS))
     mode = serializers.ChoiceField(choices=VALID_MODES)
+    pickup_address_id = serializers.CharField(required=False, allow_blank=True, max_length=24)
+    delivery_address_id = serializers.CharField(required=False, allow_blank=True, max_length=24)
 
     def validate(self, attrs):
         if attrs["origin"].strip().lower() == attrs["destination"].strip().lower():

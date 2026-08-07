@@ -82,6 +82,13 @@
   font-size: 14px;
 }
 
+.addr-error {
+  margin: 0 0 20px;
+  color: #B91C1C;
+  font-size: 14px;
+  font-weight: 600;
+}
+
 .addr-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
@@ -204,6 +211,7 @@
   transition: background 0.15s ease;
 }
 .addr-btn-primary:hover { background: var(--fa-amber); }
+.addr-btn-primary:disabled { cursor: wait; opacity: 0.7; }
 
 .addr-btn-ghost {
   font-family: inherit;

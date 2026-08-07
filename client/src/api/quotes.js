@@ -12,6 +12,8 @@ export function estimateQuote(token, payload) {
       volume_m3: Number(payload.volumeM3),
       cargo_type: payload.cargoType,
       mode: payload.mode,
+      pickup_address_id: payload.pickupAddressId,
+      delivery_address_id: payload.deliveryAddressId,
     },
   });
 }

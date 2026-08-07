@@ -1,50 +1,7 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { createSavedAddress, deleteSavedAddress, getSavedAddresses } from "../api/auth";
+import { useAuth } from "../context/AuthContext";
 import "./SavedAddresses.css";
-
-const INITIAL_ADDRESSES = [
-  {
-    id: "addr-1",
-    label: "Central Warehouse",
-    type: "Pickup (Origin)",
-    isDefault: true,
-    contact: "Rajesh Sharma",
-    phone: "+91 98765 43210",
-    email: "dispatch@centralwh.com",
-    street: "Plot 42, Industrial Area Phase 1",
-    cityState: "Mumbai, Maharashtra - 400001",
-    country: "India",
-    hours: "Mon-Sat: 9 AM - 6 PM",
-    notes: "Dock high available, Forklift on site.",
-  },
-  {
-    id: "addr-2",
-    label: "Retail Flagship Store",
-    type: "Delivery (Destination)",
-    isDefault: false,
-    contact: "Ananya Verma",
-    phone: "+91 91234 56789",
-    email: "store.mumbai@retail.com",
-    street: "Store #12, Grand Avenue Mall",
-    cityState: "Pune, Maharashtra - 411001",
-    country: "India",
-    hours: "Mon-Sun: 10 AM - 9 PM",
-    notes: "Ground-level loading only, strict morning delivery window.",
-  },
-  {
-    id: "addr-3",
-    label: "North Regional Hub",
-    type: "Both (Origin & Destination)",
-    isDefault: false,
-    contact: "Vikram Singh",
-    phone: "+91 99887 76655",
-    email: "northhub@logistics.com",
-    street: "Sector 18, Transport Nagar",
-    cityState: "Delhi, NCR - 110033",
-    country: "India",
-    hours: "24/7 Operations",
-    notes: "Multi-dock bay, heavy container truck entry permitted.",
-  },
-];
 
 const EMPTY_FORM = {
   label: "",
@@ -63,9 +20,32 @@ const EMPTY_FORM = {
 };
 
 export default function SavedAddresses() {
-  const [addresses, setAddresses] = useState(INITIAL_ADDRESSES);
+  const { token } = useAuth();
+  const [addresses, setAddresses] = useState([]);
   const [modalOpen, setModalOpen] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+
+    getSavedAddresses(token)
+      .then((data) => {
+        if (!cancelled) setAddresses(data);
+      })
+      .catch((requestError) => {
+        if (!cancelled) setError(requestError.message || "Unable to load saved addresses.");
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [token]);
 
   function update(field, value) {
     setForm((f) => ({ ...f, [field]: value }));
@@ -80,30 +60,34 @@ export default function SavedAddresses() {
     setModalOpen(false);
   }
 
-  function handleDelete(id) {
-    setAddresses((list) => list.filter((a) => a.id !== id));
+  async function handleDelete(id) {
+    setError("");
+    try {
+      await deleteSavedAddress(token, id);
+      setAddresses((list) => list.filter((address) => address.id !== id));
+    } catch (requestError) {
+      setError(requestError.message || "Unable to delete this address.");
+    }
   }
 
-  function handleSubmit(event) {
+  async function handleSubmit(event) {
     event.preventDefault();
-    const newAddress = {
-      id: `addr-${Date.now()}`,
-      label: form.label,
-      type: form.type,
-      isDefault: form.isDefault,
-      contact: form.contact,
-      phone: form.phone,
-      email: form.email,
-      street: form.street,
-      cityState: `${form.city}, ${form.state} - ${form.postal}`,
-      country: form.country,
-      hours: form.hours,
-      notes: form.notes,
-    };
-    setAddresses((list) =>
-      newAddress.isDefault ? [newAddress, ...list.map((a) => ({ ...a, isDefault: false }))] : [...list, newAddress]
-    );
-    closeModal();
+    setSaving(true);
+    setError("");
+    try {
+      const newAddress = await createSavedAddress(token, {
+        ...form,
+        is_default: form.isDefault,
+      });
+      setAddresses((list) =>
+        newAddress.isDefault ? [newAddress, ...list.map((address) => ({ ...address, isDefault: false }))] : [newAddress, ...list]
+      );
+      closeModal();
+    } catch (requestError) {
+      setError(requestError.message || "Unable to save this address.");
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
@@ -125,7 +109,11 @@ export default function SavedAddresses() {
           </button>
         </div>
 
-        {addresses.length === 0 ? (
+        {error && <p className="addr-error" role="alert">{error}</p>}
+
+        {loading ? (
+          <div className="addr-empty">Loading saved addresses...</div>
+        ) : addresses.length === 0 ? (
           <div className="addr-empty">No saved addresses yet — add your first warehouse or store location.</div>
         ) : (
           <div className="addr-grid">
@@ -142,7 +130,7 @@ export default function SavedAddresses() {
                   <p className="addr-contact">{a.contact}</p>
                   <p className="addr-detail-text">📞 {a.phone} | ✉️ {a.email}</p>
                   <p className="addr-detail-text addr-mt">{a.street}</p>
-                  <p className="addr-detail-text">{a.cityState}</p>
+                  <p className="addr-detail-text">{a.city}, {a.state} - {a.postal}</p>
                   <p className="addr-detail-text addr-country">{a.country}</p>
 
                   <div className="addr-meta-box">
@@ -180,7 +168,7 @@ export default function SavedAddresses() {
                     <select id="addr-type-input" className="addr-select" value={form.type} onChange={(e) => update("type", e.target.value)}>
                       <option value="Pickup (Origin)">Pickup (Origin)</option>
                       <option value="Delivery (Destination)">Delivery (Destination)</option>
-                      <option value="Both">Both (Origin &amp; Destination)</option>
+                      <option value="Both (Origin & Destination)">Both (Origin &amp; Destination)</option>
                     </select>
                   </div>
                 </div>
@@ -246,7 +234,9 @@ export default function SavedAddresses() {
 
                 <div className="addr-form-actions">
                   <button type="button" className="addr-btn-ghost" onClick={closeModal}>Cancel</button>
-                  <button type="submit" className="addr-btn-primary">Save Address</button>
+                  <button type="submit" className="addr-btn-primary" disabled={saving}>
+                    {saving ? "Saving..." : "Save Address"}
+                  </button>
                 </div>
               </form>
             </div>

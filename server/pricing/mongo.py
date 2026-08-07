@@ -79,6 +79,8 @@ def create_quote_document(user, request_payload, quote_result, validity_days=7):
         "breakdown": quote_result["breakdown"],
         "rates_used": quote_result["rates_used"],
         "status": "draft",
+        "pickup_address_id": request_payload.get("pickup_address_id", ""),
+        "delivery_address_id": request_payload.get("delivery_address_id", ""),
         "created_at": created_at,
         "expires_at": created_at + timedelta(days=validity_days),
     }
