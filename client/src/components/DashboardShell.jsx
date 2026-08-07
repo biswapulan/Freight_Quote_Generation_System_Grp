@@ -1,10 +1,12 @@
 import { useEffect, useState } from "react";
 import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
+import { RetailQuotesProvider } from "../context/RetailQuotesContext";
 import Logo from "./Logo";
 import QuoteCalculator from "./QuoteCalculator";
+import RetailGenerateQuote from "./RetailGenerateQuote";
 import RetailProfile from "./RetailProfile";
-import ShipmentsHistory from "./ShipmentsHistory";
+import RetailShipmentsHistory from "./RetailShipmentsHistory";
 import SavedAddresses from "./SavedAddresses";
 import Carriers from "./Carriers";
 import Support from "./Support";
@@ -147,27 +149,33 @@ export default function DashboardShell() {
 
       <main
         className={`dash-content${
-          activeItem.slug === "generate-quote" || activeItem.slug === "new-quote" ? " dash-content-flush" : ""
+          activeItem.slug === "generate-quote" || activeItem.slug === "new-quote" || activeItem.slug === "shipments-history"
+            ? " dash-content-flush"
+            : ""
         }`}
       >
-        {activeItem.slug === "generate-quote" || activeItem.slug === "new-quote" ? (
-          <QuoteCalculator />
-        ) : activeItem.slug === "shipments-history" ? (
-          <ShipmentsHistory />
-        ) : activeItem.slug === "saved-addresses" ? (
-          <SavedAddresses />
-        ) : activeItem.slug === "carriers" ? (
-          <Carriers />
-        ) : activeItem.slug === "support" ? (
-          <Support />
-        ) : activeItem.slug === "profile" && user.role === "retail" ? (
-          <RetailProfile />
-        ) : (
-          <div className="dash-placeholder">
-            <h1>{activeItem.label}</h1>
-            <p>This section hasn&apos;t been built yet.</p>
-          </div>
-        )}
+        <RetailQuotesProvider>
+          {activeItem.slug === "generate-quote" && user.role !== "business" ? (
+            <RetailGenerateQuote />
+          ) : activeItem.slug === "new-quote" ? (
+            <QuoteCalculator />
+          ) : activeItem.slug === "shipments-history" ? (
+            <RetailShipmentsHistory />
+          ) : activeItem.slug === "saved-addresses" ? (
+            <SavedAddresses />
+          ) : activeItem.slug === "carriers" ? (
+            <Carriers />
+          ) : activeItem.slug === "support" ? (
+            <Support />
+          ) : activeItem.slug === "profile" && user.role === "retail" ? (
+            <RetailProfile />
+          ) : (
+            <div className="dash-placeholder">
+              <h1>{activeItem.label}</h1>
+              <p>This section hasn&apos;t been built yet.</p>
+            </div>
+          )}
+        </RetailQuotesProvider>
       </main>
     </div>
   );

@@ -1,0 +1,461 @@
+/* ==========================================================================
+   Retail Generate Quote — ported from the "New shipment enquiry" view
+   ========================================================================== */
+.enquiryView * {
+  box-sizing: border-box;
+  font-family: "Inter", system-ui, -apple-system, sans-serif;
+}
+
+.enquiryView {
+  color: #0f172a;
+  padding-bottom: 40px;
+}
+
+.enquiryView .top-bar {
+  max-width: 1320px;
+  margin: 25px auto 20px;
+  padding: 0 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.enquiryView .breadcrumb { display: flex; flex-direction: column; gap: 4px; }
+.enquiryView .bc-path { font-size: 13px; color: #64748b; font-weight: 500; }
+.enquiryView .page-title { font-size: 26px; font-weight: 800; color: #0f172a; }
+.enquiryView .action-btns { display: flex; gap: 10px; }
+
+.enquiryView .btn-secondary-light {
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  color: #0f172a;
+  padding: 8px 18px;
+  border-radius: 8px;
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+.enquiryView .btn-secondary-light:hover { background: #f1f5f9; border-color: #94a3b8; }
+
+.enquiryView .btn-orange-primary {
+  background: #e65100;
+  color: #ffffff;
+  border: none;
+  padding: 9px 20px;
+  border-radius: 8px;
+  font-weight: 800;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  box-shadow: 0 4px 12px rgba(230, 81, 0, 0.25);
+}
+.enquiryView .btn-orange-primary:hover { background: #f57c00; transform: translateY(-1px); }
+
+.enquiryView .main-grid {
+  max-width: 1320px;
+  margin: 0 auto;
+  padding: 0 20px;
+  display: grid;
+  grid-template-columns: 1fr 340px;
+  gap: 24px;
+  align-items: start;
+}
+
+.enquiryView .right-sidebar-column {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  position: sticky;
+  top: 90px;
+}
+
+.enquiryView .section-card {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  padding: 24px 28px;
+  margin-bottom: 24px;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.03);
+}
+
+.enquiryView .section-header { display: flex; align-items: flex-start; gap: 14px; margin-bottom: 22px; }
+
+.enquiryView .sec-num {
+  background: #16a34a;
+  color: #ffffff;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+  font-size: 13px;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.enquiryView .sec-title h3 { font-size: 18px; font-weight: 800; color: #0f172a; }
+.enquiryView .sec-title p { font-size: 12px; color: #64748b; margin-top: 2px; }
+
+.enquiryView .form-row { display: flex; gap: 16px; margin-bottom: 16px; }
+.enquiryView .form-group { flex: 1; display: flex; flex-direction: column; gap: 6px; }
+.enquiryView .form-group.flex-1 { flex: 1; }
+.enquiryView .mt-3 { margin-top: 12px; }
+
+.enquiryView label { font-size: 13px; font-weight: 700; color: #1e293b; }
+.enquiryView label .req { color: #dc2626; }
+.enquiryView label .hint { color: #64748b; font-weight: normal; }
+
+.enquiryView .form-input,
+.enquiryView .form-select,
+.enquiryView .form-textarea {
+  width: 100%;
+  padding: 10px 14px;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  color: #0f172a;
+  outline: none;
+  transition: all 0.2s ease;
+  font-family: inherit;
+}
+
+.enquiryView .form-input:focus,
+.enquiryView .form-select:focus,
+.enquiryView .form-textarea:focus {
+  border-color: #ff9800;
+  box-shadow: 0 0 0 3px rgba(255, 152, 0, 0.15);
+}
+
+.enquiryView .subtext { font-size: 11px; color: #64748b; margin-top: 2px; }
+
+.enquiryView .badge-new {
+  background: #e65100;
+  color: #ffffff;
+  font-size: 10px;
+  font-weight: 800;
+  padding: 2px 6px;
+  border-radius: 4px;
+  text-transform: uppercase;
+  margin-left: 6px;
+}
+
+.enquiryView .mode-pills { display: flex; gap: 12px; margin-bottom: 18px; flex-wrap: wrap; }
+
+.enquiryView .mode-pill {
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 30px;
+  padding: 10px 20px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #334155;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.enquiryView .mode-pill.active {
+  background: #08162d;
+  color: #ffffff;
+  border-color: #08162d;
+  box-shadow: 0 4px 12px rgba(8, 22, 45, 0.2);
+}
+
+.enquiryView .alert-banner {
+  background: #fff7ed;
+  border-left: 4px solid #ea580c;
+  padding: 14px 16px;
+  border-radius: 0 8px 8px 0;
+  margin-bottom: 16px;
+}
+
+.enquiryView .alert-banner-title {
+  font-size: 11px;
+  font-weight: 800;
+  color: #c2410c;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 10px;
+}
+
+.enquiryView .item-box {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 18px;
+  margin-bottom: 16px;
+}
+
+.enquiryView .item-box-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 14px;
+}
+
+.enquiryView .item-tag { font-size: 11px; font-weight: 800; color: #94a3b8; letter-spacing: 1px; }
+
+.enquiryView .btn-remove {
+  background: transparent;
+  border: 1px solid #fee2e2;
+  color: #dc2626;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.enquiryView .btn-add-item {
+  width: 100%;
+  background: #ffffff;
+  border: 2px dashed #cbd5e1;
+  color: #0284c7;
+  padding: 12px;
+  border-radius: 8px;
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  transition: all 0.2s;
+}
+.enquiryView .btn-add-item:hover { border-color: #0284c7; background: #f0f9ff; }
+
+.enquiryView .checkbox-row {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.enquiryView .custom-check {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  color: #334155;
+}
+.enquiryView .custom-check input { accent-color: #ff9800; width: 18px; height: 18px; }
+
+.enquiryView .live-card {
+  background: #08162d;
+  color: #ffffff;
+  border-radius: 16px;
+  padding: 24px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
+}
+
+.enquiryView .live-card-header {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 1.5px;
+  color: #94a3b8;
+  text-transform: uppercase;
+  margin-bottom: 16px;
+}
+
+.enquiryView .charge-basis-box {
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  padding: 12px 14px;
+  margin-bottom: 18px;
+}
+
+.enquiryView .cb-label { font-size: 11px; color: #94a3b8; display: block; }
+.enquiryView .cb-val { font-size: 13px; font-weight: 700; color: #ffffff; display: block; margin-top: 2px; }
+
+.enquiryView .summary-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 24px;
+  padding-bottom: 18px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.enquiryView .s-row { display: flex; justify-content: space-between; font-size: 13px; }
+.enquiryView .s-row span { color: #94a3b8; }
+.enquiryView .s-row strong { color: #ffffff; font-weight: 700; text-align: right; }
+
+.enquiryView .est-total-label { font-size: 11px; font-weight: 800; letter-spacing: 1px; color: #94a3b8; text-transform: uppercase; }
+.enquiryView .est-total-price { font-size: 32px; font-weight: 800; color: #ffffff; margin: 4px 0 10px; }
+
+.enquiryView .rate-badge {
+  display: inline-block;
+  background: rgba(255, 152, 0, 0.15);
+  color: #ff9800;
+  border: 1px solid rgba(255, 152, 0, 0.4);
+  font-size: 10px;
+  font-weight: 800;
+  padding: 4px 8px;
+  border-radius: 4px;
+  margin-bottom: 20px;
+}
+
+.enquiryView .btn-generate {
+  width: 100%;
+  background: #e65100;
+  color: #ffffff;
+  border: none;
+  padding: 14px;
+  border-radius: 10px;
+  font-size: 15px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  box-shadow: 0 4px 15px rgba(230, 81, 0, 0.3);
+}
+.enquiryView .btn-generate:hover { background: #f57c00; transform: translateY(-1px); }
+
+.enquiryView .disclaimer { font-size: 11px; color: #64748b; margin-top: 12px; line-height: 1.4; text-align: center; }
+
+.enquiryView .side-widget-card {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  padding: 20px;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.03);
+}
+
+.enquiryView .side-widget-title { font-size: 14px; font-weight: 800; color: #0f172a; margin-bottom: 14px; }
+.enquiryView .chart-container-wrap { position: relative; height: 150px; width: 100%; }
+.enquiryView .map-container-wrap { height: 180px; width: 100%; border-radius: 10px; overflow: hidden; }
+
+.enquiryView .btn-dark-export {
+  width: 100%;
+  background: #08162d;
+  color: #ffffff;
+  border: none;
+  padding: 14px;
+  border-radius: 10px;
+  font-weight: 800;
+  font-size: 14px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition: all 0.2s ease;
+  box-shadow: 0 4px 12px rgba(8, 22, 45, 0.2);
+}
+.enquiryView .btn-dark-export:hover { background: #1e293b; }
+
+/* Modals */
+.enquiryView .modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.75);
+  backdrop-filter: blur(6px);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.enquiryView .modal-content {
+  background: #ffffff;
+  border-radius: 20px;
+  max-width: 800px;
+  width: 100%;
+  max-height: 90vh;
+  overflow-y: auto;
+  padding: 32px;
+  box-shadow: 0 25px 60px rgba(0, 0, 0, 0.3);
+  position: relative;
+}
+
+.enquiryView .modal-close {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  background: #f1f5f9;
+  border: none;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.enquiryView .modal-prompt-box {
+  background: #fff7ed;
+  border: 2px solid #ff9800;
+  border-radius: 12px;
+  padding: 20px;
+  margin-top: 24px;
+  text-align: center;
+}
+
+.enquiryView .modal-prompt-title { font-size: 18px; font-weight: 800; color: #0f172a; margin-bottom: 6px; }
+.enquiryView .modal-prompt-actions { display: flex; gap: 12px; justify-content: center; margin-top: 16px; flex-wrap: wrap; }
+
+.enquiryView .btn-confirm-booking {
+  background: #16a34a;
+  color: #ffffff;
+  border: none;
+  padding: 12px 24px;
+  border-radius: 8px;
+  font-weight: 800;
+  font-size: 14px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.enquiryView .modal-table { width: 100%; border-collapse: collapse; margin: 16px 0; }
+.enquiryView .modal-table th,
+.enquiryView .modal-table td { padding: 10px; border-bottom: 1px solid #e2e8f0; text-align: left; font-size: 13px; }
+.enquiryView .modal-table th { background: #f8fafc; color: #64748b; text-transform: uppercase; font-size: 11px; }
+
+.enquiryView .text-right { text-align: right; }
+.enquiryView .text-center { text-align: center; }
+
+/* MOBILE RESPONSIVE */
+@media (max-width: 768px) {
+  .enquiryView .top-bar { flex-direction: column; align-items: flex-start; gap: 12px; padding: 0 16px; margin: 15px auto 15px; }
+  .enquiryView .page-title { font-size: 20px; }
+  .enquiryView .action-btns { width: 100%; display: flex; gap: 8px; }
+  .enquiryView .action-btns button { flex: 1; justify-content: center; padding: 8px 10px; }
+  .enquiryView .main-grid { grid-template-columns: 1fr; padding: 0 16px; gap: 16px; }
+  .enquiryView .right-sidebar-column { position: static; }
+  .enquiryView .section-card { padding: 18px 16px; border-radius: 12px; }
+  .enquiryView .form-row { flex-direction: column; gap: 12px; }
+  .enquiryView .mode-pills { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+  .enquiryView .mode-pill { padding: 8px 10px; font-size: 12px; justify-content: center; }
+  .enquiryView .checkbox-row { grid-template-columns: 1fr; }
+  .enquiryView .live-card { padding: 18px 16px; border-radius: 12px; }
+  .enquiryView .est-total-price { font-size: 26px; }
+  .enquiryView .modal-content { padding: 20px 16px; border-radius: 14px; }
+}
