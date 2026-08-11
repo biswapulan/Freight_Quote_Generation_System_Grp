@@ -1,0 +1,247 @@
+.admin-panel-wide {
+  max-width: 1080px;
+}
+
+.admin-top-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.admin-nav-link {
+  color: rgba(255, 255, 255, 0.6);
+  text-decoration: none;
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.admin-nav-link:hover {
+  color: #ff9800;
+}
+
+.admin-users-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin: 24px 0;
+  align-items: center;
+}
+
+.admin-users-filters input[type="text"] {
+  flex: 1;
+  min-width: 200px;
+}
+
+.admin-users-filters input,
+.admin-users-filters select {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 10px;
+  padding: 10px 14px;
+  color: white;
+  font-size: 14px;
+  outline: none;
+}
+
+.admin-users-filters input:focus,
+.admin-users-filters select:focus {
+  border-color: #ff9800;
+  box-shadow: 0 0 0 3px rgba(255, 152, 0, 0.15);
+}
+
+.admin-filter-btn {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 10px;
+  color: white;
+  padding: 10px 18px;
+  font-weight: 600;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.admin-filter-btn:hover {
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.admin-add-btn {
+  margin-top: 0;
+  padding: 10px 18px;
+  font-size: 14px;
+}
+
+.admin-create-form {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 14px;
+  padding: 22px;
+  margin-bottom: 26px;
+}
+
+.admin-users-table-wrap {
+  overflow-x: auto;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 14px;
+}
+
+.admin-users-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.admin-users-table th {
+  text-align: left;
+  padding: 14px 16px;
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-weight: 700;
+}
+
+.admin-users-table td {
+  padding: 14px 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  vertical-align: middle;
+}
+
+.admin-empty-row {
+  text-align: center;
+  padding: 30px 16px !important;
+}
+
+.admin-row-inactive {
+  opacity: 0.55;
+}
+
+.admin-you-tag {
+  color: rgba(255, 255, 255, 0.45);
+  font-size: 12.5px;
+  font-weight: 400;
+}
+
+.admin-role-badge {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 12.5px;
+  font-weight: 700;
+}
+
+.admin-role-admin {
+  background: rgba(255, 152, 0, 0.15);
+  color: #ffb74d;
+}
+
+.admin-role-business {
+  background: rgba(76, 175, 80, 0.15);
+  color: #81c784;
+}
+
+.admin-role-retail {
+  background: rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.admin-status-badge {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 12.5px;
+  font-weight: 700;
+}
+
+.admin-status-active {
+  background: rgba(76, 175, 80, 0.15);
+  color: #4caf50;
+}
+
+.admin-status-inactive {
+  background: rgba(255, 107, 107, 0.15);
+  color: #ff6b6b;
+}
+
+.admin-row-actions {
+  display: flex;
+  gap: 14px;
+  white-space: nowrap;
+}
+
+.admin-link-btn {
+  background: none;
+  border: none;
+  color: #ff9800;
+  font-weight: 600;
+  font-size: 13.5px;
+  cursor: pointer;
+  padding: 0;
+}
+
+.admin-link-btn:hover:not(:disabled) {
+  color: #ffb020;
+  text-decoration: underline;
+}
+
+.admin-link-btn:disabled {
+  color: rgba(255, 255, 255, 0.3);
+  cursor: not-allowed;
+}
+
+.admin-link-danger {
+  color: #ff6b6b;
+}
+
+.admin-link-danger:hover:not(:disabled) {
+  color: #ff8a8a;
+}
+
+.admin-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(3, 16, 43, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  padding: 20px;
+}
+
+.admin-modal {
+  background: #0c2140;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 16px;
+  padding: 28px;
+  max-width: 420px;
+  width: 100%;
+  box-shadow: 0 25px 60px rgba(0, 0, 0, 0.5);
+}
+
+.admin-modal h2 {
+  margin-top: 0;
+  font-size: 19px;
+  color: white;
+}
+
+.admin-modal p {
+  color: rgba(255, 255, 255, 0.65);
+  margin-bottom: 22px;
+}
+
+.admin-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 20px;
+  align-items: center;
+}
+
+.admin-danger-btn {
+  background: #dc2626;
+}
+
+.admin-danger-btn:hover {
+  background: #ef4444;
+}

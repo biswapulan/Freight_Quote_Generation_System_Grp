@@ -72,9 +72,14 @@ export default function AdminRateConfig() {
   return (
     <main className="admin-page">
       <div className="admin-panel">
-        <Link to="/dashboard" className="admin-back-link">
-          &larr; Back to dashboard
-        </Link>
+        <div className="admin-top-row">
+          <Link to="/dashboard" className="admin-back-link">
+            &larr; Back to dashboard
+          </Link>
+          <Link to="/admin/users" className="admin-nav-link">
+            User Management &rarr;
+          </Link>
+        </div>
         <h1>Pricing Rate Configuration</h1>
         <p className="admin-subtitle">
           Editing these values changes the price of every quote generated from now on.

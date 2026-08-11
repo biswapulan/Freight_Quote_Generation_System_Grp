@@ -12,8 +12,11 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from .mongo import saved_addresses_collection, support_tickets_collection, users_collection
-from .permissions import IsAuthenticatedMongoUser
+from .permissions import IsAdminRole, IsAuthenticatedMongoUser
 from .serializers import (
+    ACCOUNT_ROLES,
+    AdminCreateUserSerializer,
+    AdminUpdateUserSerializer,
     ForgotPasswordSerializer,
     LoginSerializer,
     ProfileUpdateSerializer,
@@ -115,6 +118,12 @@ class LoginView(APIView):
             return Response(
                 {'detail': 'Invalid email or password'},
                 status=status.HTTP_401_UNAUTHORIZED,
+            )
+
+        if user.get('is_active', True) is False:
+            return Response(
+                {'detail': 'This account has been deactivated. Contact an administrator.'},
+                status=status.HTTP_403_FORBIDDEN,
             )
 
         token = create_token(user['_id'])
@@ -345,3 +354,151 @@ class ResetPasswordView(APIView):
         )
 
         return Response({'detail': 'Password has been reset successfully'})
+
+
+def admin_user_summary(user_doc):
+    """Shape a Mongo user document for the admin User Management views.
+
+    Includes fields a regular profile response wouldn't need (status,
+    timestamps) but still never includes password/reset-token fields.
+    """
+
+    return {
+        "id": str(user_doc["_id"]),
+        "full_name": user_doc.get("full_name", ""),
+        "email": user_doc.get("email", ""),
+        "role": user_doc.get("role", "retail"),
+        "company_name": user_doc.get("company_name", ""),
+        "gst_number": user_doc.get("gst_number", ""),
+        "is_active": user_doc.get("is_active", True),
+        "created_at": user_doc["created_at"].isoformat() if user_doc.get("created_at") else None,
+        "last_login_at": user_doc["last_login_at"].isoformat() if user_doc.get("last_login_at") else None,
+    }
+
+
+class AdminUsersView(APIView):
+    """List every account or create a new one — admin only.
+
+    This is the in-app view of every retail/business/admin account.
+    Creating a user here is also how a second/third admin gets added,
+    as an alternative to the create_admin management command.
+    """
+
+    permission_classes = [IsAdminRole]
+
+    def get(self, request):
+        query = {}
+
+        role = request.query_params.get("role")
+        if role in ACCOUNT_ROLES:
+            query["role"] = role
+
+        status_param = request.query_params.get("status")
+        if status_param == "active":
+            query["is_active"] = {"$ne": False}
+        elif status_param == "inactive":
+            query["is_active"] = False
+
+        search = request.query_params.get("search", "").strip()
+        if search:
+            query["$or"] = [
+                {"full_name": {"$regex": search, "$options": "i"}},
+                {"email": {"$regex": search, "$options": "i"}},
+            ]
+
+        users = users_collection.find(query).sort("created_at", -1)
+        return Response({"results": [admin_user_summary(u) for u in users]})
+
+    def post(self, request):
+        serializer = AdminCreateUserSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+
+        email = data["email"].lower()
+        if users_collection.find_one({"email": email}):
+            return Response(
+                {"detail": "Email is already registered"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        user_doc = {
+            "full_name": data["full_name"],
+            "email": email,
+            "password": make_password(data["password"]),
+            "role": data["role"],
+            "company_name": data.get("company_name", ""),
+            "gst_number": "",
+            "is_active": True,
+            "created_at": datetime.utcnow(),
+            "created_by": str(request.user["_id"]),
+        }
+        result = users_collection.insert_one(user_doc)
+        user_doc["_id"] = result.inserted_id
+        return Response(admin_user_summary(user_doc), status=status.HTTP_201_CREATED)
+
+
+class AdminUserDetailView(APIView):
+    """Retrieve, update, or deactivate a single user — admin only."""
+
+    permission_classes = [IsAdminRole]
+
+    def _get_user(self, user_id):
+        from bson import ObjectId
+        from bson.errors import InvalidId
+
+        try:
+            object_id = ObjectId(user_id)
+        except InvalidId:
+            return None
+
+        return users_collection.find_one({"_id": object_id})
+
+    def get(self, request, user_id):
+        user = self._get_user(user_id)
+        if not user:
+            return Response({"detail": "User not found."}, status=status.HTTP_404_NOT_FOUND)
+        return Response(admin_user_summary(user))
+
+    def patch(self, request, user_id):
+        user = self._get_user(user_id)
+        if not user:
+            return Response({"detail": "User not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        serializer = AdminUpdateUserSerializer(data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        updates = serializer.validated_data
+
+        # An admin can't change their own role or deactivate themselves —
+        # avoids a mis-click locking every admin out of the panel.
+        is_self = str(user["_id"]) == str(request.user["_id"])
+        if is_self and updates.get("role") and updates["role"] != "admin":
+            return Response(
+                {"detail": "You can't change your own role."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if is_self and updates.get("is_active") is False:
+            return Response(
+                {"detail": "You can't deactivate your own account."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        users_collection.update_one({"_id": user["_id"]}, {"$set": updates})
+        return Response(admin_user_summary(users_collection.find_one({"_id": user["_id"]})))
+
+    def delete(self, request, user_id):
+        """Soft-deactivate — sets is_active False rather than deleting the document,
+        so quote/shipment history tied to this user id stays intact.
+        """
+
+        user = self._get_user(user_id)
+        if not user:
+            return Response({"detail": "User not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        if str(user["_id"]) == str(request.user["_id"]):
+            return Response(
+                {"detail": "You can't deactivate your own account."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        users_collection.update_one({"_id": user["_id"]}, {"$set": {"is_active": False}})
+        return Response(status=status.HTTP_204_NO_CONTENT)

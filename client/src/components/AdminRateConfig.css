@@ -17,6 +17,14 @@ padding: 40px;
 box-shadow: 0 25px 60px rgba(0, 0, 0, 0.45);
 }
 
+.admin-top-row {
+display: flex;
+justify-content: space-between;
+align-items: center;
+flex-wrap: wrap;
+gap: 10px;
+}
+
 .admin-back-link {
 color: rgba(255, 255, 255, 0.6);
 text-decoration: none;
@@ -25,6 +33,17 @@ font-size: 14px;
 }
 
 .admin-back-link:hover {
+color: #ff9800;
+}
+
+.admin-nav-link {
+color: rgba(255, 255, 255, 0.6);
+text-decoration: none;
+font-weight: 600;
+font-size: 14px;
+}
+
+.admin-nav-link:hover {
 color: #ff9800;
 }
 
