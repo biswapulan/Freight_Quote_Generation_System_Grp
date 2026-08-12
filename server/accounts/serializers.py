@@ -78,6 +78,48 @@ class ProfileUpdateSerializer(serializers.Serializer):
         return attrs
 
 
+class AdminCreateUserSerializer(serializers.Serializer):
+    """Validate a new user created directly from the admin panel.
+
+    Unlike public signup, an admin may create a user with any role,
+    including 'admin' — this is the in-app alternative to the
+    create_admin CLI command.
+    """
+
+    full_name = serializers.CharField(min_length=2, max_length=150)
+    email = serializers.EmailField()
+    password = serializers.CharField(min_length=8, write_only=True)
+    role = serializers.ChoiceField(choices=ACCOUNT_ROLES, default="admin")
+    company_name = serializers.CharField(
+        max_length=150, required=False, allow_blank=True, default=""
+    )
+
+    def validate(self, attrs):
+        if attrs.get("role") == "business" and not attrs.get("company_name", "").strip():
+            raise serializers.ValidationError(
+                {"company_name": "Company name is required for a business account."}
+            )
+        return attrs
+
+
+class AdminUpdateUserSerializer(serializers.Serializer):
+    """Validate the fields an admin may change on another user's account.
+
+    All fields are optional here — the view passes partial=True and only
+    the keys actually supplied get applied as a Mongo $set.
+    """
+
+    full_name = serializers.CharField(min_length=2, max_length=150, required=False)
+    role = serializers.ChoiceField(choices=ACCOUNT_ROLES, required=False)
+    is_active = serializers.BooleanField(required=False)
+    company_name = serializers.CharField(max_length=150, required=False, allow_blank=True)
+
+    def validate(self, attrs):
+        if not attrs:
+            raise serializers.ValidationError("Provide at least one field to update.")
+        return attrs
+
+
 class SavedAddressSerializer(serializers.Serializer):
     """Validate a saved pickup or delivery address."""
 

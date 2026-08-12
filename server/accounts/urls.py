@@ -3,6 +3,8 @@
 from django.urls import path
 
 from .views import (
+    AdminUserDetailView,
+    AdminUsersView,
     ForgotPasswordView,
     LoginView,
     MeView,
@@ -24,4 +26,6 @@ urlpatterns = [
     path('saved-addresses/<str:address_id>/', SavedAddressDetailView.as_view(), name='saved-address-detail'),
     path('support-tickets/', SupportTicketsView.as_view(), name='support-tickets'),
     path('tawk-identity/', TawkIdentityView.as_view(), name='tawk-identity'),
+    path('admin/users/', AdminUsersView.as_view(), name='admin-users'),
+    path('admin/users/<str:user_id>/', AdminUserDetailView.as_view(), name='admin-user-detail'),
 ]

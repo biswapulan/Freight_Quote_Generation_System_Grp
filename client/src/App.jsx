@@ -6,6 +6,7 @@ import DashboardShell from "./components/DashboardShell";
 import QuotePage from "./components/QuotePage";
 import QuoteGenerator from "./components/QuoteGenerator";
 import AdminRateConfig from "./components/AdminRateConfig";
+import AdminUsers from "./components/AdminUsers";
 import ProtectedRoute from "./components/ProtectedRoute";
 import TransportDetail from "./components/TransportDetail";
 import TrackingPage from "./components/TrackingPage";
@@ -89,6 +90,15 @@ function App() {
           element={
             <ProtectedRoute requiredRole="admin">
               <AdminRateConfig />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/admin/users"
+          element={
+            <ProtectedRoute requiredRole="admin">
+              <AdminUsers />
             </ProtectedRoute>
           }
         />
