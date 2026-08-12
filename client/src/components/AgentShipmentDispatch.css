@@ -1,0 +1,121 @@
+.agent-dispatch {
+  padding: 24px 20px;
+  max-width: 100%;
+  margin: 0 auto;
+  color: #0f172a;
+  box-sizing: border-box;
+}
+
+.dispatch-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+
+@media (max-width: 1120px) {
+  .dispatch-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.dispatch-control-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 160px);
+  gap: 12px;
+  align-items: start;
+  margin-top: 12px;
+}
+
+@media (max-width: 640px) {
+  .dispatch-control-body {
+    grid-template-columns: 1fr;
+  }
+}
+
+.dispatch-form-left {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.dispatch-timeline-vertical {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 12px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.vstep-node {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.vstep-indicator {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.vstep-circle {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #ffffff;
+  border: 2px solid #cbd5e1;
+  color: #64748b;
+  font-size: 10.5px;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.vstep-node.completed .vstep-circle {
+  background: #059669;
+  border-color: #059669;
+  color: #ffffff;
+}
+
+.vstep-node.active .vstep-circle {
+  background: #0284c7;
+  border-color: #0284c7;
+  color: #ffffff;
+  box-shadow: 0 0 6px rgba(2, 132, 199, 0.35);
+}
+
+.vstep-line {
+  width: 2px;
+  height: 14px;
+  background: #e2e8f0;
+  margin: 1px 0;
+}
+
+.vstep-line.completed {
+  background: #059669;
+}
+
+.vstep-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: #64748b;
+  margin-top: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.vstep-node.completed .vstep-label {
+  color: #059669;
+  font-weight: 700;
+}
+
+.vstep-node.active .vstep-label {
+  color: #0284c7;
+  font-weight: 800;
+}

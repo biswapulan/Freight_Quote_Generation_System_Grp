@@ -26,12 +26,23 @@ export function AuthProvider({ children }) {
     setLoading(true);
     getMe(token)
       .then((profile) => {
-        if (!cancelled) setUser(profile);
+        if (!cancelled) {
+          setUser(profile);
+          localStorage.setItem("freightai_user", JSON.stringify(profile));
+        }
       })
       .catch(() => {
-        // Token is invalid or expired — clear it rather than looping.
+        // Token is invalid or backend unreachable — check cached user
         if (!cancelled) {
+          const cachedUser = localStorage.getItem("freightai_user");
+          if (cachedUser) {
+            try {
+              setUser(JSON.parse(cachedUser));
+              return;
+            } catch {}
+          }
           localStorage.removeItem(TOKEN_KEY);
+          localStorage.removeItem("freightai_user");
           setToken(null);
           setUser(null);
         }
@@ -47,6 +58,7 @@ export function AuthProvider({ children }) {
 
   function login({ token: newToken, ...profile }) {
     localStorage.setItem(TOKEN_KEY, newToken);
+    localStorage.setItem("freightai_user", JSON.stringify(profile));
     setToken(newToken);
     setUser(profile);
     setLoading(false);
@@ -54,6 +66,7 @@ export function AuthProvider({ children }) {
 
   function logout() {
     localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem("freightai_user");
     setToken(null);
     setUser(null);
   }

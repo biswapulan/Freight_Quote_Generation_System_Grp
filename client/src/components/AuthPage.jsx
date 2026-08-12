@@ -106,7 +106,7 @@ setErrorMsg("");
 setLoading(true);
 
 try {
-await signup({
+const data = await signup({
 fullName: signupData.fullName,
 email: signupData.email,
 password: signupData.password,
@@ -114,7 +114,8 @@ role: signupData.role,
 companyName: signupData.companyName,
 gstNumber: signupData.gstNumber,
 });
-setSignupDone(true);
+auth.login(data);
+navigate("/dashboard");
 } catch (error) {
 setErrorMsg(error.message || "Unable to create account. Please try again.");
 } finally {
@@ -357,6 +358,20 @@ onClick={() => setSignupData({ ...signupData, role: "business" })}
 >
 Business
 </button>
+<button
+type="button"
+className={`role-option ${signupData.role === "agent" ? "active" : ""}`}
+onClick={() => setSignupData({ ...signupData, role: "agent" })}
+>
+Freight Agent
+</button>
+<button
+type="button"
+className={`role-option ${signupData.role === "admin" ? "active" : ""}`}
+onClick={() => setSignupData({ ...signupData, role: "admin" })}
+>
+Admin
+</button>
 </div>
 </div>
 
@@ -368,7 +383,7 @@ Business
 <FaUser className="input-icon" />
 <input
 type="text"
-placeholder="Acme Logistics Pvt Ltd"
+placeholder="Acme Freight Pvt Ltd"
 required
 value={signupData.companyName}
 onChange={(e) => setSignupData({ ...signupData, companyName: e.target.value })}

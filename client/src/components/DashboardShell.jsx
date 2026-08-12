@@ -13,13 +13,19 @@ import RetailShipmentsHistory from "./RetailShipmentsHistory";
 import SavedAddresses from "./SavedAddresses";
 import Carriers from "./Carriers";
 import Support from "./Support";
+import AgentOverview from "./AgentOverview";
+import AgentQuoteDesk from "./AgentQuoteDesk";
+import AgentShipmentDispatch from "./AgentShipmentDispatch";
+import AgentSpotRates from "./AgentSpotRates";
+import AgentPerformance from "./AgentPerformance";
+import AdminRateConfig from "./AdminRateConfig";
+import AdminUsers from "./AdminUsers";
+import AdminMasterData from "./AdminMasterData";
 import "./Logo.css";
 import "./DashboardShell.css";
 
 // Sidebar section labels per account type — see the slug switch in <main>
-// further down for what each renders. "Overview", "Routes" and
-// "Port Congestion" render real UI for retail accounts; the business
-// account versions of these sections are still placeholders.
+// further down for what each renders.
 const RETAIL_SECTIONS = [
   "Overview",
   "Generate Quote",
@@ -46,9 +52,34 @@ const BUSINESS_SECTIONS = [
   "Support",
 ];
 
+const AGENT_SECTIONS = [
+  "Overview",
+  "Quote Desk",
+  "Shipment Dispatch",
+  "Spot Rates",
+  "Client & Performance",
+  "Routes",
+  "Port Congestion",
+  "Carriers",
+  "Profile",
+  "Support",
+];
+
+const ADMIN_SECTIONS = [
+  "Rate Config",
+  "User Management",
+  "Master Data",
+  "Routes",
+  "Port Congestion",
+  "Carriers",
+  "Profile",
+  "Support",
+];
+
 const ROLE_LABELS = {
   retail: "Retail Account",
   business: "Business Account",
+  agent: "Logistics Agent",
   admin: "Admin",
 };
 
@@ -80,7 +111,14 @@ export default function DashboardShell() {
 
   if (!user) return null;
 
-  const sections = user.role === "business" ? BUSINESS_SECTIONS : RETAIL_SECTIONS;
+  const sections =
+    user.role === "admin"
+      ? ADMIN_SECTIONS
+      : user.role === "agent"
+      ? AGENT_SECTIONS
+      : user.role === "business"
+      ? BUSINESS_SECTIONS
+      : RETAIL_SECTIONS;
   const items = sections.map((label) => ({ label, slug: slugify(label) }));
 
   if (!section || !items.some((i) => i.slug === section)) {
@@ -159,7 +197,57 @@ export default function DashboardShell() {
         }`}
       >
         <RetailQuotesProvider>
-          {activeItem.slug === "overview" && user.role !== "business" ? (
+          {user.role === "admin" ? (
+            activeItem.slug === "rate-config" || activeItem.slug === "overview" ? (
+              <AdminRateConfig />
+            ) : activeItem.slug === "user-management" ? (
+              <AdminUsers />
+            ) : activeItem.slug === "master-data" ? (
+              <AdminMasterData />
+            ) : activeItem.slug === "routes" ? (
+              <RetailRoutes />
+            ) : activeItem.slug === "port-congestion" ? (
+              <RetailPortCongestion />
+            ) : activeItem.slug === "carriers" ? (
+              <Carriers />
+            ) : activeItem.slug === "profile" ? (
+              <RetailProfile />
+            ) : activeItem.slug === "support" ? (
+              <Support />
+            ) : (
+              <div className="dash-placeholder">
+                <h1>{activeItem.label}</h1>
+                <p>This section hasn&apos;t been built yet.</p>
+              </div>
+            )
+          ) : user.role === "agent" ? (
+            activeItem.slug === "overview" ? (
+              <AgentOverview />
+            ) : activeItem.slug === "quote-desk" ? (
+              <AgentQuoteDesk />
+            ) : activeItem.slug === "shipment-dispatch" ? (
+              <AgentShipmentDispatch />
+            ) : activeItem.slug === "spot-rates" ? (
+              <AgentSpotRates />
+            ) : activeItem.slug === "client-and-performance" ? (
+              <AgentPerformance />
+            ) : activeItem.slug === "routes" ? (
+              <RetailRoutes />
+            ) : activeItem.slug === "port-congestion" ? (
+              <RetailPortCongestion />
+            ) : activeItem.slug === "carriers" ? (
+              <Carriers />
+            ) : activeItem.slug === "profile" ? (
+              <RetailProfile />
+            ) : activeItem.slug === "support" ? (
+              <Support />
+            ) : (
+              <div className="dash-placeholder">
+                <h1>{activeItem.label}</h1>
+                <p>This section hasn&apos;t been built yet.</p>
+              </div>
+            )
+          ) : activeItem.slug === "overview" && user.role !== "business" ? (
             <RetailOverview />
           ) : activeItem.slug === "routes" && user.role !== "business" ? (
             <RetailRoutes />

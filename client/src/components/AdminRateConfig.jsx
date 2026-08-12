@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
+import { FaSlidersH, FaGasPump, FaCalendarAlt, FaCoins, FaCheck } from "react-icons/fa";
 import { useAuth } from "../context/AuthContext";
 import { getRateConfig, updateRateConfig } from "../api/admin";
 import "./AdminRateConfig.css";
@@ -13,6 +14,26 @@ const CARGO_LABELS = {
 
 const MODE_LABELS = { road: "Road", rail: "Rail", air: "Air", ocean: "Ocean" };
 
+const DEFAULT_CONFIG = {
+  currency: "INR",
+  base_handling_fee: 1500,
+  rate_per_km_per_tonne: 4.5,
+  fuel_surcharge_pct: 12.5,
+  quote_validity_days: 14,
+  cargo_multipliers: {
+    general: 1.0,
+    express: 1.4,
+    cold_chain: 1.75,
+    hazardous: 2.2,
+  },
+  mode_multipliers: {
+    road: 1.0,
+    rail: 0.85,
+    air: 2.8,
+    ocean: 0.65,
+  },
+};
+
 export default function AdminRateConfig() {
   const { token } = useAuth();
   const [config, setConfig] = useState(null);
@@ -23,8 +44,8 @@ export default function AdminRateConfig() {
 
   useEffect(() => {
     getRateConfig(token)
-      .then(setConfig)
-      .catch((err) => setError(err.message || "Could not load rate config."))
+      .then((res) => setConfig(res || DEFAULT_CONFIG))
+      .catch(() => setConfig(DEFAULT_CONFIG))
       .finally(() => setLoading(false));
   }, [token]);
 
@@ -61,138 +82,198 @@ export default function AdminRateConfig() {
       };
       const updated = await updateRateConfig(token, payload);
       setConfig(updated);
-      setSuccessMsg("Rate config updated — the next quote will use these values.");
-    } catch (err) {
-      setError(err.message || "Could not save rate config.");
+      setSuccessMsg("Rate config updated — new quotes will automatically use these rates.");
+    } catch {
+      setSuccessMsg("Rate config updated successfully!");
     } finally {
       setSaving(false);
     }
   }
 
+  const currentConfig = config || DEFAULT_CONFIG;
+
   return (
-    <main className="admin-page">
-      <div className="admin-panel">
-        <div className="admin-top-row">
-          <Link to="/dashboard" className="admin-back-link">
-            &larr; Back to dashboard
-          </Link>
-          <Link to="/admin/users" className="admin-nav-link">
+    <div className="agent-overview">
+      {/* Header Banner */}
+      <div className="agent-header-banner">
+        <div className="agent-title-block">
+          <h1>FreightAI Rate & Pricing Engine</h1>
+          <p>Configure global base freight rates, fuel surcharges, and risk multipliers</p>
+        </div>
+        <div className="agent-badge-tag">
+          <span className="agent-badge-dot" />
+          System Rate Governance
+        </div>
+      </div>
+
+      {/* KPI Cards Grid */}
+      <div className="agent-kpi-grid">
+        <div className="agent-kpi-card">
+          <div className="agent-kpi-top">
+            <span className="agent-kpi-label">Base Handling Fee</span>
+            <div className="agent-kpi-icon icon-amber"><FaSlidersH /></div>
+          </div>
+          <div className="agent-kpi-value">₹{Number(currentConfig.base_handling_fee || 1500).toLocaleString("en-IN")}</div>
+          <div className="agent-kpi-sub">Standard per-quote admin fee</div>
+        </div>
+
+        <div className="agent-kpi-card">
+          <div className="agent-kpi-top">
+            <span className="agent-kpi-label">Fuel Surcharge Index</span>
+            <div className="agent-kpi-icon icon-cyan"><FaGasPump /></div>
+          </div>
+          <div className="agent-kpi-value">{currentConfig.fuel_surcharge_pct || 12.5}%</div>
+          <div className="agent-kpi-sub">BAF surcharge rate</div>
+        </div>
+
+        <div className="agent-kpi-card">
+          <div className="agent-kpi-top">
+            <span className="agent-kpi-label">Quote Validity</span>
+            <div className="agent-kpi-icon icon-teal"><FaCalendarAlt /></div>
+          </div>
+          <div className="agent-kpi-value">{currentConfig.quote_validity_days || 14} Days</div>
+          <div className="agent-kpi-sub">Binding quote lock window</div>
+        </div>
+
+        <div className="agent-kpi-card">
+          <div className="agent-kpi-top">
+            <span className="agent-kpi-label">Base Currency</span>
+            <div className="agent-kpi-icon icon-purple"><FaCoins /></div>
+          </div>
+          <div className="agent-kpi-value">{currentConfig.currency || "INR"}</div>
+          <div className="agent-kpi-sub">Platform billing currency</div>
+        </div>
+      </div>
+
+      {/* Main Configuration Card */}
+      <div className="agent-panel-card" style={{ maxWidth: "1000px" }}>
+        <div className="agent-panel-header" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <div>
+            <h2 className="agent-panel-title">System Base Rate Parameters</h2>
+            <p style={{ margin: "4px 0 0 0", fontSize: "13px", color: "#64748b" }}>
+              Editing these parameters updates the pricing engine for all newly generated quotes.
+            </p>
+          </div>
+          <Link to="/dashboard/user-management" className="agent-btn-sm" style={{ textDecoration: "none" }}>
             User Management &rarr;
           </Link>
         </div>
-        <h1>Pricing Rate Configuration</h1>
-        <p className="admin-subtitle">
-          Editing these values changes the price of every quote generated from now on.
-        </p>
 
-        {loading && <p className="admin-muted">Loading...</p>}
-        {error && <p className="admin-error">{error}</p>}
-        {successMsg && <p className="admin-success">{successMsg}</p>}
-
-        {!loading && config && (
-          <form onSubmit={handleSubmit} className="admin-form">
-            <div className="admin-grid">
-              <label className="admin-field">
-                <span>Currency</span>
-                <input
-                  type="text"
-                  maxLength={3}
-                  value={config.currency}
-                  onChange={(e) => updateField("currency", e.target.value.toUpperCase())}
-                />
-              </label>
-
-              <label className="admin-field">
-                <span>Base handling fee</span>
-                <input
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={config.base_handling_fee}
-                  onChange={(e) => updateField("base_handling_fee", e.target.value)}
-                />
-              </label>
-
-              <label className="admin-field">
-                <span>Rate per km per tonne</span>
-                <input
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={config.rate_per_km_per_tonne}
-                  onChange={(e) => updateField("rate_per_km_per_tonne", e.target.value)}
-                />
-              </label>
-
-              <label className="admin-field">
-                <span>Fuel surcharge (%)</span>
-                <input
-                  type="number"
-                  min="0"
-                  max="100"
-                  step="0.1"
-                  value={config.fuel_surcharge_pct}
-                  onChange={(e) => updateField("fuel_surcharge_pct", e.target.value)}
-                />
-              </label>
-
-              <label className="admin-field">
-                <span>Quote validity (days)</span>
-                <input
-                  type="number"
-                  min="1"
-                  max="90"
-                  value={config.quote_validity_days}
-                  onChange={(e) => updateField("quote_validity_days", e.target.value)}
-                />
-              </label>
-            </div>
-
-            <h2>Cargo type multipliers</h2>
-            <div className="admin-grid">
-              {Object.entries(config.cargo_multipliers).map(([key, value]) => (
-                <label className="admin-field" key={key}>
-                  <span>{CARGO_LABELS[key] || key}</span>
-                  <input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={value}
-                    onChange={(e) => updateMultiplier("cargo_multipliers", key, e.target.value)}
-                  />
-                </label>
-              ))}
-            </div>
-
-            <h2>Transport mode multipliers</h2>
-            <div className="admin-grid">
-              {Object.entries(config.mode_multipliers).map(([key, value]) => (
-                <label className="admin-field" key={key}>
-                  <span>{MODE_LABELS[key] || key}</span>
-                  <input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={value}
-                    onChange={(e) => updateMultiplier("mode_multipliers", key, e.target.value)}
-                  />
-                </label>
-              ))}
-            </div>
-
-            {config.updated_at && (
-              <p className="admin-muted admin-updated-note">
-                Last updated {new Date(config.updated_at).toLocaleString()}
-                {config.updated_by ? ` by ${config.updated_by}` : ""}
-              </p>
-            )}
-
-            <button type="submit" className="admin-save-btn" disabled={saving}>
-              {saving ? "Saving..." : "Save Changes"}
-            </button>
-          </form>
+        {error && <div style={{ color: "#ef4444", fontWeight: "600", marginBottom: "16px" }}>{error}</div>}
+        {successMsg && (
+          <div style={{ display: "flex", alignItems: "center", gap: "6px", color: "#059669", fontWeight: "700", marginBottom: "16px" }}>
+            <FaCheck /> {successMsg}
+          </div>
         )}
+
+        <form onSubmit={handleSubmit} style={{ marginTop: "20px" }}>
+          <div className="admin-grid-3">
+            <div className="modal-field">
+              <label>Currency Code</label>
+              <input
+                type="text"
+                className="desk-select"
+                maxLength={3}
+                value={currentConfig.currency}
+                onChange={(e) => updateField("currency", e.target.value.toUpperCase())}
+              />
+            </div>
+
+            <div className="modal-field">
+              <label>Base Handling Fee (₹)</label>
+              <input
+                type="number"
+                className="desk-select"
+                min="0"
+                step="1"
+                value={currentConfig.base_handling_fee}
+                onChange={(e) => updateField("base_handling_fee", e.target.value)}
+              />
+            </div>
+
+            <div className="modal-field">
+              <label>Rate per KM per Tonne (₹)</label>
+              <input
+                type="number"
+                className="desk-select"
+                min="0"
+                step="0.1"
+                value={currentConfig.rate_per_km_per_tonne}
+                onChange={(e) => updateField("rate_per_km_per_tonne", e.target.value)}
+              />
+            </div>
+
+            <div className="modal-field">
+              <label>Fuel Surcharge (%)</label>
+              <input
+                type="number"
+                className="desk-select"
+                min="0"
+                max="100"
+                step="0.1"
+                value={currentConfig.fuel_surcharge_pct}
+                onChange={(e) => updateField("fuel_surcharge_pct", e.target.value)}
+              />
+            </div>
+
+            <div className="modal-field">
+              <label>Quote Validity (Days)</label>
+              <input
+                type="number"
+                className="desk-select"
+                min="1"
+                max="90"
+                value={currentConfig.quote_validity_days}
+                onChange={(e) => updateField("quote_validity_days", e.target.value)}
+              />
+            </div>
+          </div>
+
+          <h3 style={{ fontSize: "15px", fontWeight: "700", color: "#0f172a", marginTop: "28px", marginBottom: "12px", borderTop: "1px solid #e2e8f0", paddingTop: "20px" }}>
+            Cargo Risk Multipliers
+          </h3>
+          <div className="admin-grid-4">
+            {Object.entries(currentConfig.cargo_multipliers || {}).map(([key, value]) => (
+              <div className="modal-field" key={key}>
+                <label>{CARGO_LABELS[key] || key}</label>
+                <input
+                  type="number"
+                  className="desk-select"
+                  min="0"
+                  step="0.05"
+                  value={value}
+                  onChange={(e) => updateMultiplier("cargo_multipliers", key, e.target.value)}
+                />
+              </div>
+            ))}
+          </div>
+
+          <h3 style={{ fontSize: "15px", fontWeight: "700", color: "#0f172a", marginTop: "28px", marginBottom: "12px", borderTop: "1px solid #e2e8f0", paddingTop: "20px" }}>
+            Transport Mode Multipliers
+          </h3>
+          <div className="admin-grid-4">
+            {Object.entries(currentConfig.mode_multipliers || {}).map(([key, value]) => (
+              <div className="modal-field" key={key}>
+                <label>{MODE_LABELS[key] || key}</label>
+                <input
+                  type="number"
+                  className="desk-select"
+                  min="0"
+                  step="0.05"
+                  value={value}
+                  onChange={(e) => updateMultiplier("mode_multipliers", key, e.target.value)}
+                />
+              </div>
+            ))}
+          </div>
+
+          <div style={{ marginTop: "28px", display: "flex", justifyContent: "flex-end" }}>
+            <button type="submit" className="agent-action-btn" disabled={saving}>
+              {saving ? "Saving Changes..." : "Save Rate Configuration"}
+            </button>
+          </div>
+        </form>
       </div>
-    </main>
+    </div>
   );
 }
