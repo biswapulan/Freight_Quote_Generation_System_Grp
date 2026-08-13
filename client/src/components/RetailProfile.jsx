@@ -4,6 +4,13 @@ import { updateProfile } from "../api/auth";
 import { useAuth } from "../context/AuthContext";
 import "./RetailProfile.css";
 
+const ROLE_LABELS = {
+  admin: "Platform Admin",
+  agent: "Freight Agent Account",
+  business: "Business Account",
+  retail: "Retail Account",
+};
+
 export default function RetailProfile() {
   const { token, user, updateUser } = useAuth();
   const [email, setEmail] = useState(user.email || "");
@@ -80,7 +87,7 @@ export default function RetailProfile() {
             {user.full_name?.trim().charAt(0).toUpperCase() || "U"}
           </div>
           <div>
-            <p className="retail-profile__label">Retail account</p>
+            <p className="retail-profile__label">{ROLE_LABELS[user.role] || `${user.role} account`}</p>
             <h2>{user.full_name}</h2>
           </div>
           <dl className="retail-profile__details">
