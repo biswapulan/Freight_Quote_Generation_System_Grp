@@ -203,7 +203,6 @@ const CATEGORIES = [
     collections: [
       { id: "documentTypes", label: "Document Types" },
       { id: "customerTiers", label: "Customer Tiers" },
-      { id: "masterDataAudit", label: "Master Data Change Log" },
     ],
   },
 ];
@@ -211,7 +210,14 @@ const CATEGORIES = [
 export default function AdminMasterData() {
   const [activeCategory, setActiveCategory] = useState("network");
   const [activeCollection, setActiveCollection] = useState("countries");
-  const [collections, setCollections] = useState(MASTER_COLLECTIONS_SEED);
+  const [collections, setCollections] = useState(() => {
+    try {
+      const saved = localStorage.getItem("freightai_master_data");
+      return saved ? JSON.parse(saved) : MASTER_COLLECTIONS_SEED;
+    } catch {
+      return MASTER_COLLECTIONS_SEED;
+    }
+  });
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedRecord, setSelectedRecord] = useState(null);
   const [showJsonModal, setShowJsonModal] = useState(false);
@@ -231,8 +237,20 @@ export default function AdminMasterData() {
         return jsonStr.includes(query);
       });
 
-  function toggleRecordActive(index) {
+  function updateCollections(updater) {
     setCollections((prev) => {
+      const next = typeof updater === "function" ? updater(prev) : updater;
+      try {
+        localStorage.setItem("freightai_master_data", JSON.stringify(next));
+      } catch (err) {
+        console.warn("Could not save master data to localStorage:", err);
+      }
+      return next;
+    });
+  }
+
+  function toggleRecordActive(index) {
+    updateCollections((prev) => {
       const list = [...prev[activeCollection]];
       list[index] = { ...list[index], isActive: !list[index].isActive };
       return { ...prev, [activeCollection]: list };
@@ -270,7 +288,7 @@ export default function AdminMasterData() {
   function handleSaveRecord() {
     try {
       const parsed = JSON.parse(formDataJson);
-      setCollections((prev) => {
+      updateCollections((prev) => {
         const list = [...prev[activeCollection]];
         if (editingIndex !== null) {
           list[editingIndex] = parsed;
@@ -289,7 +307,7 @@ export default function AdminMasterData() {
 
   function handleDeleteRecord(index) {
     if (!window.confirm("Are you sure you want to delete this record?")) return;
-    setCollections((prev) => {
+    updateCollections((prev) => {
       const list = prev[activeCollection].filter((_, i) => i !== index);
       return { ...prev, [activeCollection]: list };
     });

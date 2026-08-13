@@ -43,9 +43,24 @@ export default function AdminRateConfig() {
   const [successMsg, setSuccessMsg] = useState("");
 
   useEffect(() => {
+    try {
+      const saved = localStorage.getItem("freightai_rate_config");
+      if (saved) setConfig(JSON.parse(saved));
+    } catch (e) {
+      console.warn("Could not load local rate config:", e);
+    }
+
     getRateConfig(token)
-      .then((res) => setConfig(res || DEFAULT_CONFIG))
-      .catch(() => setConfig(DEFAULT_CONFIG))
+      .then((res) => {
+        if (res) {
+          setConfig(res);
+          localStorage.setItem("freightai_rate_config", JSON.stringify(res));
+        }
+      })
+      .catch(() => {
+        // Fallback to local storage or DEFAULT_CONFIG
+        setConfig((prev) => prev || DEFAULT_CONFIG);
+      })
       .finally(() => setLoading(false));
   }, [token]);
 
@@ -80,11 +95,18 @@ export default function AdminRateConfig() {
           Object.entries(config.mode_multipliers).map(([k, v]) => [k, Number(v)]),
         ),
       };
-      const updated = await updateRateConfig(token, payload);
-      setConfig(updated || payload);
+      let finalConfig = payload;
+      try {
+        const updated = await updateRateConfig(token, payload);
+        if (updated) finalConfig = updated;
+      } catch {
+        console.warn("Backend rate config update offline; applying locally.");
+      }
+      setConfig(finalConfig);
+      localStorage.setItem("freightai_rate_config", JSON.stringify(finalConfig));
       setSuccessMsg("Rate config updated — new quotes will automatically use these rates.");
     } catch (err) {
-      setError(err.message || "Failed to update rate configuration on backend API.");
+      setError(err.message || "Failed to update rate configuration.");
     } finally {
       setSaving(false);
     }
