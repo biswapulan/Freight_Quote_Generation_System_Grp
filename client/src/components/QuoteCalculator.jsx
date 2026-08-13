@@ -145,9 +145,46 @@ export default function QuoteCalculator() {
 
   const pdfContainerRef = useRef(null);
 
+  // Read dynamic Admin Rate Config & Master Data from localStorage
+  const rateConfig = useMemo(() => {
+    try {
+      const saved = localStorage.getItem("freightai_rate_config");
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
+  }, []);
+
+  const masterData = useMemo(() => {
+    try {
+      const saved = localStorage.getItem("freightai_master_data");
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
+  }, []);
+
+  // Merged dynamic ports (Master Data + Seed)
+  const portsList = useMemo(() => {
+    if (!masterData?.ports || !Array.isArray(masterData.ports)) return PORTS;
+    const dynamicPorts = masterData.ports
+      .filter((p) => p.isActive)
+      .map((p) => ({
+        id: p.unlocode,
+        name: p.portName,
+        country: p.countryCode,
+        type: p.portType === "AIRPORT" ? "air" : "ocean",
+        lat: p.location?.coordinates?.[1] || 18.95,
+        lng: p.location?.coordinates?.[0] || 72.95,
+      }));
+    const ids = new Set(dynamicPorts.map((p) => p.id));
+    const extra = PORTS.filter((p) => !ids.has(p.id));
+    return [...dynamicPorts, ...extra];
+  }, [masterData]);
+
   const currency = CURRENCIES.find((c) => c.code === currencyCode) || CURRENCIES[0];
-  const oPort = PORTS.find((p) => p.id === originId);
-  const dPort = PORTS.find((p) => p.id === destId);
+  const oPort = portsList.find((p) => p.id === originId);
+  const dPort = portsList.find((p) => p.id === destId);
 
   const toggleService = (key) => setServices((s) => ({ ...s, [key]: !s[key] }));
 
@@ -172,31 +209,48 @@ export default function QuoteCalculator() {
     if (!originId || !destId || !oPort || !dPort || !mode) {
       return null;
     }
-    const commMult = COMMODITIES.find((c) => c.value === commodity)?.mult || 1.0;
+
+    // Dynamic Admin Rate Engine Multipliers
+    const cargoMults = rateConfig?.cargo_multipliers || {};
+    let commMult = COMMODITIES.find((c) => c.value === commodity)?.mult || 1.0;
+    if (commodity === "general" && cargoMults.general) commMult = cargoMults.general;
+    if (commodity === "hazmat" && cargoMults.hazardous) commMult = cargoMults.hazardous;
+    if (commodity === "reefer" && cargoMults.cold_chain) commMult = cargoMults.cold_chain;
+
+    const modeMults = rateConfig?.mode_multipliers || {};
+    let modeMult = 1.0;
+    if (mode.startsWith("ocean") && modeMults.ocean) modeMult = modeMults.ocean;
+    if (mode.startsWith("air") && modeMults.air) modeMult = modeMults.air;
+    if (mode.startsWith("road") && modeMults.road) modeMult = modeMults.road;
+
     const distKm = calculateDistanceKm(oPort.lat, oPort.lng, dPort.lat, dPort.lng);
     const distNM = Math.round(distKm * 0.539957);
 
     let baseINR = 0;
     if (mode === "ocean_fcl") {
       const rate = CONTAINER_TYPES.find((c) => c.value === containerType)?.rateINR || 160000;
-      baseINR = rate * containerQty * commMult;
+      baseINR = rate * containerQty * commMult * modeMult;
     } else if (mode === "ocean_lcl") {
-      baseINR = Math.max(cargoVolume, 1) * 9500 * commMult;
+      baseINR = Math.max(cargoVolume, 1) * 9500 * commMult * modeMult;
     } else if (mode === "air_standard") {
       const chargeable = Math.max(cargoWeight, cargoVolume * 167);
-      baseINR = chargeable * 400 * commMult;
+      baseINR = chargeable * 400 * commMult * modeMult;
     } else {
-      baseINR = Math.max(distKm * 140 * (cargoWeight / 1000), 35000);
+      baseINR = Math.max(distKm * 140 * (cargoWeight / 1000), 35000) * commMult * modeMult;
     }
+
+    const fuelPct = rateConfig?.fuel_surcharge_pct || 12.5;
+    const baseHandlingFee = rateConfig?.base_handling_fee || 1500;
 
     const items = [{ name: "Base Freight Rate", inr: Math.round(baseINR) }];
 
-    if (services.customs) items.push({ name: "Customs Entry & Clearance", inr: 15000 });
+    if (services.customs) items.push({ name: "Customs Entry & Clearance", inr: Math.round(baseHandlingFee * 10) });
     if (services.insurance && declaredValue > 0)
       items.push({ name: "All-Risk Cargo Insurance", inr: Math.max(Math.round(declaredValue * 0.0035), 6000) });
     if (services.thc)
       items.push({ name: "Terminal Handling Charges (THC)", inr: 18000 * (mode === "ocean_fcl" ? containerQty : 1) });
-    if (services.baf) items.push({ name: "Fuel Surcharge (BAF 12%)", inr: Math.round(baseINR * 0.12) });
+    if (services.baf)
+      items.push({ name: `Bunker Fuel Surcharge (BAF ${fuelPct}%)`, inr: Math.round(baseINR * (fuelPct / 100)) });
     if (services.doorPickup) items.push({ name: "First/Last-Mile Drayage & Delivery", inr: 28000 });
     if (services.greenOffset) items.push({ name: "Green Carbon Offset", inr: 3500 });
 
@@ -389,7 +443,7 @@ export default function QuoteCalculator() {
                   </label>
                   <select className="qg-form-select" value={originId} onChange={(e) => setOriginId(e.target.value)}>
                     <option value="" disabled hidden>-- Select Origin Port / City --</option>
-                    {PORTS.map((p) => (
+                    {portsList.map((p) => (
                       <option key={p.id} value={p.id}>
                         {p.name} ({p.country})
                       </option>
@@ -405,7 +459,7 @@ export default function QuoteCalculator() {
                   </label>
                   <select className="qg-form-select" value={destId} onChange={(e) => setDestId(e.target.value)}>
                     <option value="" disabled hidden>-- Select Destination Port / City --</option>
-                    {PORTS.map((p) => (
+                    {portsList.map((p) => (
                       <option key={p.id} value={p.id}>
                         {p.name} ({p.country})
                       </option>
