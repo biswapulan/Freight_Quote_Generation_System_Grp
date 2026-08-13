@@ -1,0 +1,18 @@
+.agent-performance {
+  padding: 32px;
+  max-width: 1400px;
+  margin: 0 auto;
+  color: #0f172a;
+}
+
+.perf-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+}
+
+@media (max-width: 1024px) {
+  .perf-grid {
+    grid-template-columns: 1fr;
+  }
+}

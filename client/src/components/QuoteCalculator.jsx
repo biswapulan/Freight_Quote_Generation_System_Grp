@@ -109,21 +109,21 @@ function formatCurrency(val, sym = "₹") {
 
 export default function QuoteCalculator() {
   const [currencyCode, setCurrencyCode] = useState("INR");
-  const [originId, setOriginId] = useState("INBOM");
-  const [destId, setDestId] = useState("NLRTM");
-  const [mode, setMode] = useState("ocean_fcl");
-  const [containerType, setContainerType] = useState("20ft");
-  const [containerQty, setContainerQty] = useState(1);
-  const [cargoWeight, setCargoWeight] = useState(1200);
-  const [cargoVolume, setCargoVolume] = useState(4.5);
-  const [commodity, setCommodity] = useState("general");
-  const [declaredValue, setDeclaredValue] = useState(2000000);
+  const [originId, setOriginId] = useState("");
+  const [destId, setDestId] = useState("");
+  const [mode, setMode] = useState("");
+  const [containerType, setContainerType] = useState("");
+  const [containerQty, setContainerQty] = useState("");
+  const [cargoWeight, setCargoWeight] = useState("");
+  const [cargoVolume, setCargoVolume] = useState("");
+  const [commodity, setCommodity] = useState("");
+  const [declaredValue, setDeclaredValue] = useState("");
 
   const [services, setServices] = useState({
-    customs: true,
-    insurance: true,
-    thc: true,
-    baf: true,
+    customs: false,
+    insurance: false,
+    thc: false,
+    baf: false,
     doorPickup: false,
     greenOffset: false,
   });
@@ -146,8 +146,8 @@ export default function QuoteCalculator() {
   const pdfContainerRef = useRef(null);
 
   const currency = CURRENCIES.find((c) => c.code === currencyCode) || CURRENCIES[0];
-  const oPort = PORTS.find((p) => p.id === originId) || PORTS[0];
-  const dPort = PORTS.find((p) => p.id === destId) || PORTS[1];
+  const oPort = PORTS.find((p) => p.id === originId);
+  const dPort = PORTS.find((p) => p.id === destId);
 
   const toggleService = (key) => setServices((s) => ({ ...s, [key]: !s[key] }));
 
@@ -169,6 +169,9 @@ export default function QuoteCalculator() {
 
   // ---- Core quote calculation (recomputed on any relevant state change) ----
   const quote = useMemo(() => {
+    if (!originId || !destId || !oPort || !dPort || !mode) {
+      return null;
+    }
     const commMult = COMMODITIES.find((c) => c.value === commodity)?.mult || 1.0;
     const distKm = calculateDistanceKm(oPort.lat, oPort.lng, dPort.lat, dPort.lng);
     const distNM = Math.round(distKm * 0.539957);
@@ -261,7 +264,7 @@ export default function QuoteCalculator() {
   // ---- Leaflet map: update markers/route on port change ----
   useEffect(() => {
     const map = mapInstanceRef.current;
-    if (!map) return;
+    if (!map || !oPort || !dPort) return;
 
     if (originMarkerRef.current) map.removeLayer(originMarkerRef.current);
     if (destMarkerRef.current) map.removeLayer(destMarkerRef.current);
@@ -309,10 +312,10 @@ export default function QuoteCalculator() {
   // ---- Chart.js donut: update on quote change ----
   useEffect(() => {
     const chart = chartInstanceRef.current;
-    if (!chart) return;
+    if (!chart || !quote) return;
     chart.data.datasets[0].data = [quote.baseINR, quote.subtotalINR - quote.baseINR];
     chart.update();
-  }, [quote.baseINR, quote.subtotalINR]);
+  }, [quote]);
 
   const exportPDF = () => {
     const container = pdfContainerRef.current;
@@ -385,6 +388,7 @@ export default function QuoteCalculator() {
                     <MapPin style={{ color: "#ff9800" }} /> Origin Port / City
                   </label>
                   <select className="qg-form-select" value={originId} onChange={(e) => setOriginId(e.target.value)}>
+                    <option value="" disabled hidden>-- Select Origin Port / City --</option>
                     {PORTS.map((p) => (
                       <option key={p.id} value={p.id}>
                         {p.name} ({p.country})
@@ -400,6 +404,7 @@ export default function QuoteCalculator() {
                     <MapPin style={{ color: "#16a34a" }} /> Destination Port / City
                   </label>
                   <select className="qg-form-select" value={destId} onChange={(e) => setDestId(e.target.value)}>
+                    <option value="" disabled hidden>-- Select Destination Port / City --</option>
                     {PORTS.map((p) => (
                       <option key={p.id} value={p.id}>
                         {p.name} ({p.country})
@@ -588,94 +593,120 @@ export default function QuoteCalculator() {
           </div>
 
           {/* Right Summary Column */}
-          <div className="qg-calc-card">
-            <div className="qg-summary-header">
-              <h3>
-                <Receipt /> Quote Summary
+          {!quote ? (
+            <div
+              className="qg-calc-card"
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                justifyContent: "center",
+                minHeight: "360px",
+                padding: "40px 24px",
+                textAlign: "center",
+                background: "#f8fafc",
+                border: "2px dashed #cbd5e1",
+                borderRadius: "16px",
+              }}
+            >
+              <div style={{ fontSize: "40px", marginBottom: "12px" }}>📦</div>
+              <h3 style={{ fontSize: "17px", fontWeight: "700", color: "#0f172a", marginBottom: "6px" }}>
+                Form Not Filled
               </h3>
-              <span className="qg-quote-badge">{quote.id}</span>
+              <p style={{ fontSize: "13px", color: "#64748b", maxWidth: "280px", margin: "0 auto" }}>
+                Please select your origin port, destination port, and shipping mode to calculate live freight rates.
+              </p>
             </div>
+          ) : (
+            <div className="qg-calc-card">
+              <div className="qg-summary-header">
+                <h3>
+                  <Receipt /> Quote Summary
+                </h3>
+                <span className="qg-quote-badge">{quote.id}</span>
+              </div>
 
-            <div className="qg-transit-stats">
-              <div className="qg-t-item">
-                <Clock />
-                <div>
-                  <span>Est. Transit</span>
-                  <strong>{quote.transitDays}</strong>
+              <div className="qg-transit-stats">
+                <div className="qg-t-item">
+                  <Clock />
+                  <div>
+                    <span>Est. Transit</span>
+                    <strong>{quote.transitDays}</strong>
+                  </div>
+                </div>
+                <div className="qg-t-item">
+                  <Navigation />
+                  <div>
+                    <span>Distance</span>
+                    <strong>{quote.distNM.toLocaleString()} NM</strong>
+                  </div>
+                </div>
+                <div className="qg-t-item">
+                  <Cloud />
+                  <div>
+                    <span>CO2 Footprint</span>
+                    <strong>{quote.co2Tonnes} Tonnes</strong>
+                  </div>
                 </div>
               </div>
-              <div className="qg-t-item">
-                <Navigation />
-                <div>
-                  <span>Distance</span>
-                  <strong>{quote.distNM.toLocaleString()} NM</strong>
-                </div>
-              </div>
-              <div className="qg-t-item">
-                <Cloud />
-                <div>
-                  <span>CO2 Footprint</span>
-                  <strong>{quote.co2Tonnes} Tonnes</strong>
-                </div>
-              </div>
-            </div>
 
-            <table className="qg-breakdown-table">
-              <thead>
-                <tr>
-                  <th>Description</th>
-                  <th className="qg-text-right">Amount</th>
-                </tr>
-              </thead>
-              <tbody>
-                {quote.items.map((i, idx) => (
-                  <tr key={idx}>
-                    <td>{i.name}</td>
-                    <td className="qg-text-right">{i.formatted}</td>
+              <table className="qg-breakdown-table">
+                <thead>
+                  <tr>
+                    <th>Description</th>
+                    <th className="qg-text-right">Amount</th>
                   </tr>
-                ))}
-              </tbody>
-              <tfoot>
-                <tr>
-                  <td>Subtotal</td>
-                  <td className="qg-text-right">{quote.formattedSubtotal}</td>
-                </tr>
-                <tr>
-                  <td>Discount</td>
-                  <td className="qg-text-right qg-text-emerald">-{quote.formattedDiscount}</td>
-                </tr>
-                <tr className="qg-total-row">
-                  <td>Total Freight Quote</td>
-                  <td className="qg-text-right">{quote.formattedTotal}</td>
-                </tr>
-              </tfoot>
-            </table>
+                </thead>
+                <tbody>
+                  {quote.items.map((i, idx) => (
+                    <tr key={idx}>
+                      <td>{i.name}</td>
+                      <td className="qg-text-right">{i.formatted}</td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr>
+                    <td>Subtotal</td>
+                    <td className="qg-text-right">{quote.formattedSubtotal}</td>
+                  </tr>
+                  <tr>
+                    <td>Discount</td>
+                    <td className="qg-text-right qg-text-emerald">-{quote.formattedDiscount}</td>
+                  </tr>
+                  <tr className="qg-total-row">
+                    <td>Total Freight Quote</td>
+                    <td className="qg-text-right">{quote.formattedTotal}</td>
+                  </tr>
+                </tfoot>
+              </table>
 
-            <div className="qg-chart-box">
-              <h4>Cost Distribution</h4>
-              <div className="qg-chart-container">
-                <canvas ref={chartCanvasRef}></canvas>
+              <div className="qg-chart-box">
+                <h4>Cost Distribution</h4>
+                <div className="qg-chart-container">
+                  <canvas ref={chartCanvasRef}></canvas>
+                </div>
+              </div>
+
+              <div className="qg-map-box">
+                <h4>Shipping Route Visualizer</h4>
+                <div ref={mapElRef} className="qg-route-map"></div>
+              </div>
+
+              <div className="qg-action-row">
+                <button className="qg-btn-dark" onClick={exportPDF}>
+                  <FileText /> Export PDF Quote
+                </button>
+                <button
+                  type="button"
+                  className="qg-btn-ship"
+                  onClick={() => setShowShipModal(true)}
+                >
+                  <PackageCheck /> Ship This Quote
+                </button>
               </div>
             </div>
-
-            <div className="qg-map-box">
-              <h4>Shipping Route Visualizer</h4>
-              <div ref={mapElRef} className="qg-route-map"></div>
-            </div>
-
-            <div className="qg-action-row">
-              <button className="qg-btn-dark" onClick={exportPDF}>
-                <FileText /> Export PDF Quote
-              </button>
-              <button
-                type="button"
-                className="qg-btn-ship"
-                onClick={() => setShowShipModal(true)}
-              >
-                <PackageCheck /> Ship This Quote
-              </button>
-            </div>
-          </div>
+          )}
         </div>
       </div>
 
