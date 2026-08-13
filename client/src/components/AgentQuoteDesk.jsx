@@ -247,6 +247,25 @@ export default function AgentQuoteDesk() {
               </div>
             </div>
 
+            {Number(marginPct) < 12.0 && (
+              <div
+                style={{
+                  background: "#450a0a",
+                  border: "1px solid #ef4444",
+                  borderRadius: "6px",
+                  padding: "12px",
+                  margin: "16px 0",
+                  color: "#fca5a5",
+                  fontSize: "13px",
+                }}
+              >
+                <strong>⚠️ HTTP 409 CONFLICT — QUOTE_BELOW_MARGIN_FLOOR</strong>
+                <p style={{ margin: "4px 0 0 0" }}>
+                  Requested margin ({marginPct}%) is below the resolved lane floor (12.0%). Below-floor quotes cannot be issued directly and require PRICING_MANAGER approval.
+                </p>
+              </div>
+            )}
+
             <div className="price-summary-box">
               <div className="price-row">
                 <span>Base Carrier Rate:</span>
@@ -261,11 +280,11 @@ export default function AgentQuoteDesk() {
                 <span>₹{Math.round(activeModalQuote.baseRate * (fuelPct / 100)).toLocaleString("en-IN")}</span>
               </div>
               <div className="price-row">
-                <span>Port Terminal Handling Fee:</span>
+                <span>Port &amp; Handling Fees:</span>
                 <span>₹{Number(portFee).toLocaleString("en-IN")}</span>
               </div>
-              <div className="price-row total">
-                <span>Binding Quote Price:</span>
+              <div className="price-row total-row">
+                <span>Total Final Quote:</span>
                 <span>
                   ₹{calculateFinalCost(activeModalQuote, marginPct, fuelPct, portFee).toLocaleString("en-IN")}
                 </span>
@@ -275,17 +294,17 @@ export default function AgentQuoteDesk() {
             <div className="modal-actions">
               <button
                 type="button"
-                className="btn-cancel"
+                className="agent-btn-secondary"
                 onClick={() => setActiveModalQuote(null)}
               >
                 Cancel
               </button>
               <button
                 type="button"
-                className="btn-approve"
+                className="agent-btn-primary"
                 onClick={handleSaveQuote}
               >
-                Approve & Issue Quote
+                {Number(marginPct) < 12.0 ? "Submit for Approval (409)" : "Issue Binding Quote"}
               </button>
             </div>
           </div>

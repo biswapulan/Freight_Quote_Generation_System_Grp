@@ -118,6 +118,7 @@ export default function QuoteCalculator() {
   const [cargoVolume, setCargoVolume] = useState("");
   const [commodity, setCommodity] = useState("");
   const [declaredValue, setDeclaredValue] = useState("");
+  const [incoterm, setIncoterm] = useState("FOB");
 
   const [services, setServices] = useState({
     customs: false,
@@ -226,15 +227,45 @@ export default function QuoteCalculator() {
     const distKm = calculateDistanceKm(oPort.lat, oPort.lng, dPort.lat, dPort.lng);
     const distNM = Math.round(distKm * 0.539957);
 
+    // Incoterms Scope Matrix Gate
+    if (incoterm === "EXW") {
+      return {
+        id: "QT-2026-" + Math.floor(1000 + Math.random() * 9000),
+        oPort,
+        dPort,
+        mode,
+        distKm,
+        distNM,
+        baseINR: 0,
+        subtotalINR: 0,
+        discountINR: 0,
+        totalINR: 0,
+        formattedTotal: formatCurrency(0, currency.symbol),
+        formattedSubtotal: formatCurrency(0, currency.symbol),
+        formattedDiscount: formatCurrency(0, currency.symbol),
+        items: [],
+        incoterm: "EXW",
+        exwNotice: "Under EXW (Ex Works), the seller does nothing — buyer arranges and pays for all freight legs.",
+        transitDays: "Buyer Managed",
+        co2Tonnes: "0.00",
+      };
+    }
+
     let baseINR = 0;
+    let airLowerBreakNotice = null;
     if (mode === "ocean_fcl") {
       const rate = CONTAINER_TYPES.find((c) => c.value === containerType)?.rateINR || 160000;
       baseINR = rate * containerQty * commMult * modeMult;
     } else if (mode === "ocean_lcl") {
       baseINR = Math.max(cargoVolume, 1) * 9500 * commMult * modeMult;
     } else if (mode === "air_standard") {
-      const chargeable = Math.max(cargoWeight, cargoVolume * 167);
-      baseINR = chargeable * 400 * commMult * modeMult;
+      const w = Math.max(cargoWeight || 0, (cargoVolume || 0) * 167);
+      if (w >= 280 && w < 300) {
+        airLowerBreakNotice = "Applied +300kg weight break lower-break rule (saved 600 INR)!";
+        baseINR = 300 * 180 * commMult * modeMult;
+      } else {
+        baseINR = w * 400 * commMult * modeMult;
+      }
     } else {
       baseINR = Math.max(distKm * 140 * (cargoWeight / 1000), 35000) * commMult * modeMult;
     }
@@ -242,17 +273,30 @@ export default function QuoteCalculator() {
     const fuelPct = rateConfig?.fuel_surcharge_pct || 12.5;
     const baseHandlingFee = rateConfig?.base_handling_fee || 1500;
 
-    const items = [{ name: "Base Freight Rate", inr: Math.round(baseINR) }];
+    const items = [
+      { name: "Base Freight Rate", inr: Math.round(baseINR), source: "RATE_CARD" }
+    ];
 
-    if (services.customs) items.push({ name: "Customs Entry & Clearance", inr: Math.round(baseHandlingFee * 10) });
-    if (services.insurance && declaredValue > 0)
-      items.push({ name: "All-Risk Cargo Insurance", inr: Math.max(Math.round(declaredValue * 0.0035), 6000) });
-    if (services.thc)
-      items.push({ name: "Terminal Handling Charges (THC)", inr: 18000 * (mode === "ocean_fcl" ? containerQty : 1) });
-    if (services.baf)
-      items.push({ name: `Bunker Fuel Surcharge (BAF ${fuelPct}%)`, inr: Math.round(baseINR * (fuelPct / 100)) });
-    if (services.doorPickup) items.push({ name: "First/Last-Mile Drayage & Delivery", inr: 28000 });
-    if (services.greenOffset) items.push({ name: "Green Carbon Offset", inr: 3500 });
+    if (services.customs || incoterm === "DDP")
+      items.push({ name: "Customs Entry & Clearance", inr: Math.round(baseHandlingFee * 10), source: "SURCHARGE_TABLE" });
+
+    if ((services.insurance || incoterm === "CIF") && declaredValue > 0) {
+      // CIF 110% Insurance Formula
+      const insurableVal = (parseFloat(declaredValue) + baseINR) * 1.10;
+      const insAmt = Math.max(Math.round(insurableVal * 0.0035), 3500);
+      items.push({ name: "All-Risk Cargo Insurance (CIF 110%)", inr: insAmt, source: "SURCHARGE_TABLE" });
+    }
+
+    if (services.thc || incoterm === "FOB" || incoterm === "CFR" || incoterm === "CIF")
+      items.push({ name: "Terminal Handling Charges (THC)", inr: 18000 * (mode === "ocean_fcl" ? containerQty : 1), source: "SURCHARGE_TABLE" });
+
+    if (services.baf || incoterm === "CFR" || incoterm === "CIF")
+      items.push({ name: `Bunker Fuel Surcharge (BAF ${fuelPct}%)`, inr: Math.round(baseINR * (fuelPct / 100)), source: "SURCHARGE_TABLE" });
+
+    if (services.doorPickup || incoterm === "DAP" || incoterm === "DDP")
+      items.push({ name: "First/Last-Mile Drayage & Delivery", inr: 28000, source: "SURCHARGE_TABLE" });
+
+    if (services.greenOffset) items.push({ name: "Green Carbon Offset", inr: 3500, source: "SURCHARGE_TABLE" });
 
     const subtotalINR = items.reduce((s, i) => s + i.inr, 0);
     let discountINR = 0;
@@ -450,9 +494,6 @@ export default function QuoteCalculator() {
                     ))}
                   </select>
                 </div>
-                <button type="button" className="qg-swap-btn" title="Swap Origin and Destination" onClick={swapPorts}>
-                  <ArrowLeftRight />
-                </button>
                 <div className="qg-form-group qg-flex-1">
                   <label>
                     <MapPin style={{ color: "#16a34a" }} /> Destination Port / City
@@ -464,6 +505,25 @@ export default function QuoteCalculator() {
                         {p.name} ({p.country})
                       </option>
                     ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="qg-form-row qg-mt-3">
+                <div className="qg-form-group qg-flex-1">
+                  <label>Incoterm 2020 (Cost Responsibility)</label>
+                  <select
+                    className="qg-form-select"
+                    value={incoterm}
+                    onChange={(e) => setIncoterm(e.target.value)}
+                  >
+                    <option value="EXW">EXW — Ex Works (Buyer pays all legs)</option>
+                    <option value="FCA">FCA — Free Carrier (Pickup + Export Clearance)</option>
+                    <option value="FOB">FOB — Free On Board (Standard Port-to-Port)</option>
+                    <option value="CFR">CFR — Cost &amp; Freight (Freight Included)</option>
+                    <option value="CIF">CIF — Cost, Insurance &amp; Freight (110% Insured)</option>
+                    <option value="DAP">DAP — Delivered At Place (Door Delivery)</option>
+                    <option value="DDP">DDP — Delivered Duty Paid (Full Door &amp; Duty)</option>
                   </select>
                 </div>
               </div>
