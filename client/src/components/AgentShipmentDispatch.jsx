@@ -23,7 +23,7 @@ const INITIAL_SHIPMENTS = [
     carrier: "Lufthansa Cargo",
     origin: "Delhi (DEL)",
     destination: "Frankfurt (FRA)",
-    currentMilestone: "Customs",
+    currentMilestone: "Customs Cleared",
     eta: "2026-08-14",
     vessel: "Flight LH8220",
     containerNo: "AWB-020-8819201",

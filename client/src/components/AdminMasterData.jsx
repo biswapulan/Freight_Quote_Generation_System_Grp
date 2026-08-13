@@ -223,10 +223,13 @@ export default function AdminMasterData() {
   const currentCategoryObj = CATEGORIES.find((c) => c.id === activeCategory);
   const rawList = collections[activeCollection] || [];
 
-  const filteredList = rawList.filter((item) => {
-    const jsonStr = JSON.stringify(item).toLowerCase();
-    return jsonStr.includes(searchTerm.toLowerCase());
-  });
+  const query = searchTerm.trim().toLowerCase();
+  const filteredList = !query
+    ? rawList
+    : rawList.filter((item) => {
+        const jsonStr = JSON.stringify(item).toLowerCase();
+        return jsonStr.includes(query);
+      });
 
   function toggleRecordActive(index) {
     setCollections((prev) => {

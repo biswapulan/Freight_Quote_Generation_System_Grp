@@ -78,7 +78,7 @@ export default function AdminUsers() {
         status: statusFilter || undefined,
         search: search || undefined,
       });
-      setUsers(data.results && data.results.length > 0 ? data.results : MOCK_ADMIN_USERS);
+      setUsers(Array.isArray(data.results) ? data.results : []);
     } catch {
       setUsers(MOCK_ADMIN_USERS);
     } finally {
@@ -138,9 +138,8 @@ export default function AdminUsers() {
       setUsers((prev) => prev.map((item) => (item.id === u.id ? updated : item)));
       setSuccessMsg(`Role for ${u.full_name} changed to ${ROLE_LABELS[editRole]}.`);
       cancelEditing();
-    } catch {
-      setUsers((prev) => prev.map((item) => (item.id === u.id ? { ...item, role: editRole } : item)));
-      setSuccessMsg(`Role for ${u.full_name} updated to ${ROLE_LABELS[editRole]}.`);
+    } catch (err) {
+      setError(err.message || `Could not update role for ${u.full_name}.`);
       cancelEditing();
     } finally {
       setSavingId(null);
@@ -154,9 +153,8 @@ export default function AdminUsers() {
       const updated = await updateUser(token, u.id, { is_active: true });
       setUsers((prev) => prev.map((item) => (item.id === u.id ? updated : item)));
       setSuccessMsg(`${u.full_name} reactivated successfully.`);
-    } catch {
-      setUsers((prev) => prev.map((item) => (item.id === u.id ? { ...item, is_active: true } : item)));
-      setSuccessMsg(`${u.full_name} reactivated.`);
+    } catch (err) {
+      setError(err.message || `Could not reactivate ${u.full_name}.`);
     } finally {
       setSavingId(null);
     }
@@ -170,9 +168,8 @@ export default function AdminUsers() {
       setUsers((prev) => prev.map((item) => (item.id === u.id ? { ...item, is_active: false } : item)));
       setSuccessMsg(`${u.full_name} was deactivated.`);
       setConfirmDeactivateId(null);
-    } catch {
-      setUsers((prev) => prev.map((item) => (item.id === u.id ? { ...item, is_active: false } : item)));
-      setSuccessMsg(`${u.full_name} deactivated.`);
+    } catch (err) {
+      setError(err.message || `Could not deactivate ${u.full_name}.`);
       setConfirmDeactivateId(null);
     } finally {
       setSavingId(null);
@@ -357,7 +354,10 @@ export default function AdminUsers() {
             </thead>
             <tbody>
               {users.map((u) => {
-                const isSelf = currentUser && currentUser.email === u.email;
+                const isSelf = currentUser && (
+                  (currentUser.id && currentUser.id === u.id) ||
+                  (currentUser.email && currentUser.email.toLowerCase() === (u.email || "").toLowerCase())
+                );
                 const isEditingThis = editingId === u.id;
                 const isConfirmingThis = confirmDeactivateId === u.id;
 

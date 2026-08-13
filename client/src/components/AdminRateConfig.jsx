@@ -81,10 +81,10 @@ export default function AdminRateConfig() {
         ),
       };
       const updated = await updateRateConfig(token, payload);
-      setConfig(updated);
+      setConfig(updated || payload);
       setSuccessMsg("Rate config updated — new quotes will automatically use these rates.");
-    } catch {
-      setSuccessMsg("Rate config updated successfully!");
+    } catch (err) {
+      setError(err.message || "Failed to update rate configuration on backend API.");
     } finally {
       setSaving(false);
     }
