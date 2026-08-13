@@ -764,6 +764,7 @@ export default function QuoteCalculator() {
       )}
 
       {/* Hidden PDF Print Template */}
+      {quote && (
       <div ref={pdfContainerRef} className="qg-pdf-export-container hidden">
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <h2 style={{ color: "#0f172a", margin: 0 }}>
@@ -819,6 +820,7 @@ export default function QuoteCalculator() {
           </tfoot>
         </table>
       </div>
+      )}
 
     </div>
   );
