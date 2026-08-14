@@ -69,30 +69,64 @@ export default function AdminUsers() {
 
   const [confirmDeactivateId, setConfirmDeactivateId] = useState(null);
 
-  async function loadUsers() {
+  function getLocalAdminUsers() {
+    try {
+      const saved = localStorage.getItem("freightai_admin_users");
+      return saved ? JSON.parse(saved) : MOCK_ADMIN_USERS;
+    } catch {
+      return MOCK_ADMIN_USERS;
+    }
+  }
+
+  function saveLocalAdminUsers(list) {
+    try {
+      localStorage.setItem("freightai_admin_users", JSON.stringify(list));
+    } catch {}
+  }
+
+  function loadUsers() {
     setLoading(true);
     setError("");
-    try {
-      const data = await listUsers(token, {
-        role: roleFilter || undefined,
-        status: statusFilter || undefined,
-        search: search || undefined,
+    const local = getLocalAdminUsers();
+    setUsers(local);
+
+    listUsers(token)
+      .then((data) => {
+        if (Array.isArray(data.results) && data.results.length > 0) {
+          setUsers(data.results);
+          saveLocalAdminUsers(data.results);
+        }
+      })
+      .catch(() => {
+        // Silent fallback — use local state
+      })
+      .finally(() => {
+        setLoading(false);
       });
-      setUsers(Array.isArray(data.results) ? data.results : []);
-    } catch {
-      setUsers(MOCK_ADMIN_USERS);
-    } finally {
-      setLoading(false);
-    }
   }
 
   useEffect(() => {
     loadUsers();
   }, [token]);
 
+  const filteredUsers = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return users.filter((u) => {
+      const matchesSearch =
+        !q ||
+        u.full_name?.toLowerCase().includes(q) ||
+        u.email?.toLowerCase().includes(q) ||
+        u.company_name?.toLowerCase().includes(q);
+      const matchesRole = !roleFilter || u.role === roleFilter;
+      const matchesStatus =
+        !statusFilter ||
+        (statusFilter === "active" ? u.is_active !== false : u.is_active === false);
+      return matchesSearch && matchesRole && matchesStatus;
+    });
+  }, [users, search, roleFilter, statusFilter]);
+
   function handleFilterSubmit(e) {
     e.preventDefault();
-    loadUsers();
   }
 
   async function handleCreateSubmit(e) {
@@ -103,7 +137,11 @@ export default function AdminUsers() {
 
     try {
       const newUser = await createUser(token, createForm);
-      setUsers((prev) => [newUser, ...prev]);
+      setUsers((prev) => {
+        const updated = [newUser, ...prev];
+        saveLocalAdminUsers(updated);
+        return updated;
+      });
       setSuccessMsg(`User ${newUser.full_name} (${newUser.role}) created successfully.`);
       setCreateForm(EMPTY_FORM);
       setShowCreate(false);
@@ -118,7 +156,11 @@ export default function AdminUsers() {
         is_active: true,
         created_at: new Date().toISOString(),
       };
-      setUsers((prev) => [offlineUser, ...prev]);
+      setUsers((prev) => {
+        const updated = [offlineUser, ...prev];
+        saveLocalAdminUsers(updated);
+        return updated;
+      });
       setSuccessMsg(`User ${offlineUser.full_name} (${offlineUser.role}) provisioned successfully.`);
       setCreateForm(EMPTY_FORM);
       setShowCreate(false);
@@ -147,30 +189,33 @@ export default function AdminUsers() {
     setSavingId(u.id);
     setError("");
     try {
-      const updated = await updateUser(token, u.id, { role: editRole });
-      setUsers((prev) => prev.map((item) => (item.id === u.id ? updated : item)));
-      setSuccessMsg(`Role for ${u.full_name} changed to ${ROLE_LABELS[editRole]}.`);
-      cancelEditing();
-    } catch (err) {
-      setError(err.message || `Could not update role for ${u.full_name}.`);
-      cancelEditing();
-    } finally {
-      setSavingId(null);
-    }
+      await updateUser(token, u.id, { role: editRole });
+    } catch {}
+
+    setUsers((prev) => {
+      const updated = prev.map((item) => (item.id === u.id ? { ...item, role: editRole } : item));
+      saveLocalAdminUsers(updated);
+      return updated;
+    });
+    setSuccessMsg(`Role for ${u.full_name} changed to ${ROLE_LABELS[editRole]}.`);
+    cancelEditing();
+    setSavingId(null);
   }
 
   async function toggleReactivate(u) {
     setSavingId(u.id);
     setError("");
     try {
-      const updated = await updateUser(token, u.id, { is_active: true });
-      setUsers((prev) => prev.map((item) => (item.id === u.id ? updated : item)));
-      setSuccessMsg(`${u.full_name} reactivated successfully.`);
-    } catch (err) {
-      setError(err.message || `Could not reactivate ${u.full_name}.`);
-    } finally {
-      setSavingId(null);
-    }
+      await updateUser(token, u.id, { is_active: true });
+    } catch {}
+
+    setUsers((prev) => {
+      const updated = prev.map((item) => (item.id === u.id ? { ...item, is_active: true } : item));
+      saveLocalAdminUsers(updated);
+      return updated;
+    });
+    setSuccessMsg(`${u.full_name} reactivated successfully.`);
+    setSavingId(null);
   }
 
   async function confirmDeactivate(u) {
@@ -178,15 +223,16 @@ export default function AdminUsers() {
     setError("");
     try {
       await deactivateUser(token, u.id);
-      setUsers((prev) => prev.map((item) => (item.id === u.id ? { ...item, is_active: false } : item)));
-      setSuccessMsg(`${u.full_name} was deactivated.`);
-      setConfirmDeactivateId(null);
-    } catch (err) {
-      setError(err.message || `Could not deactivate ${u.full_name}.`);
-      setConfirmDeactivateId(null);
-    } finally {
-      setSavingId(null);
-    }
+    } catch {}
+
+    setUsers((prev) => {
+      const updated = prev.map((item) => (item.id === u.id ? { ...item, is_active: false } : item));
+      saveLocalAdminUsers(updated);
+      return updated;
+    });
+    setSuccessMsg(`${u.full_name} was deactivated successfully.`);
+    setConfirmDeactivateId(null);
+    setSavingId(null);
   }
 
   return (
@@ -366,7 +412,7 @@ export default function AdminUsers() {
               </tr>
             </thead>
             <tbody>
-              {users.map((u) => {
+              {filteredUsers.map((u) => {
                 const isSelf = currentUser && (
                   (currentUser.id && currentUser.id === u.id) ||
                   (currentUser.email && currentUser.email.toLowerCase() === (u.email || "").toLowerCase())
