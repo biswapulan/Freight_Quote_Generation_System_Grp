@@ -368,46 +368,45 @@ export default function AdminMasterData() {
 
       {/* Main Workspace Card */}
       <div className="agent-panel-card">
-      {/* Collection Action Header */}
-      <div className="md-action-bar">
-        <div className="md-collection-info">
-          <h2>
-            Collection: <span className="md-highlight">{activeCollection}</span>
-          </h2>
-          <span className="md-count-pill">{filteredList.length} documents</span>
-        </div>
-
-        <div className="md-action-right">
-          <div className="md-search-box">
-            <FaSearch className="md-search-icon" />
-            <input
-              type="text"
-              placeholder={`Search in ${activeCollection}...`}
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-            />
+        <div className="agent-panel-header md-workspace-header">
+          <div className="md-header-left">
+            <h2 className="agent-panel-title">
+              Collection: <code className="md-collection-name">{activeCollection}</code>
+            </h2>
+            <span className="md-total-text">{filteredList.length} documents</span>
           </div>
 
-          {activeCollection === "rateCards" && (
+          <div className="md-header-actions">
+            <div className="md-search-box">
+              <FaSearch />
+              <input
+                type="text"
+                placeholder={`Search in ${activeCollection}...`}
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
+            </div>
+
+            {activeCollection === "rateCards" && (
+              <button
+                type="button"
+                className="agent-action-btn md-add-btn"
+                onClick={() => alert("Rate Card Two-Phase Importer:\n\nPhase 1 (Validate): Parsed 1,284 rows, 0 hard errors, 2 warnings.\nValidation Token: vt_m2_8f3a2c910b\n\nPhase 2 (Commit): Ready to commit rate card lines to MongoDB in single atomic transaction.")}
+                style={{ background: "#0284c7" }}
+              >
+                📥 Import Rate Card (2-Phase)
+              </button>
+            )}
+
             <button
               type="button"
               className="agent-action-btn md-add-btn"
-              onClick={() => alert("Rate Card Two-Phase Importer:\n\nPhase 1 (Validate): Parsed 1,284 rows, 0 hard errors, 2 warnings.\nValidation Token: vt_m2_8f3a2c910b\n\nPhase 2 (Commit): Ready to commit rate card lines to MongoDB in single atomic transaction.")}
-              style={{ background: "#0284c7" }}
+              onClick={openAddModal}
             >
-              📥 Import Rate Card (2-Phase)
+              <FaPlus /> Add Record
             </button>
-          )}
-
-          <button
-            type="button"
-            className="agent-action-btn md-add-btn"
-            onClick={openAddModal}
-          >
-            <FaPlus /> Add Record
-          </button>
+          </div>
         </div>
-      </div>
 
         {/* Dynamic Schema Table Component */}
         <div className="agent-table-wrap">

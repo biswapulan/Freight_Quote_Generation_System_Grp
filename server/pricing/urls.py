@@ -11,6 +11,7 @@ from .views import (
     CostBreakdownView,
     ValidateRateCardView,
     CommitRateCardView,
+    RouteAgentView,
 )
 
 urlpatterns = [
@@ -22,4 +23,5 @@ urlpatterns = [
     path("admin/rate-config/", RateConfigView.as_view(), name="rate-config"),
     path("pricing/rate-cards/validate", ValidateRateCardView.as_view(), name="rate-cards-validate"),
     path("pricing/rate-cards/commit", CommitRateCardView.as_view(), name="rate-cards-commit"),
+    path("pricing/route-recommendation/", RouteAgentView.as_view(), name="route-recommendation"),
 ]

@@ -134,6 +134,34 @@ export default function QuoteCalculator() {
   const [promoMsg, setPromoMsg] = useState({ text: "", ok: false });
 
   const [showShipModal, setShowShipModal] = useState(false);
+  const [submitMsg, setSubmitMsg] = useState("");
+
+  const submitToBrokerDesk = () => {
+    if (!quote) return;
+    const newReq = {
+      id: quote.id,
+      client: "Direct Online Shipper",
+      clientEmail: "shipper@example.com",
+      origin: `${quote.oPort.name} (${quote.oPort.id})`,
+      destination: `${quote.dPort.name} (${quote.dPort.id})`,
+      mode: quote.mode === "ocean_fcl" ? "Ocean FCL" : quote.mode === "ocean_lcl" ? "Ocean LCL" : quote.mode === "air_standard" ? "Air Standard" : "Road Drayage",
+      cargoClass: `${commodity || "General"} cargo`,
+      weightKg: cargoWeight || 1200,
+      baseRate: quote.baseINR,
+      marginPct: 10,
+      fuelSurchargePct: 12.5,
+      portFee: 15000,
+      status: "Pending Review",
+      requestedDate: new Date().toISOString().split("T")[0],
+    };
+    try {
+      const saved = localStorage.getItem("freightai_agent_quotes");
+      const list = saved ? JSON.parse(saved) : [];
+      localStorage.setItem("freightai_agent_quotes", JSON.stringify([newReq, ...list]));
+      setSubmitMsg(`✅ Quote ${quote.id} submitted to Broker Desk for review & margin approval!`);
+      setTimeout(() => setSubmitMsg(""), 5000);
+    } catch {}
+  };
 
   const mapElRef = useRef(null);
   const mapInstanceRef = useRef(null);
@@ -314,6 +342,7 @@ export default function QuoteCalculator() {
       oPort,
       dPort,
       mode,
+      incoterm,
       distKm,
       distNM,
       baseINR,
@@ -324,6 +353,7 @@ export default function QuoteCalculator() {
       formattedSubtotal: formatCurrency(subtotalINR * rate, sym),
       formattedDiscount: formatCurrency(discountINR * rate, sym),
       items: items.map((i) => ({ ...i, formatted: formatCurrency(i.inr * rate, sym) })),
+      airLowerBreakNotice,
       transitDays: `${Math.round(distNM / 350) + 4} - ${Math.round(distNM / 350) + 9} Days`,
       co2Tonnes: (
         (distKm * Math.max(cargoWeight / 1000, 1.5) * (mode === "air_standard" ? 500 : 12)) /
@@ -339,6 +369,7 @@ export default function QuoteCalculator() {
     cargoVolume,
     commodity,
     declaredValue,
+    incoterm,
     services,
     activePromo,
     currency,
@@ -494,6 +525,9 @@ export default function QuoteCalculator() {
                     ))}
                   </select>
                 </div>
+                <button type="button" className="qg-swap-btn" title="Swap Origin and Destination" onClick={swapPorts}>
+                  <ArrowLeftRight />
+                </button>
                 <div className="qg-form-group qg-flex-1">
                   <label>
                     <MapPin style={{ color: "#16a34a" }} /> Destination Port / City
@@ -510,8 +544,8 @@ export default function QuoteCalculator() {
               </div>
 
               <div className="qg-form-row qg-mt-3">
-                <div className="qg-form-group qg-flex-1">
-                  <label>Incoterm 2020 (Cost Responsibility)</label>
+                <div className="qg-form-group" style={{ flex: 1 }}>
+                  <label>🌐 Incoterm 2020 — Trade Cost Responsibility</label>
                   <select
                     className="qg-form-select"
                     value={incoterm}
@@ -737,7 +771,22 @@ export default function QuoteCalculator() {
                 <h3>
                   <Receipt /> Quote Summary
                 </h3>
-                <span className="qg-quote-badge">{quote.id}</span>
+                <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
+                  <span className="qg-quote-badge">{quote.id}</span>
+                  <span
+                    style={{
+                      fontSize: "11px",
+                      fontWeight: "700",
+                      padding: "3px 8px",
+                      borderRadius: "20px",
+                      background: "#0c4a6e",
+                      color: "#7dd3fc",
+                      letterSpacing: "0.5px",
+                    }}
+                  >
+                    {incoterm}
+                  </span>
+                </div>
               </div>
 
               <div className="qg-transit-stats">
@@ -764,10 +813,53 @@ export default function QuoteCalculator() {
                 </div>
               </div>
 
+              {/* EXW zero-cost notice */}
+              {quote.exwNotice && (
+                <div
+                  style={{
+                    background: "#1c1917",
+                    border: "1px solid #78716c",
+                    borderRadius: "8px",
+                    padding: "10px 14px",
+                    marginBottom: "12px",
+                    color: "#d6d3d1",
+                    fontSize: "12.5px",
+                    display: "flex",
+                    gap: "8px",
+                    alignItems: "flex-start",
+                  }}
+                >
+                  <span>📦</span>
+                  <span>{quote.exwNotice}</span>
+                </div>
+              )}
+
+              {/* Air lower-break notice */}
+              {quote.airLowerBreakNotice && (
+                <div
+                  style={{
+                    background: "#052e16",
+                    border: "1px solid #16a34a",
+                    borderRadius: "8px",
+                    padding: "10px 14px",
+                    marginBottom: "12px",
+                    color: "#86efac",
+                    fontSize: "12.5px",
+                    display: "flex",
+                    gap: "8px",
+                    alignItems: "flex-start",
+                  }}
+                >
+                  <span>✈️</span>
+                  <span>{quote.airLowerBreakNotice}</span>
+                </div>
+              )}
+
               <table className="qg-breakdown-table">
                 <thead>
                   <tr>
                     <th>Description</th>
+                    <th style={{ textAlign: "center", width: "90px" }}>Source</th>
                     <th className="qg-text-right">Amount</th>
                   </tr>
                 </thead>
@@ -775,21 +867,42 @@ export default function QuoteCalculator() {
                   {quote.items.map((i, idx) => (
                     <tr key={idx}>
                       <td>{i.name}</td>
+                      <td style={{ textAlign: "center" }}>
+                        <span
+                          style={{
+                            fontSize: "10px",
+                            fontWeight: "700",
+                            padding: "2px 6px",
+                            borderRadius: "4px",
+                            letterSpacing: "0.3px",
+                            background:
+                              i.source === "RATE_CARD" ? "#1e3a5f" :
+                              i.source === "PREDICTED" ? "#3b1e5f" :
+                              "#1e3d2f",
+                            color:
+                              i.source === "RATE_CARD" ? "#93c5fd" :
+                              i.source === "PREDICTED" ? "#c4b5fd" :
+                              "#86efac",
+                          }}
+                        >
+                          {i.source || "MANUAL"}
+                        </span>
+                      </td>
                       <td className="qg-text-right">{i.formatted}</td>
                     </tr>
                   ))}
                 </tbody>
                 <tfoot>
                   <tr>
-                    <td>Subtotal</td>
+                    <td colSpan={2}>Subtotal</td>
                     <td className="qg-text-right">{quote.formattedSubtotal}</td>
                   </tr>
                   <tr>
-                    <td>Discount</td>
+                    <td colSpan={2}>Discount</td>
                     <td className="qg-text-right qg-text-emerald">-{quote.formattedDiscount}</td>
                   </tr>
                   <tr className="qg-total-row">
-                    <td>Total Freight Quote</td>
+                    <td colSpan={2}>Total Freight Quote</td>
                     <td className="qg-text-right">{quote.formattedTotal}</td>
                   </tr>
                 </tfoot>
@@ -807,9 +920,23 @@ export default function QuoteCalculator() {
                 <div ref={mapElRef} className="qg-route-map"></div>
               </div>
 
+              {submitMsg && (
+                <div style={{ background: "#052e16", border: "1px solid #16a34a", color: "#86efac", padding: "10px 14px", borderRadius: "8px", fontSize: "13px", fontWeight: "600", marginBottom: "12px" }}>
+                  {submitMsg}
+                </div>
+              )}
+
               <div className="qg-action-row">
                 <button className="qg-btn-dark" onClick={exportPDF}>
                   <FileText /> Export PDF Quote
+                </button>
+                <button
+                  type="button"
+                  className="qg-btn-dark"
+                  style={{ background: "#0284c7", borderColor: "#0284c7" }}
+                  onClick={submitToBrokerDesk}
+                >
+                  <PackageCheck /> Submit to Broker Desk
                 </button>
                 <button
                   type="button"
