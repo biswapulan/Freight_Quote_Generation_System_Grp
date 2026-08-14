@@ -1,0 +1,102 @@
+.m1-dashboard {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.m1-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 16px;
+}
+
+.m1-kpi-card {
+  background: #ffffff;
+  padding: 18px;
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.m1-kpi-label {
+  font-size: 12.5px;
+  color: #64748b;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.m1-kpi-val {
+  font-size: 26px;
+  font-weight: 800;
+  color: #0f172a;
+}
+
+.m1-meta-box {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 14px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  font-size: 13px;
+  color: #334155;
+}
+
+.m1-routes-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.m1-route-card {
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  padding: 14px;
+  background: #ffffff;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.m1-route-card.recommended {
+  border: 2px solid #16a34a;
+  background: #f0fdf4;
+}
+
+.m1-route-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.m1-route-code {
+  font-weight: 700;
+  font-size: 14px;
+  color: #0f172a;
+}
+
+.m1-badge-rec {
+  background: #16a34a;
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 20px;
+}
+
+.m1-route-path {
+  font-size: 14px;
+  font-weight: 600;
+  color: #0284c7;
+}
+
+.m1-route-footer {
+  display: flex;
+  gap: 20px;
+  font-size: 12.5px;
+  color: #64748b;
+}

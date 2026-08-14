@@ -296,3 +296,31 @@ class CommitRateCardView(APIView):
             },
             status=status.HTTP_201_CREATED,
         )
+
+
+class RouteAgentView(APIView):
+    """Milestone 1 API: Route Agent generating route options, transit estimation & recommended route."""
+
+    def post(self, request):
+        from .route_agent import evaluate_shipment_routes
+
+        data = request.data or {}
+        shipment_id = data.get("shipment_id", "SHP001")
+        customer_id = data.get("customer_id", "C001")
+        customer_name = data.get("customer_name", "ABC Logistics")
+        origin = data.get("origin_code", "INMAA")
+        dest = data.get("dest_code", "SGSIN")
+        cargo_type = data.get("cargo_type", "Electronics")
+        container_type = data.get("container_type", "40FT")
+
+        result = evaluate_shipment_routes(
+            shipment_id=shipment_id,
+            customer_id=customer_id,
+            customer_name=customer_name,
+            origin_code=origin,
+            dest_code=dest,
+            cargo_type=cargo_type,
+            container_type=container_type,
+        )
+
+        return Response(result, status=status.HTTP_200_OK)

@@ -21,6 +21,7 @@ import AgentPerformance from "./AgentPerformance";
 import AdminRateConfig from "./AdminRateConfig";
 import AdminUsers from "./AdminUsers";
 import AdminMasterData from "./AdminMasterData";
+import M1RouteDashboard from "./M1RouteDashboard";
 import "./Logo.css";
 import "./DashboardShell.css";
 
@@ -54,6 +55,7 @@ const BUSINESS_SECTIONS = [
 
 const AGENT_SECTIONS = [
   "Overview",
+  "M1 Route Intelligence",
   "Quote Desk",
   "Shipment Dispatch",
   "Spot Rates",
@@ -223,6 +225,8 @@ export default function DashboardShell() {
           ) : user.role === "agent" ? (
             activeItem.slug === "overview" ? (
               <AgentOverview />
+            ) : activeItem.slug === "m1-route-intelligence" ? (
+              <M1RouteDashboard />
             ) : activeItem.slug === "quote-desk" ? (
               <AgentQuoteDesk />
             ) : activeItem.slug === "shipment-dispatch" ? (

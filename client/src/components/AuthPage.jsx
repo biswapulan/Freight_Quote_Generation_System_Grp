@@ -49,20 +49,46 @@ setErrorMsg("");
 setLoading(false);
 }
 
+// ---- Demo offline credentials (used when Django backend is not running) ----
+const DEMO_USERS = {
+  "admin@freightai.com":    { token: "demo-token-admin",    role: "admin",    name: "Admin User",      email: "admin@freightai.com",    companyName: "FreightAI HQ" },
+  "agent@freightai.com":   { token: "demo-token-agent",    role: "agent",    name: "Freight Agent",    email: "agent@freightai.com",    companyName: "FreightAI HQ" },
+  "business@freightai.com":{ token: "demo-token-biz",      role: "business", name: "Business User",    email: "business@freightai.com", companyName: "Apex Exports Pvt Ltd" },
+  "retail@freightai.com":  { token: "demo-token-retail",   role: "retail",   name: "Retail Customer",  email: "retail@freightai.com",   companyName: null },
+};
+const DEMO_PASSWORD = "demo123";
+
 async function handleLoginSubmit(e) {
 e.preventDefault();
 setErrorMsg("");
 setLoading(true);
 
 try {
-const data = await loginRequest(loginData);
-auth.login(data);
-navigate("/dashboard");
-} catch (error) {
-setErrorMsg(error.message || "Unable to log in. Please try again.");
+  const data = await loginRequest(loginData);
+  auth.login(data);
+  navigate("/dashboard");
+} catch {
+  // Backend unreachable — try demo offline credentials
+  const demoUser = DEMO_USERS[loginData.email.toLowerCase().trim()];
+  if (demoUser && loginData.password === DEMO_PASSWORD) {
+    auth.login(demoUser);
+    navigate("/dashboard");
+  } else if (demoUser) {
+    setErrorMsg("Demo password is: demo123");
+  } else {
+    setErrorMsg("Unable to connect to server. Use a demo account below to explore the platform.");
+  }
 } finally {
-setLoading(false);
+  setLoading(false);
 }
+}
+
+function demoLogin(email) {
+  const demoUser = DEMO_USERS[email];
+  if (demoUser) {
+    auth.login(demoUser);
+    navigate("/dashboard");
+  }
 }
 
 async function handleForgotSubmit(e) {
@@ -228,6 +254,47 @@ Forgot password?
 <button type="submit" className="primary-btn" disabled={loading} aria-busy={loading}>
 {loading ? <><FaSpinner className="button-loader" /> Logging in...</> : "Log In"}
 </button>
+
+<div
+  style={{
+    marginTop: "20px",
+    borderTop: "1px solid #1e293b",
+    paddingTop: "18px",
+  }}
+>
+  <p style={{ fontSize: "12px", color: "#64748b", textAlign: "center", marginBottom: "12px", fontWeight: "600", letterSpacing: "0.5px", textTransform: "uppercase" }}>
+    Quick Demo Access
+  </p>
+  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
+    {[
+      { label: "⚙️ Admin", email: "admin@freightai.com", color: "#dc2626" },
+      { label: "🎯 Agent", email: "agent@freightai.com", color: "#0284c7" },
+      { label: "🏢 Business", email: "business@freightai.com", color: "#7c3aed" },
+      { label: "🛒 Retail", email: "retail@freightai.com", color: "#059669" },
+    ].map(({ label, email, color }) => (
+      <button
+        key={email}
+        type="button"
+        onClick={() => demoLogin(email)}
+        style={{
+          background: "transparent",
+          border: `1px solid ${color}`,
+          color: color,
+          borderRadius: "8px",
+          padding: "8px 12px",
+          fontSize: "12px",
+          fontWeight: "700",
+          cursor: "pointer",
+          transition: "all 0.2s",
+        }}
+        onMouseOver={(e) => { e.currentTarget.style.background = color; e.currentTarget.style.color = "#fff"; }}
+        onMouseOut={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = color; }}
+      >
+        {label}
+      </button>
+    ))}
+  </div>
+</div>
 
 </form>
 

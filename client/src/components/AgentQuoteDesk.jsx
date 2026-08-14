@@ -53,7 +53,14 @@ const INITIAL_QUOTES = [
 ];
 
 export default function AgentQuoteDesk() {
-  const [quotes, setQuotes] = useState(INITIAL_QUOTES);
+  const [quotes, setQuotes] = useState(() => {
+    try {
+      const saved = localStorage.getItem("freightai_agent_quotes");
+      return saved ? JSON.parse(saved) : INITIAL_QUOTES;
+    } catch {
+      return INITIAL_QUOTES;
+    }
+  });
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
 
@@ -71,19 +78,23 @@ export default function AgentQuoteDesk() {
 
   function handleSaveQuote() {
     if (!activeModalQuote) return;
-    setQuotes((prev) =>
-      prev.map((q) =>
+    setQuotes((prev) => {
+      const updated = prev.map((q) =>
         q.id === activeModalQuote.id
           ? {
               ...q,
               marginPct: Number(marginPct),
               fuelSurchargePct: Number(fuelPct),
               portFee: Number(portFee),
-              status: "Approved",
+              status: Number(marginPct) < 12.0 ? "Pending Approval (409)" : "Approved",
             }
           : q
-      )
-    );
+      );
+      try {
+        localStorage.setItem("freightai_agent_quotes", JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
     setActiveModalQuote(null);
   }
 
@@ -110,8 +121,8 @@ export default function AgentQuoteDesk() {
     <div className="agent-quote-desk">
       <div className="desk-header">
         <div className="desk-title">
-          <h1>Agent Quote Desk & Pricing Engine</h1>
-          <p>Review customer freight quote requests, adjust agent margins, and issue binding quotes</p>
+          <h1>Milestone 2 — Broker Pricing &amp; Quotation Dashboard</h1>
+          <p>Review customer freight requests, calculate operational costs, enforce margin policies, and issue dynamic binding quotes</p>
         </div>
 
         <div className="desk-controls">
@@ -131,6 +142,38 @@ export default function AgentQuoteDesk() {
             <option value="Pending Review">Pending Review</option>
             <option value="Approved">Approved</option>
           </select>
+        </div>
+      </div>
+
+      {/* M2 Broker Dashboard KPIs specified in Section 11 */}
+      <div className="m1-kpi-grid" style={{ marginBottom: "20px" }}>
+        <div className="m1-kpi-card">
+          <span className="m1-kpi-label">Total Shipments</span>
+          <strong className="m1-kpi-val">120</strong>
+        </div>
+        <div className="m1-kpi-card">
+          <span className="m1-kpi-label">Quotes Generated</span>
+          <strong className="m1-kpi-val" style={{ color: "#0284c7" }}>85</strong>
+        </div>
+        <div className="m1-kpi-card">
+          <span className="m1-kpi-label">Pending Quotes</span>
+          <strong className="m1-kpi-val" style={{ color: "#ea580c" }}>20</strong>
+        </div>
+        <div className="m1-kpi-card">
+          <span className="m1-kpi-label">Approved Quotes</span>
+          <strong className="m1-kpi-val" style={{ color: "#16a34a" }}>60</strong>
+        </div>
+        <div className="m1-kpi-card">
+          <span className="m1-kpi-label">Avg Freight Cost</span>
+          <strong className="m1-kpi-val">₹1,58,000</strong>
+        </div>
+        <div className="m1-kpi-card">
+          <span className="m1-kpi-label">Avg Quote</span>
+          <strong className="m1-kpi-val" style={{ color: "#059669" }}>₹1,95,000</strong>
+        </div>
+        <div className="m1-kpi-card">
+          <span className="m1-kpi-label">Avg Margin</span>
+          <strong className="m1-kpi-val" style={{ color: "#7c3aed" }}>15%</strong>
         </div>
       </div>
 
