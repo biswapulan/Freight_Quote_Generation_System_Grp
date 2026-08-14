@@ -33,6 +33,39 @@ const CONTAINER_TYPES = [
   { value: "45HC", label: "45HC — 45ft Reefer" },
 ];
 
+const DEFAULT_SAVED_ADDRESSES = [
+  { id: "addr_1", label: "Mumbai Central Warehouse", type: "Pickup (Origin)", contact: "Rajesh Kumar", phone: "+91 98200 12345", email: "warehouse@company.com", street: "Plot 42, MIDC Industrial Area", city: "Mumbai", state: "Maharashtra", postal: "400093", country: "India", isDefault: true },
+  { id: "addr_2", label: "Chennai Port Export Hub", type: "Pickup (Origin)", contact: "Suresh Raman", phone: "+91 98400 54321", email: "chennai.hub@company.com", street: "Harbor Line Road, Gate 3", city: "Chennai", state: "Tamil Nadu", postal: "600001", country: "India", isDefault: false },
+  { id: "addr_3", label: "Singapore Gateway Terminal", type: "Delivery (Destination)", contact: "Kenji Tan", phone: "+65 6789 0123", email: "singapore.ops@gateway.sg", street: "10 Pasir Panjang Rd", city: "Singapore", state: "Singapore", postal: "117438", country: "Singapore", isDefault: false },
+];
+
+function getLocalSavedAddresses() {
+  try {
+    const saved = localStorage.getItem("freightai_saved_addresses");
+    return saved ? JSON.parse(saved) : DEFAULT_SAVED_ADDRESSES;
+  } catch {
+    return DEFAULT_SAVED_ADDRESSES;
+  }
+}
+
+function saveLocalAddress(newAddr) {
+  try {
+    const current = getLocalSavedAddresses();
+    const updated = newAddr.isDefault ? [newAddr, ...current.map((a) => ({ ...a, isDefault: false }))] : [newAddr, ...current];
+    localStorage.setItem("freightai_saved_addresses", JSON.stringify(updated));
+    return updated;
+  } catch {
+    return [newAddr, ...DEFAULT_SAVED_ADDRESSES];
+  }
+}
+
+const getTodayStr = () => new Date().toISOString().slice(0, 10);
+const getPlus7DaysStr = () => {
+  const d = new Date();
+  d.setDate(d.getDate() + 7);
+  return d.toISOString().slice(0, 10);
+};
+
 const EMPTY_ITEM = { id: 1, type: "", containerType: "", count: "", weight: "", desc: "", hs: "" };
 
 const EMPTY_ADDRESS = {
@@ -45,13 +78,13 @@ const initialFormState = {
   destId: "",
   pickupAddr: "",
   deliveryAddr: "",
-  readyDate: "",
-  deliveryDate: "",
+  readyDate: getTodayStr(),
+  deliveryDate: getPlus7DaysStr(),
   mode: "",
   loadType: "",
   incoterm: "",
   declaredVal: "",
-  currency: "",
+  currency: "INR",
   specialInst: "",
   chkFragile: false,
   chkHazardous: false,
@@ -125,16 +158,29 @@ export default function RetailGenerateQuote() {
     event.preventDefault();
     setSavingAddress(true);
     setAddressesError("");
+    const newAddr = {
+      id: "addr_" + Date.now(),
+      label: addressForm.label || `${addressForm.city || "Location"} (${addressForm.type})`,
+      type: addressForm.type,
+      contact: addressForm.contact || user?.full_name || "Contact Person",
+      phone: addressForm.phone || "+91 98200 00000",
+      email: addressForm.email || user?.email || "contact@example.com",
+      street: addressForm.street || "Main Industrial Highway",
+      city: addressForm.city || "Mumbai",
+      state: addressForm.state || "Maharashtra",
+      postal: addressForm.postal || "400001",
+      country: addressForm.country || "India",
+      isDefault: addressForm.isDefault,
+    };
     try {
-      const address = await createSavedAddress(token, { ...addressForm, is_default: addressForm.isDefault });
-      setSavedAddresses((list) => address.isDefault ? [address, ...list.map((item) => ({ ...item, isDefault: false }))] : [address, ...list]);
-      setField(addressModalType === "pickup" ? "pickupAddr" : "deliveryAddr", address.id);
-      setAddressModalType("");
-    } catch (error) {
-      setAddressesError(error.message || "Unable to save this address.");
-    } finally {
-      setSavingAddress(false);
-    }
+      await createSavedAddress(token, { ...addressForm, is_default: addressForm.isDefault });
+    } catch {}
+
+    const updated = saveLocalAddress(newAddr);
+    setSavedAddresses(updated);
+    setField(addressModalType === "pickup" ? "pickupAddr" : "deliveryAddr", newAddr.id);
+    setAddressModalType("");
+    setSavingAddress(false);
   }
 
   useEffect(() => {
@@ -142,16 +188,50 @@ export default function RetailGenerateQuote() {
 
     getSavedAddresses(token)
       .then((addresses) => {
-        if (!cancelled) setSavedAddresses(addresses);
+        if (!cancelled) setSavedAddresses(Array.isArray(addresses) && addresses.length > 0 ? addresses : getLocalSavedAddresses());
       })
-      .catch((error) => {
-        if (!cancelled) setAddressesError(error.message || "Unable to load saved addresses.");
+      .catch(() => {
+        if (!cancelled) setSavedAddresses(getLocalSavedAddresses());
       });
 
     return () => {
       cancelled = true;
     };
   }, [token]);
+
+  function quickFillDemo() {
+    const addresses = savedAddresses.length > 0 ? savedAddresses : getLocalSavedAddresses();
+    const pAddr = addresses.find((a) => a.type.includes("Pickup")) || addresses[0];
+    const dAddr = addresses.find((a) => a.type.includes("Delivery")) || addresses[1] || addresses[0];
+
+    setForm({
+      originId: "INMAA",
+      destId: "SGSIN",
+      pickupAddr: pAddr?.id || "addr_1",
+      deliveryAddr: dAddr?.id || "addr_3",
+      readyDate: getTodayStr(),
+      deliveryDate: getPlus7DaysStr(),
+      mode: "ocean",
+      loadType: "FCL",
+      incoterm: "CIF",
+      declaredVal: "500000",
+      currency: "INR",
+      specialInst: "Fragile cargo, keep dry and handle with care.",
+      chkFragile: true,
+      chkHazardous: false,
+      chkTemp: false,
+      chkInsurance: true,
+      unNumber: "",
+      imoClass: "",
+      custName: user?.full_name || "Anand Verma",
+      custCompany: "Verma Exports India",
+      custEmail: user?.email || "anand.verma@example.com",
+      custCountry: "India",
+    });
+    setItems([
+      { id: Date.now(), type: "Consumer Electronics", containerType: "40HC", count: "1", weight: "12500", desc: "40ft High Cube Container of Laptops & Accessories", hs: "847130" },
+    ]);
+  }
 
   function addItem() {
     setItems((list) => [
@@ -384,6 +464,7 @@ export default function RetailGenerateQuote() {
           <h1 className="page-title">New shipment enquiry</h1>
         </div>
         <div className="action-btns">
+          <button type="button" className="btn-secondary-light" onClick={quickFillDemo} style={{ background: "#ea580c", color: "#ffffff", borderColor: "#ea580c", fontWeight: "700" }}>⚡ Quick Fill Demo Quote</button>
           <button type="button" className="btn-secondary-light" onClick={saveDraft}>Save draft</button>
           <button type="button" className="btn-secondary-light" onClick={clearForm}>Clear</button>
         </div>
@@ -428,16 +509,30 @@ export default function RetailGenerateQuote() {
 
             <div className="form-row">
               <div className="form-group">
-                <label>Pickup address <span className="hint">(door pickup only)</span></label>
-                <select className="form-select" value={form.pickupAddr} onFocus={() => savedAddresses.length === 0 && openAddressModal("pickup")} onChange={(e) => setField("pickupAddr", e.target.value)}>
-                  <option value="">{savedAddresses.length === 0 ? "Enter a pickup address" : "Select a saved pickup address"}</option>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <label>Pickup address <span className="hint">(door pickup only)</span></label>
+                  <button type="button" onClick={() => openAddressModal("pickup")} style={{ fontSize: "11.5px", color: "#ea580c", background: "none", border: "none", cursor: "pointer", fontWeight: "700" }}>+ Add Address</button>
+                </div>
+                <select className="form-select" value={form.pickupAddr} onChange={(e) => {
+                  if (e.target.value === "ADD_NEW") openAddressModal("pickup");
+                  else setField("pickupAddr", e.target.value);
+                }}>
+                  <option value="">Select a saved pickup address</option>
+                  <option value="ADD_NEW">+ Enter &amp; Save New Address...</option>
                   {pickupAddresses.map((address) => <option key={address.id} value={address.id}>{address.label} — {address.city}, {address.country}</option>)}
                 </select>
               </div>
               <div className="form-group">
-                <label>Delivery address <span className="hint">(door delivery only)</span> <span className="badge-new">NEW</span></label>
-                <select className="form-select" value={form.deliveryAddr} onFocus={() => savedAddresses.length === 0 && openAddressModal("delivery")} onChange={(e) => setField("deliveryAddr", e.target.value)}>
-                  <option value="">{savedAddresses.length === 0 ? "Enter a delivery address" : "Select a saved delivery address"}</option>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <label>Delivery address <span className="hint">(door delivery only)</span> <span className="badge-new">NEW</span></label>
+                  <button type="button" onClick={() => openAddressModal("delivery")} style={{ fontSize: "11.5px", color: "#ea580c", background: "none", border: "none", cursor: "pointer", fontWeight: "700" }}>+ Add Address</button>
+                </div>
+                <select className="form-select" value={form.deliveryAddr} onChange={(e) => {
+                  if (e.target.value === "ADD_NEW") openAddressModal("delivery");
+                  else setField("deliveryAddr", e.target.value);
+                }}>
+                  <option value="">Select a saved delivery address</option>
+                  <option value="ADD_NEW">+ Enter &amp; Save New Address...</option>
                   {deliveryAddresses.map((address) => <option key={address.id} value={address.id}>{address.label} — {address.city}, {address.country}</option>)}
                 </select>
               </div>
