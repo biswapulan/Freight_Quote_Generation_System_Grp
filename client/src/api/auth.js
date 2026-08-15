@@ -2,20 +2,27 @@
 
 const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL ||
-  "https://freight-quote-generation-system-grp.onrender.com/api";
+  (typeof window !== "undefined" && (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1")
+    ? "http://localhost:8000/api"
+    : "https://freight-quote-generation-system-grp.onrender.com/api");
 
 const AUTH_URL = `${API_BASE_URL.replace(/\/$/, "")}/auth`;
 
-async function request(endpoint, data, { method = "POST", token } = {}) {
+async function request(endpoint, data, { method = "POST", token, timeoutMs = 1200 } = {}) {
   const headers = { "Content-Type": "application/json" };
   if (token) headers.Authorization = `Bearer ${token}`;
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
     const res = await fetch(`${AUTH_URL}${endpoint}`, {
       method,
       headers,
       body: method === "GET" ? undefined : JSON.stringify(data),
+      signal: controller.signal,
     });
+    clearTimeout(timer);
 
     const body = await res.json().catch(() => ({}));
 
@@ -25,8 +32,9 @@ async function request(endpoint, data, { method = "POST", token } = {}) {
 
     return body;
   } catch (err) {
-    // If backend server is sleeping or unreachable ("Failed to fetch"), fallback seamlessly to local demo mode
-    if (err.message === "Failed to fetch" || err.name === "TypeError") {
+    clearTimeout(timer);
+    // If backend server is sleeping or unreachable ("Failed to fetch" or timeout AbortError), fallback seamlessly to local demo mode instantly
+    if (err.message === "Failed to fetch" || err.name === "TypeError" || err.name === "AbortError") {
       console.warn("Backend API server unreachable, activating offline demo fallback.");
       
       const mockUsers = JSON.parse(localStorage.getItem("freightai_mock_users") || "{}");
