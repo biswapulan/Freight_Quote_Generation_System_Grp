@@ -5,25 +5,37 @@
 
 const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL ||
-  "https://freight-quote-generation-system-grp.onrender.com/api";
+  (typeof window !== "undefined" && (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1")
+    ? "http://localhost:8000/api"
+    : "https://freight-quote-generation-system-grp.onrender.com/api");
 
 const BASE = API_BASE_URL.replace(/\/$/, "");
 
-export async function apiRequest(endpoint, { method = "GET", token, body } = {}) {
+export async function apiRequest(endpoint, { method = "GET", token, body, timeoutMs = 1200 } = {}) {
   const headers = { "Content-Type": "application/json" };
   if (token) headers.Authorization = `Bearer ${token}`;
 
-  const res = await fetch(`${BASE}${endpoint}`, {
-    method,
-    headers,
-    body: body !== undefined ? JSON.stringify(body) : undefined,
-  });
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
 
-  const data = await res.json().catch(() => ({}));
+  try {
+    const res = await fetch(`${BASE}${endpoint}`, {
+      method,
+      headers,
+      body: body !== undefined ? JSON.stringify(body) : undefined,
+      signal: controller.signal,
+    });
+    clearTimeout(timer);
 
-  if (!res.ok) {
-    throw new Error(data.detail || data.error || "Something went wrong");
+    const data = await res.json().catch(() => ({}));
+
+    if (!res.ok) {
+      throw new Error(data.detail || data.error || "Something went wrong");
+    }
+
+    return data;
+  } catch (err) {
+    clearTimeout(timer);
+    throw err;
   }
-
-  return data;
 }

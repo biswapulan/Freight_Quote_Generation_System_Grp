@@ -30,9 +30,13 @@ export function LocationProvider({ children }) {
           let city = "Your Location";
 
           try {
+            const controller = new AbortController();
+            const timer = setTimeout(() => controller.abort(), 600);
             const res = await fetch(
-              `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&zoom=10`
+              `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&zoom=10`,
+              { signal: controller.signal }
             );
+            clearTimeout(timer);
             if (res.ok) {
               const data = await res.json();
               city =
