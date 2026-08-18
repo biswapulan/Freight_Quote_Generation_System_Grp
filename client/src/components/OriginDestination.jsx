@@ -63,6 +63,7 @@ const OriginDestination = () => {
 
               <input
                 type="date"
+                min={new Date().toISOString().slice(0, 10)}
                 className="w-full border rounded-xl p-4 focus:ring-2 focus:ring-blue-500 outline-none"
               />
             </div>

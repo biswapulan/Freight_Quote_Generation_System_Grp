@@ -110,10 +110,6 @@ function goNextStep(e) {
 e.preventDefault();
 setErrorMsg("");
 if (step === 1 && signupData.fullName.trim().length < 2) return;
-if (step === 1 && signupData.role === "business" && signupData.companyName.trim().length < 2) {
-setErrorMsg("Company name is required for a business account.");
-return;
-}
 if (step === 2 && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(signupData.email)) return;
 setStep((s) => Math.min(s + 1, 3));
 }
@@ -407,71 +403,6 @@ onChange={(e) => setSignupData({ ...signupData, fullName: e.target.value })}
 />
 </div>
 </label>
-
-<div className="field">
-<span className="field-label">Account type</span>
-<div className="role-toggle">
-<button
-type="button"
-className={`role-option ${signupData.role === "retail" ? "active" : ""}`}
-onClick={() => setSignupData({ ...signupData, role: "retail" })}
->
-Retail
-</button>
-<button
-type="button"
-className={`role-option ${signupData.role === "business" ? "active" : ""}`}
-onClick={() => setSignupData({ ...signupData, role: "business" })}
->
-Business
-</button>
-<button
-type="button"
-className={`role-option ${signupData.role === "agent" ? "active" : ""}`}
-onClick={() => setSignupData({ ...signupData, role: "agent" })}
->
-Freight Agent
-</button>
-<button
-type="button"
-className={`role-option ${signupData.role === "admin" ? "active" : ""}`}
-onClick={() => setSignupData({ ...signupData, role: "admin" })}
->
-Admin
-</button>
-</div>
-</div>
-
-{signupData.role === "business" && (
-<>
-<label className="field">
-<span className="field-label">Company name</span>
-<div className="input-wrap">
-<FaUser className="input-icon" />
-<input
-type="text"
-placeholder="Acme Freight Pvt Ltd"
-required
-value={signupData.companyName}
-onChange={(e) => setSignupData({ ...signupData, companyName: e.target.value })}
-/>
-</div>
-</label>
-
-<label className="field">
-<span className="field-label">GST number (optional)</span>
-<div className="input-wrap">
-<FaUser className="input-icon" />
-<input
-type="text"
-placeholder="22AAAAA0000A1Z5"
-value={signupData.gstNumber}
-onChange={(e) => setSignupData({ ...signupData, gstNumber: e.target.value })}
-/>
-</div>
-</label>
-</>
-)}
 
 {errorMsg && <p className="error-text">{errorMsg}</p>}
 </>
