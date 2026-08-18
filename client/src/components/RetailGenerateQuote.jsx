@@ -401,6 +401,7 @@ export default function RetailGenerateQuote() {
 
     const cityByPort = {
       INNSA: "Mumbai",
+      INMAA: "Chennai",
       AEJEA: "Dubai",
       SGSIN: "Singapore",
       NLRTM: "Rotterdam",
@@ -411,7 +412,7 @@ export default function RetailGenerateQuote() {
     const cargoType = form.chkHazardous ? "hazardous" : form.chkTemp ? "cold_chain" : form.mode === "express" ? "express" : "general";
 
     try {
-      // Step 2: Agent evaluates request & route
+      // Step 2: Agent evaluates request & route (approx 750ms)
       await new Promise((r) => setTimeout(r, 750));
       setAgentStage(2);
       setAgentLogs((prev) => [
@@ -421,7 +422,7 @@ export default function RetailGenerateQuote() {
         `[00:01.8] ⚓ Checking port handling tariffs, customs rules & congestion factors...`,
       ]);
 
-      // Step 3: Agent determines quote estimation
+      // Step 3: Agent determines quote estimation (approx 850ms)
       await new Promise((r) => setTimeout(r, 850));
       setAgentStage(3);
       setAgentLogs((prev) => [
@@ -430,9 +431,14 @@ export default function RetailGenerateQuote() {
         `[00:02.6] 🧮 Calling pricing engine algorithms for authoritative rate estimation...`,
       ]);
 
+      const originKey = oPort?.id || form.originId || "INNSA";
+      const destKey = dPort?.id || form.destId || "SGSIN";
+      const originCity = cityByPort[originKey] || oPort?.name?.split(",")[0] || "Mumbai";
+      const destCity = cityByPort[destKey] || dPort?.name?.split(",")[0] || "Singapore";
+
       const result = await estimateQuote(token, {
-        origin: cityByPort[oPort.id] || "Mumbai",
-        destination: cityByPort[dPort.id] || "Singapore",
+        origin: originCity,
+        destination: destCity,
         weightKg: Math.max(summaryStats.totalWeight, 1),
         volumeM3: Math.max(summaryStats.totalContainers * 20, 1),
         cargoType,

@@ -4,6 +4,7 @@ import { useAuth } from "./AuthContext";
 
 export const PORTS_MASTER = [
   { id: "INNSA", code: "INNSA", name: "Nhava Sheva, Mumbai", country: "India", lat: 18.95, lng: 72.95 },
+  { id: "INMAA", code: "INMAA", name: "Chennai Port, Tamil Nadu", country: "India", lat: 13.08, lng: 80.29 },
   { id: "AEJEA", code: "AEJEA", name: "Jebel Ali, Dubai", country: "UAE", lat: 24.98, lng: 55.02 },
   { id: "SGSIN", code: "SGSIN", name: "Port of Singapore", country: "Singapore", lat: 1.35, lng: 103.81 },
   { id: "NLRTM", code: "NLRTM", name: "Port of Rotterdam", country: "Netherlands", lat: 51.92, lng: 4.47 },
