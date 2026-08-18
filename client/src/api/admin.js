@@ -20,7 +20,7 @@ const API_BASE_URL =
 
 const AUTH_URL = `${API_BASE_URL.replace(/\/$/, "")}/auth`;
 
-async function authApiRequest(endpoint, { method = "GET", token, body, timeoutMs = 1200 } = {}) {
+async function authApiRequest(endpoint, { method = "GET", token, body, timeoutMs = 8000 } = {}) {
   const headers = { "Content-Type": "application/json" };
   if (token) headers.Authorization = `Bearer ${token}`;
 

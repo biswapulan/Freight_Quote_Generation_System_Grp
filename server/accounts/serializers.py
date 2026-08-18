@@ -6,7 +6,7 @@ from rest_framework import serializers
 # signup choices below — admins are promoted via the create_admin management
 # command, never self-registered.
 ACCOUNT_ROLES = ("retail", "business", "agent", "admin")
-SELF_SIGNUP_ROLES = ("retail", "business", "agent", "admin")
+SELF_SIGNUP_ROLES = ("retail",)
 
 
 class SignupSerializer(serializers.Serializer):

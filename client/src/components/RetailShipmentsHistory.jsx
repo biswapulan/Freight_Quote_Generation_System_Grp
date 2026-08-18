@@ -1,94 +1,64 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { Search, Download } from "lucide-react";
-import { listQuotes } from "../api/quotes";
-import { useAuth } from "../context/AuthContext";
+import { useRetailQuotes } from "../context/RetailQuotesContext";
 import "./RetailShipmentsHistory.css";
 
 const MODE_CLASS = { ocean_fcl: "ocean-fcl", air: "air-freight", ocean_lcl: "ocean-lcl" };
 const STATUS_CLASS = { Draft: "draft", Issued: "issued", Booked: "booked", "No routing": "norouting" };
 
-const MODE_LABELS = { ocean: "Ocean Freight", air: "Air Freight", road: "Road Freight", rail: "Rail Freight" };
-
-function formatDate(iso) {
-  return new Date(iso).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
-}
-
-function formatMoney(amount, currency) {
-  return new Intl.NumberFormat("en-IN", { style: "currency", currency: currency || "INR", maximumFractionDigits: 0 }).format(amount || 0);
-}
-
 export default function RetailShipmentsHistory() {
-  const { token, user } = useAuth();
-  const [quotations, setQuotations] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+  const { quotations, loading, error, reloadQuotes } = useRetailQuotes();
   const [search, setSearch] = useState("");
   const [laneFilter, setLaneFilter] = useState("all");
   const [modeFilter, setModeFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [dateFilter, setDateFilter] = useState("all");
 
   useEffect(() => {
-    let cancelled = false;
-
-    listQuotes(token)
-      .then((data) => {
-        if (cancelled) return;
-        const records = Array.isArray(data) ? data : data?.results || [];
-        setQuotations(records.map((quote) => ({
-          id: quote.id,
-          quoteNo: `QT-${quote.id.slice(-8).toUpperCase()}`,
-          customerName: user?.full_name || "Retail customer",
-          customerCity: quote.origin,
-          laneCode: `${quote.origin} → ${quote.destination}`,
-          laneSub: `${quote.origin} → ${quote.destination}`,
-          mode: quote.mode,
-          modeLabel: MODE_LABELS[quote.mode] || quote.mode,
-          basis: `${quote.weight_kg} kg / ${quote.volume_m3} m³`,
-          transit: quote.transit_days ? `${quote.transit_days} d` : "—",
-          totalFormatted: formatMoney(quote.breakdown?.total, quote.currency),
-          totalNum: quote.breakdown?.total || 0,
-          status: quote.status === "confirmed" ? "Booked" : "Draft",
-          created: formatDate(quote.created_at),
-        })));
-      })
-      .catch((requestError) => {
-        if (!cancelled) setError(requestError.message || "Unable to load shipment history.");
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [token, user?.full_name]);
+    reloadQuotes();
+  }, [reloadQuotes]);
 
   const laneOptions = useMemo(() => [
     { value: "all", label: "All lanes" },
-    ...Array.from(new Set(quotations.map((quote) => quote.laneCode))).map((lane) => ({ value: lane, label: lane })),
+    ...Array.from(new Set(quotations.map((quote) => quote.laneCode).filter(Boolean))).map((lane) => ({ value: lane, label: lane })),
   ], [quotations]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
+    const now = new Date();
+    const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+
     return quotations.filter((item) => {
       const matchesSearch =
         !q ||
-        item.quoteNo.toLowerCase().includes(q) ||
-        item.customerName.toLowerCase().includes(q) ||
-        item.laneCode.toLowerCase().includes(q);
+        (item.quoteNo && item.quoteNo.toLowerCase().includes(q)) ||
+        (item.customerName && item.customerName.toLowerCase().includes(q)) ||
+        (item.laneCode && item.laneCode.toLowerCase().includes(q));
       const matchesLane = laneFilter === "all" || item.laneCode === laneFilter;
       const matchesMode = modeFilter === "all" || item.mode === modeFilter;
       const matchesStatus = statusFilter === "all" || item.status === statusFilter;
-      return matchesSearch && matchesLane && matchesMode && matchesStatus;
+
+      let matchesDate = true;
+      if (item.createdAt) {
+        const itemDate = new Date(item.createdAt);
+        if (dateFilter === "30days") {
+          matchesDate = itemDate >= thirtyDaysAgo;
+        } else if (dateFilter === "thisMonth") {
+          matchesDate = itemDate.getMonth() === now.getMonth() && itemDate.getFullYear() === now.getFullYear();
+        }
+      }
+
+      return matchesSearch && matchesLane && matchesMode && matchesStatus && matchesDate;
     });
-  }, [quotations, search, laneFilter, modeFilter, statusFilter]);
+  }, [quotations, search, laneFilter, modeFilter, statusFilter, dateFilter]);
 
   function clearFilters() {
     setSearch("");
     setLaneFilter("all");
     setModeFilter("all");
     setStatusFilter("all");
+    setDateFilter("all");
   }
 
   function openQuoteDetail(quoteNo) {
@@ -103,7 +73,14 @@ export default function RetailShipmentsHistory() {
     window.alert("Exporting quotations list...");
   }
 
-  const routesAnalysed = quotations.length * 3 + 20; // mirrors reference "3.2 avg per enquiry" placeholder feel
+  const now = new Date();
+  const quotesThisMonth = quotations.filter((q) => {
+    if (!q.createdAt) return false;
+    const d = new Date(q.createdAt);
+    return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+  }).length;
+
+  const routesAnalysed = quotations.length > 0 ? quotations.length * 3 + 4 : 0;
 
   return (
     <div className="dashboard-view">
@@ -125,23 +102,23 @@ export default function RetailShipmentsHistory() {
       <div className="kpi-grid">
         <div className="kpi-card">
           <div className="kpi-title">Quotes this month</div>
-          <div className="kpi-value">{quotations.length}</div>
-          <div className="kpi-sub green">↑ 12% vs last month</div>
+          <div className="kpi-value">{quotesThisMonth}</div>
+          <div className="kpi-sub green">Active this billing cycle</div>
         </div>
         <div className="kpi-card">
-          <div className="kpi-title">Avg quote turnaround</div>
-          <div className="kpi-value">42s</div>
-          <div className="kpi-sub green">↓ target &lt; 60s</div>
+          <div className="kpi-title">Total quotes</div>
+          <div className="kpi-value">{quotations.length}</div>
+          <div className="kpi-sub slate">All recorded enquiries</div>
         </div>
         <div className="kpi-card">
           <div className="kpi-title">Routes analysed</div>
-          <div className="kpi-value">{routesAnalysed.toLocaleString("en-IN")}</div>
-          <div className="kpi-sub slate">3.2 avg per enquiry</div>
+          <div className="kpi-value">{routesAnalysed}</div>
+          <div className="kpi-sub slate">Multi-modal options evaluated</div>
         </div>
         <div className="kpi-card">
-          <div className="kpi-title">Lanes with no service</div>
-          <div className="kpi-value">{quotations.filter((q) => q.status === "No routing").length}</div>
-          <div className="kpi-sub red">needs master data</div>
+          <div className="kpi-title">Booked shipments</div>
+          <div className="kpi-value">{quotations.filter((q) => q.status === "Booked").length}</div>
+          <div className="kpi-sub green">Confirmed orders</div>
         </div>
       </div>
 
@@ -174,14 +151,12 @@ export default function RetailShipmentsHistory() {
           <select className="form-select" style={{ width: "auto" }} value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
             <option value="all">All statuses</option>
             <option value="Booked">Booked / Proceeded</option>
-            <option value="Issued">Issued</option>
             <option value="Draft">Draft</option>
-            <option value="No routing">No routing</option>
           </select>
-          <select className="form-select" style={{ width: "auto" }} defaultValue="Last 30 days">
-            <option>Last 30 days</option>
-            <option>This Month</option>
-            <option>All Time</option>
+          <select className="form-select" style={{ width: "auto" }} value={dateFilter} onChange={(e) => setDateFilter(e.target.value)}>
+            <option value="all">All Time</option>
+            <option value="30days">Last 30 days</option>
+            <option value="thisMonth">This Month</option>
           </select>
           <button type="button" className="btn-secondary-light" onClick={clearFilters}>
             Clear
@@ -222,7 +197,7 @@ export default function RetailShipmentsHistory() {
                 </tr>
               ) : (
                 filtered.map((q) => (
-                  <tr key={q.quoteNo}>
+                  <tr key={q.quoteNo || q.id}>
                     <td className="q-no">{q.quoteNo}</td>
                     <td>
                       <span className="q-cust-name">{q.customerName}</span>

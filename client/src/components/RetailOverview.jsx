@@ -179,7 +179,11 @@ const INR = new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR",
 
 export default function RetailOverview() {
   const { user } = useAuth();
-  const { quotations } = useRetailQuotes();
+  const { quotations, loading, reloadQuotes } = useRetailQuotes();
+
+  useEffect(() => {
+    reloadQuotes();
+  }, [reloadQuotes]);
 
   const todayLabel = useMemo(
     () =>

@@ -16,7 +16,7 @@ import PageLoader from "./components/PageLoader";
 import CookieConsent from "./components/CookieConsent";
 import { LocationProvider } from "./context/LocationContext";
 
-const INITIAL_LOAD_MS = 5000;
+const INITIAL_LOAD_MS = 600;
 
 function App() {
   const [loading, setLoading] = useState(true);

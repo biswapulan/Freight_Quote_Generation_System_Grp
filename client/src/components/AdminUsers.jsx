@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { FaUsers, FaUserTie, FaBuilding, FaUserCheck, FaPlus, FaSearch, FaUserShield, FaCheck } from "react-icons/fa";
 import { useAuth } from "../context/AuthContext";
@@ -235,13 +235,21 @@ export default function AdminUsers() {
     setSavingId(null);
   }
 
+  const kpis = useMemo(() => {
+    const totalUsers = users.length;
+    const activeAgents = users.filter((u) => u.role === "agent" && u.is_active !== false).length;
+    const businessAccounts = users.filter((u) => u.role === "business" && u.is_active !== false).length;
+    const retailAccounts = users.filter((u) => u.role === "retail" && u.is_active !== false).length;
+    return { totalUsers, activeAgents, businessAccounts, retailAccounts };
+  }, [users]);
+
   return (
     <div className="agent-overview">
       {/* Header Banner */}
       <div className="agent-header-banner">
         <div className="agent-title-block">
           <h1>System User Governance & RBAC</h1>
-          <p>Manage platform accounts, approve freight agencies, toggle roles & access statuses</p>
+          <p>Manage platform accounts, create & approve freight agencies & business accounts, toggle roles & access</p>
         </div>
         <div className="agent-badge-tag">
           <span className="agent-badge-dot" />
@@ -256,7 +264,7 @@ export default function AdminUsers() {
             <span className="agent-kpi-label">Total Registered Users</span>
             <div className="agent-kpi-icon icon-cyan"><FaUsers /></div>
           </div>
-          <div className="agent-kpi-value">1,420</div>
+          <div className="agent-kpi-value">{loading ? "..." : kpis.totalUsers}</div>
           <div className="agent-kpi-sub">Across all 4 account roles</div>
         </div>
 
@@ -265,8 +273,8 @@ export default function AdminUsers() {
             <span className="agent-kpi-label">Active Freight Agents</span>
             <div className="agent-kpi-icon icon-amber"><FaUserTie /></div>
           </div>
-          <div className="agent-kpi-value">48</div>
-          <div className="agent-kpi-sub">Licensed forwarding agencies</div>
+          <div className="agent-kpi-value">{loading ? "..." : kpis.activeAgents}</div>
+          <div className="agent-kpi-sub">Forwarding agencies</div>
         </div>
 
         <div className="agent-kpi-card">
@@ -274,17 +282,17 @@ export default function AdminUsers() {
             <span className="agent-kpi-label">Business Accounts</span>
             <div className="agent-kpi-icon icon-teal"><FaBuilding /></div>
           </div>
-          <div className="agent-kpi-value">312</div>
-          <div className="agent-kpi-sub">Enterprise & SMB importers</div>
+          <div className="agent-kpi-value">{loading ? "..." : kpis.businessAccounts}</div>
+          <div className="agent-kpi-sub">Enterprise & SMB accounts</div>
         </div>
 
         <div className="agent-kpi-card">
           <div className="agent-kpi-top">
-            <span className="agent-kpi-label">Pending Approvals</span>
+            <span className="agent-kpi-label">Retail Customers</span>
             <div className="agent-kpi-icon icon-purple"><FaUserCheck /></div>
           </div>
-          <div className="agent-kpi-value">3</div>
-          <div className="agent-kpi-sub">Agencies awaiting verification</div>
+          <div className="agent-kpi-value">{loading ? "..." : kpis.retailAccounts}</div>
+          <div className="agent-kpi-sub">Self-registered retail accounts</div>
         </div>
       </div>
 
@@ -387,6 +395,17 @@ export default function AdminUsers() {
                     <option key={r} value={r}>{ROLE_LABELS[r]}</option>
                   ))}
                 </select>
+              </div>
+              <div className="modal-field">
+                <label>Company / Organization {createForm.role === "business" ? "(Required)" : "(Optional)"}</label>
+                <input
+                  type="text"
+                  className="desk-select"
+                  placeholder={createForm.role === "business" ? "e.g. Apex Exports Pvt Ltd" : "e.g. Forwarding Agency"}
+                  required={createForm.role === "business"}
+                  value={createForm.company_name}
+                  onChange={(e) => setCreateForm((f) => ({ ...f, company_name: e.target.value }))}
+                />
               </div>
             </div>
 

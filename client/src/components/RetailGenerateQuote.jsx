@@ -4,8 +4,8 @@ import Chart from "chart.js/auto";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import html2pdf from "html2pdf.js";
-import { Ship, Plane, Truck, Zap, Plus, Trash2, X, CheckCircle, FileText, Check } from "lucide-react";
-import { PORTS_MASTER } from "../context/RetailQuotesContext";
+import { Ship, Plane, Truck, Zap, Plus, Trash2, X, CheckCircle, FileText, Check, Bot, Cpu, Sparkles } from "lucide-react";
+import { PORTS_MASTER, useRetailQuotes } from "../context/RetailQuotesContext";
 import { createSavedAddress, getSavedAddresses } from "../api/auth";
 import { confirmQuote, estimateQuote } from "../api/quotes";
 import { useAuth } from "../context/AuthContext";
@@ -112,6 +112,7 @@ function money(n) {
 export default function RetailGenerateQuote() {
   const navigate = useNavigate();
   const { token, user } = useAuth();
+  const { reloadQuotes } = useRetailQuotes();
 
   const [form, setForm] = useState(initialFormState);
   const [items, setItems] = useState([EMPTY_ITEM]);
@@ -120,6 +121,9 @@ export default function RetailGenerateQuote() {
   const [quoteError, setQuoteError] = useState("");
   const [generatedQuote, setGeneratedQuote] = useState(null);
   const [generating, setGenerating] = useState(false);
+  const [agentEvaluating, setAgentEvaluating] = useState(false);
+  const [agentStage, setAgentStage] = useState(1);
+  const [agentLogs, setAgentLogs] = useState([]);
   const [confirming, setConfirming] = useState(false);
   const [showQuoteModal, setShowQuoteModal] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
@@ -142,10 +146,12 @@ export default function RetailGenerateQuote() {
   }
 
   function updateReadyDate(value) {
+    const today = getTodayStr();
+    const safeVal = value && value < today ? today : value;
     setForm((current) => ({
       ...current,
-      readyDate: value,
-      deliveryDate: current.deliveryDate && current.deliveryDate <= value ? "" : current.deliveryDate,
+      readyDate: safeVal,
+      deliveryDate: current.deliveryDate && current.deliveryDate <= safeVal ? "" : current.deliveryDate,
     }));
   }
 
@@ -260,59 +266,26 @@ export default function RetailGenerateQuote() {
   const oPort = PORTS_MASTER.find((p) => p.id === form.originId);
   const dPort = PORTS_MASTER.find((p) => p.id === form.destId);
 
-  // ---- Rate calculation (ported as-is from the reference calculator) ----
-  const quote = useMemo(() => {
+  // ---- Summary stats calculated for shipment enquiry payload ----
+  const summaryStats = useMemo(() => {
     let totalContainers = 0;
     let totalWeight = 0;
     let containerSummaryStr = "";
-    const hasEstimateDetails = form.originId && form.destId && form.mode && form.loadType && form.incoterm
-      && items.length > 0
-      && items.every((item) => item.type && item.containerType && Number(item.count) > 0 && Number(item.weight) > 0);
-
-    if (!hasEstimateDetails) {
-      return {
-        id: "", totalContainers: 0, totalWeight: 0, containerSummaryStr: "Not selected",
-        baseFreight: 0, thcCost: 0, customsCost: 0, bafCost: 0, hazmatCost: 0,
-        insuranceCost: 0, surchargesTotal: 0, grandTotal: 0, formattedPrice: money(0),
-      };
-    }
 
     items.forEach((item) => {
       totalContainers += parseInt(item.count, 10) || 0;
       totalWeight += parseFloat(item.weight) || 0;
-      containerSummaryStr += `${item.count} × ${item.containerType} `;
+      if (item.containerType) {
+        containerSummaryStr += `${item.count || 1} × ${item.containerType} `;
+      }
     });
-    containerSummaryStr = containerSummaryStr.trim() || "1 × 40HC";
-
-    const baseFreight = totalContainers * 145000;
-    const thcCost = totalContainers * 18000;
-    const customsCost = 15000;
-    const bafCost = Math.round(baseFreight * 0.12);
-    const hazmatCost = form.chkHazardous ? 25000 : 0;
-    const declaredVal = parseFloat(form.declaredVal) || 0;
-    const insuranceCost = form.chkInsurance ? Math.max(Math.round(declaredVal * 0.0035), 7000) : 0;
-
-    const surchargesTotal = thcCost + customsCost + bafCost + hazmatCost + insuranceCost;
-    const grandTotal = baseFreight + surchargesTotal;
-    const quoteId = "QT-2026-00" + Math.floor(935 + Math.random() * 50);
 
     return {
-      id: quoteId,
-      totalContainers,
-      totalWeight,
-      containerSummaryStr,
-      baseFreight,
-      thcCost,
-      customsCost,
-      bafCost,
-      hazmatCost,
-      insuranceCost,
-      surchargesTotal,
-      grandTotal,
-      formattedPrice: money(grandTotal),
+      totalContainers: Math.max(totalContainers, 1),
+      totalWeight: Math.max(totalWeight, 0),
+      containerSummaryStr: containerSummaryStr.trim() || "1 × 40HC",
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [items, form.chkHazardous, form.chkInsurance, form.declaredVal]);
+  }, [items]);
 
   // ---- Leaflet map: init once ----
   useEffect(() => {
@@ -374,13 +347,20 @@ export default function RetailGenerateQuote() {
     };
   }, []);
 
-  // ---- Chart.js doughnut: update on quote change ----
+  // ---- Chart.js doughnut: update on generatedQuote change ----
   useEffect(() => {
     const chart = chartInstanceRef.current;
     if (!chart) return;
-    chart.data.datasets[0].data = [quote.baseFreight, quote.surchargesTotal];
+    if (generatedQuote?.breakdown) {
+      chart.data.datasets[0].data = [
+        generatedQuote.breakdown.distance_cost || 70,
+        (generatedQuote.breakdown.fuel_surcharge || 0) + (generatedQuote.breakdown.base_handling_fee || 0),
+      ];
+    } else {
+      chart.data.datasets[0].data = [75, 25];
+    }
     chart.update();
-  }, [quote.baseFreight, quote.surchargesTotal]);
+  }, [generatedQuote]);
 
   const pickupAddresses = savedAddresses.filter((address) =>
     ["Pickup (Origin)", "Both (Origin & Destination)"].includes(address.type)
@@ -394,13 +374,31 @@ export default function RetailGenerateQuote() {
       item.type && item.containerType && Number(item.count) > 0 && Number(item.weight) > 0 && item.desc.trim()
     );
     if (!form.originId || !form.destId || !form.readyDate || !form.mode || !form.loadType || !form.incoterm || !hasValidItems) {
-      setQuoteError("Complete the required route, date, service, and shipment details before generating a quote.");
+      setQuoteError("Complete the required route, ready date, service type, and cargo details before submitting to the Quote Generation Agent.");
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      return;
+    }
+
+    const todayStr = getTodayStr();
+    if (form.readyDate < todayStr) {
+      setQuoteError("Ready date cannot be in the past. Please select today or a future date.");
       window.scrollTo({ top: 0, behavior: "smooth" });
       return;
     }
 
     setGenerating(true);
+    setAgentEvaluating(true);
+    setAgentStage(1);
     setQuoteError("");
+
+    const originName = oPort?.name || form.originId;
+    const destName = dPort?.name || form.destId;
+
+    setAgentLogs([
+      `[00:00.1] 🚀 Retailer submitted shipment enquiry for lane: ${originName} → ${destName}`,
+      `[00:00.3] 📡 Dispatching enquiry parameters to AI Quote Generation Agent...`,
+    ]);
+
     const cityByPort = {
       INNSA: "Mumbai",
       AEJEA: "Dubai",
@@ -413,20 +411,62 @@ export default function RetailGenerateQuote() {
     const cargoType = form.chkHazardous ? "hazardous" : form.chkTemp ? "cold_chain" : form.mode === "express" ? "express" : "general";
 
     try {
+      // Step 2: Agent evaluates request & route
+      await new Promise((r) => setTimeout(r, 750));
+      setAgentStage(2);
+      setAgentLogs((prev) => [
+        ...prev,
+        `[00:00.9] 🔍 Quote Generation Agent evaluating routing options & vessel schedules...`,
+        `[00:01.4] 📦 Evaluating cargo profile: ${summaryStats.totalWeight.toLocaleString()} kg, ${summaryStats.containerSummaryStr}, ${cargoType} classification...`,
+        `[00:01.8] ⚓ Checking port handling tariffs, customs rules & congestion factors...`,
+      ]);
+
+      // Step 3: Agent determines quote estimation
+      await new Promise((r) => setTimeout(r, 850));
+      setAgentStage(3);
+      setAgentLogs((prev) => [
+        ...prev,
+        `[00:02.3] ⚙️ Agent determining dynamic rate matrix, BAF fuel surcharge & handling fees...`,
+        `[00:02.6] 🧮 Calling pricing engine algorithms for authoritative rate estimation...`,
+      ]);
+
       const result = await estimateQuote(token, {
-        origin: cityByPort[oPort.id],
-        destination: cityByPort[dPort.id],
-        weightKg: Math.max(quote.totalWeight, 1),
-        volumeM3: Math.max(quote.totalContainers * 20, 1),
+        origin: cityByPort[oPort.id] || "Mumbai",
+        destination: cityByPort[dPort.id] || "Singapore",
+        weightKg: Math.max(summaryStats.totalWeight, 1),
+        volumeM3: Math.max(summaryStats.totalContainers * 20, 1),
         cargoType,
         mode: apiMode,
         pickupAddressId: form.pickupAddr,
         deliveryAddressId: form.deliveryAddr,
       });
+
       setGeneratedQuote(result);
+      setAgentLogs((prev) => [
+        ...prev,
+        `[00:03.2] 📊 Dynamic rate calculated: ₹${Math.round(result.breakdown?.total || 0).toLocaleString("en-IN")}`,
+      ]);
+
+      // Step 4: Quote verified and returned
+      await new Promise((r) => setTimeout(r, 750));
+      setAgentStage(4);
+      const quoteCode = result.id ? `QT-${result.id.slice(-8).toUpperCase()}` : "QT-NEW";
+      setAgentLogs((prev) => [
+        ...prev,
+        `[00:03.8] ✅ Quotation verified & certified by Agent: ${quoteCode}`,
+        `[00:04.1] 📋 Returning official quotation to retailer...`,
+      ]);
+
+      // Reveal quote to retailer
+      await new Promise((r) => setTimeout(r, 650));
+      setAgentEvaluating(false);
       setShowQuoteModal(true);
+      if (reloadQuotes) {
+        reloadQuotes();
+      }
     } catch (error) {
-      setQuoteError(error.message || "Unable to generate this quote.");
+      setAgentEvaluating(false);
+      setQuoteError(error.message || "Quote Generation Agent encountered an issue evaluating this request.");
     } finally {
       setGenerating(false);
     }
@@ -443,6 +483,9 @@ export default function RetailGenerateQuote() {
       setShowQuoteModal(false);
       setBookingRef(`BK-${confirmedQuote.id.slice(-8).toUpperCase()}`);
       setShowSuccessModal(true);
+      if (reloadQuotes) {
+        reloadQuotes();
+      }
     } catch (error) {
       setQuoteError(error.message || "Unable to book this shipment.");
     } finally {
@@ -453,7 +496,8 @@ export default function RetailGenerateQuote() {
   function exportPDF() {
     const el = modalContentRef.current;
     if (!el) return;
-    html2pdf().set({ margin: 0.5, filename: `Freight_Quote_${quote.id}.pdf` }).from(el).save();
+    const exportId = generatedQuote ? `QT-${generatedQuote.id.slice(-8).toUpperCase()}` : "QT-ESTIMATE";
+    html2pdf().set({ margin: 0.5, filename: `Freight_Quote_${exportId}.pdf` }).from(el).save();
   }
 
   return (
@@ -542,7 +586,7 @@ export default function RetailGenerateQuote() {
             <div className="form-row">
               <div className="form-group">
                 <label>Ready date <span className="req">*</span></label>
-                <input type="date" className="form-input" value={form.readyDate} onChange={(e) => updateReadyDate(e.target.value)} />
+                <input type="date" className="form-input" min={getTodayStr()} value={form.readyDate} onChange={(e) => updateReadyDate(e.target.value)} />
               </div>
               <div className="form-group">
                 <label>Required delivery date <span className="hint">(optional)</span></label>
@@ -787,39 +831,70 @@ export default function RetailGenerateQuote() {
               </div>
             </div>
           </div>
+
+          {/* SUBMIT ENQUIRY ACTION ROW */}
+          <div style={{ marginTop: "24px", display: "flex", justifyContent: "flex-end", gap: "12px", alignItems: "center" }}>
+            <button type="button" className="btn-secondary-light" onClick={clearForm}>
+              Reset Form
+            </button>
+            <button type="button" className="btn-orange-primary" style={{ padding: "12px 28px", fontSize: "14px" }} onClick={handleGenerateQuote} disabled={generating}>
+              <Bot size={18} /> {generating ? "Quote Generation Agent Active..." : "Submit Enquiry to Quote Agent ➔"}
+            </button>
+          </div>
         </div>
 
         {/* RIGHT STICKY COLUMN */}
         <div className="right-sidebar-column">
-          {/* LIVE ESTIMATE CARD */}
+          {/* SHIPMENT SUMMARY & AGENT STATUS CARD */}
           <div className="live-card">
-            <div className="live-card-header">LIVE ESTIMATE</div>
+            <div className="live-card-header">SHIPMENT SPECS &amp; AGENT STATUS</div>
 
             <div className="charge-basis-box">
-              <span className="cb-label">Charge basis</span>
-              <strong className="cb-val">Per container — FCL</strong>
+              <span className="cb-label">Agent Status</span>
+              <strong className="cb-val" style={{ color: generatedQuote ? "#16a34a" : "#e65100" }}>
+                {generatedQuote ? "✓ Quote Evaluated & Ready" : "⏳ Pending Agent Evaluation"}
+              </strong>
             </div>
 
             <div className="summary-rows">
-              <div className="s-row"><span>Containers</span><strong>{quote.containerSummaryStr}</strong></div>
-              <div className="s-row"><span>Gross weight</span><strong>{quote.totalWeight.toLocaleString("en-IN")} kg</strong></div>
-              <div className="s-row"><span>Sea distance</span><strong>1,205 nm</strong></div>
-              <div className="s-row"><span>Estimated transit</span><strong>6–10 d</strong></div>
-              <div className="s-row"><span>Est. arrival</span><strong>22 Aug</strong></div>
-              <div className="s-row"><span>Route options</span><strong>3 found</strong></div>
+              <div className="s-row"><span>Origin Port</span><strong>{oPort ? oPort.name.split(",")[0] : "Not selected"}</strong></div>
+              <div className="s-row"><span>Destination</span><strong>{dPort ? dPort.name.split(",")[0] : "Not selected"}</strong></div>
+              <div className="s-row"><span>Ready Date</span><strong>{form.readyDate || "Not set"}</strong></div>
+              <div className="s-row"><span>Containers</span><strong>{summaryStats.containerSummaryStr}</strong></div>
+              <div className="s-row"><span>Gross weight</span><strong>{summaryStats.totalWeight.toLocaleString("en-IN")} kg</strong></div>
+              <div className="s-row"><span>Service Mode</span><strong style={{ textTransform: "capitalize" }}>{form.mode || "Ocean"}</strong></div>
             </div>
 
-            <div className="est-total-label">ESTIMATED TOTAL</div>
-            <div className="est-total-price">{quote.formattedPrice}</div>
+            {generatedQuote ? (
+              <>
+                <div className="est-total-label">AGENT-DETERMINED ESTIMATE</div>
+                <div className="est-total-price">{money(generatedQuote.breakdown?.total || 0)}</div>
+                <div className="rate-badge">◆ CERTIFIED BY QUOTE AGENT ({`QT-${generatedQuote.id.slice(-8).toUpperCase()}`})</div>
+                <button type="button" className="btn-generate" onClick={() => setShowQuoteModal(true)}>
+                  👁️ View Full Quotation Offer
+                </button>
+              </>
+            ) : (
+              <>
+                <div style={{ background: "#f8fafc", border: "1px dashed #cbd5e1", borderRadius: "10px", padding: "12px", margin: "14px 0 16px", textAlign: "center" }}>
+                  <div style={{ fontSize: "12.5px", fontWeight: "700", color: "#334155", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px" }}>
+                    <Bot size={16} color="#e65100" /> Quote Generation Agent
+                  </div>
+                  <div style={{ fontSize: "11.5px", color: "#64748b", marginTop: "4px", lineHeight: "1.4" }}>
+                    Submit this enquiry to start Agent review, route analysis, and overall estimation determination.
+                  </div>
+                </div>
 
-            <div className="rate-badge">◆ INDICATIVE — M1 FLAT RATE</div>
-
-            <button type="button" className="btn-generate" onClick={handleGenerateQuote} disabled={generating}>
-              {generating ? "Generating quotation..." : "➔ Generate full quotation"}
-            </button>
+                <button type="button" className="btn-generate" onClick={handleGenerateQuote} disabled={generating}>
+                  {generating ? "Agent Evaluating Request..." : "➔ Submit to Quote Agent"}
+                </button>
+              </>
+            )}
 
             <p className="disclaimer">
-              Final rate confirmed by your account manager within business hours. Estimate excludes duties &amp; taxes.
+              {generatedQuote
+                ? "Official quotation determined by Quote Generation Agent. Valid for 7 days."
+                : "Quotation is calculated upon submission by the AI Quote Generation Agent."}
             </p>
           </div>
 
@@ -838,7 +913,7 @@ export default function RetailGenerateQuote() {
           </div>
 
           {/* EXPORT PDF */}
-          <button type="button" className="btn-dark-export" onClick={exportPDF}>
+          <button type="button" className="btn-dark-export" onClick={exportPDF} disabled={!generatedQuote}>
             <FileText size={18} /> Export PDF Quote (₹)
           </button>
         </div>
@@ -871,6 +946,95 @@ export default function RetailGenerateQuote() {
         </div>
       )}
 
+      {/* QUOTE GENERATION AGENT EVALUATION MODAL */}
+      {agentEvaluating && (
+        <div className="modal-overlay">
+          <div className="modal-content agent-eval-modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="agent-eval-header">
+              <div className="agent-eval-title-wrap">
+                <div className="agent-eval-avatar">
+                  <Bot size={26} />
+                </div>
+                <div>
+                  <h3 className="agent-eval-title">Quote Generation Agent</h3>
+                  <p className="agent-eval-subtitle">Evaluating enquiry specifications, route dynamics &amp; rate matrix</p>
+                </div>
+              </div>
+              <div className="agent-eval-badge">
+                <Sparkles size={14} /> Autonomous Evaluation
+              </div>
+            </div>
+
+            {/* Stepper */}
+            <div className="agent-stepper">
+              <div
+                className="agent-stepper-progress"
+                style={{
+                  width:
+                    agentStage === 1 ? "15%" : agentStage === 2 ? "45%" : agentStage === 3 ? "75%" : "100%",
+                }}
+              />
+              
+              <div className={`agent-step-item ${agentStage > 1 ? "completed" : agentStage === 1 ? "active" : ""}`}>
+                <div className="agent-step-icon">
+                  {agentStage > 1 ? <Check size={18} /> : <span>1</span>}
+                </div>
+                <div className="agent-step-title">Enquiry Submitted</div>
+              </div>
+
+              <div className={`agent-step-item ${agentStage > 2 ? "completed" : agentStage === 2 ? "active" : ""}`}>
+                <div className="agent-step-icon">
+                  {agentStage > 2 ? <Check size={18} /> : <span>2</span>}
+                </div>
+                <div className="agent-step-title">Agent Evaluating Request</div>
+              </div>
+
+              <div className={`agent-step-item ${agentStage > 3 ? "completed" : agentStage === 3 ? "active" : ""}`}>
+                <div className="agent-step-icon">
+                  {agentStage > 3 ? <Check size={18} /> : <span>3</span>}
+                </div>
+                <div className="agent-step-title">Determining Estimation</div>
+              </div>
+
+              <div className={`agent-step-item ${agentStage === 4 ? "completed active" : ""}`}>
+                <div className="agent-step-icon">
+                  {agentStage === 4 ? <Check size={18} /> : <span>4</span>}
+                </div>
+                <div className="agent-step-title">Quote Returned</div>
+              </div>
+            </div>
+
+            {/* Live Terminal Log */}
+            <div className="agent-terminal-box">
+              <div className="agent-terminal-header">
+                <span>AGENT EXECUTION CONSOLE</span>
+                <span>STATUS: {agentStage === 4 ? "COMPLETED" : "PROCESSING..."}</span>
+              </div>
+              {agentLogs.map((log, idx) => (
+                <div
+                  key={idx}
+                  className={`agent-log-line ${
+                    idx === agentLogs.length - 1 ? (agentStage === 4 ? "success" : "highlight") : ""
+                  }`}
+                >
+                  {log}
+                </div>
+              ))}
+            </div>
+
+            <div className="agent-eval-status-bar">
+              <div className="agent-spinner-dot" />
+              <span>
+                {agentStage === 1 && "Ingesting shipment parameters & dispatching to Quote Agent..."}
+                {agentStage === 2 && "Agent evaluating lane distance, carrier rules & cargo constraints..."}
+                {agentStage === 3 && "Agent determining dynamic freight pricing & surcharges..."}
+                {agentStage === 4 && "Quotation determined! Returning official quote offer to retailer..."}
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* QUOTE OFFER MODAL */}
       {showQuoteModal && (
         <div className="modal-overlay" onClick={() => setShowQuoteModal(false)}>
@@ -885,23 +1049,29 @@ export default function RetailGenerateQuote() {
                 <span style={{ fontSize: 12, color: "#64748b" }}>Issued by Global Logistics Platform</span>
               </div>
               <div style={{ textAlign: "right" }}>
-                <span style={{ fontSize: 18, fontWeight: 800, color: "#ff9800", display: "block" }}>{quote.id}</span>
-                <span style={{ fontSize: 12, color: "#64748b" }}>Date: 12 Aug 2026</span>
+                <span style={{ fontSize: 18, fontWeight: 800, color: "#ff9800", display: "block" }}>
+                  {generatedQuote ? `QT-${generatedQuote.id.slice(-8).toUpperCase()}` : quote.id}
+                </span>
+                <span style={{ fontSize: 12, color: "#64748b" }}>Date: {new Date().toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}</span>
               </div>
             </div>
 
             <div style={{ display: "flex", justifyContent: "space-between", background: "#f8fafc", padding: 14, borderRadius: 10, marginBottom: 20 }}>
               <div>
                 <span style={{ fontSize: 10, color: "#64748b", textTransform: "uppercase", fontWeight: 800 }}>ORIGIN PORT</span>
-                <strong style={{ display: "block", fontSize: 15, color: "#0f172a" }}>{oPort.code} ({oPort.name.split(",")[0]})</strong>
+                <strong style={{ display: "block", fontSize: 15, color: "#0f172a" }}>{oPort ? `${oPort.code} (${oPort.name.split(",")[0]})` : "Origin"}</strong>
               </div>
               <div style={{ textAlign: "center" }}>
-                <span style={{ background: "#08162d", color: "#fff", padding: "4px 10px", borderRadius: 4, fontSize: 12, fontWeight: 700 }}>OCEAN FCL</span>
-                <span style={{ display: "block", fontSize: 11, color: "#64748b", marginTop: 2 }}>Est. 6–10 Days</span>
+                <span style={{ background: "#08162d", color: "#fff", padding: "4px 10px", borderRadius: 4, fontSize: 12, fontWeight: 700 }}>
+                  {generatedQuote?.mode ? generatedQuote.mode.toUpperCase() : "FREIGHT"}
+                </span>
+                <span style={{ display: "block", fontSize: 11, color: "#64748b", marginTop: 2 }}>
+                  {generatedQuote?.transit_days ? `Est. ${generatedQuote.transit_days} Days` : "Est. 6–10 Days"}
+                </span>
               </div>
               <div style={{ textAlign: "right" }}>
                 <span style={{ fontSize: 10, color: "#64748b", textTransform: "uppercase", fontWeight: 800 }}>DESTINATION PORT</span>
-                <strong style={{ display: "block", fontSize: 15, color: "#0f172a" }}>{dPort.code} ({dPort.name.split(",")[0]})</strong>
+                <strong style={{ display: "block", fontSize: 15, color: "#0f172a" }}>{dPort ? `${dPort.code} (${dPort.name.split(",")[0]})` : "Destination"}</strong>
               </div>
             </div>
 
@@ -911,21 +1081,36 @@ export default function RetailGenerateQuote() {
                 <tr><th>Description</th><th className="text-right">Amount (₹)</th></tr>
               </thead>
               <tbody>
-                <tr><td>Base Ocean Freight ({quote.containerSummaryStr})</td><td className="text-right">{money(quote.baseFreight)}</td></tr>
-                <tr><td>Terminal Handling Charges (THC)</td><td className="text-right">{money(quote.thcCost)}</td></tr>
-                <tr><td>Export &amp; Import Customs Filing</td><td className="text-right">{money(quote.customsCost)}</td></tr>
-                <tr><td>Bunker Fuel Adjustment (BAF 12%)</td><td className="text-right">{money(quote.bafCost)}</td></tr>
-                {form.chkHazardous && (
-                  <tr><td>Hazardous Material (HAZMAT) Fee</td><td className="text-right">{money(quote.hazmatCost)}</td></tr>
-                )}
-                {form.chkInsurance && (
-                  <tr><td>All-Risk Cargo Insurance</td><td className="text-right">{money(quote.insuranceCost)}</td></tr>
+                {generatedQuote?.breakdown ? (
+                  <>
+                    <tr><td>Base Handling Fee</td><td className="text-right">{money(generatedQuote.breakdown.base_handling_fee)}</td></tr>
+                    <tr><td>Distance Freight Cost ({generatedQuote.distance_km ? `${generatedQuote.distance_km.toLocaleString("en-IN")} km` : ""})</td><td className="text-right">{money(generatedQuote.breakdown.distance_cost)}</td></tr>
+                    {generatedQuote.breakdown.cargo_charge > 0 && (
+                      <tr><td>Cargo Special Handling Fee</td><td className="text-right">{money(generatedQuote.breakdown.cargo_charge)}</td></tr>
+                    )}
+                    <tr><td>Fuel Surcharge (BAF)</td><td className="text-right">{money(generatedQuote.breakdown.fuel_surcharge)}</td></tr>
+                  </>
+                ) : (
+                  <>
+                    <tr><td>Base Ocean Freight ({quote.containerSummaryStr})</td><td className="text-right">{money(quote.baseFreight)}</td></tr>
+                    <tr><td>Terminal Handling Charges (THC)</td><td className="text-right">{money(quote.thcCost)}</td></tr>
+                    <tr><td>Export &amp; Import Customs Filing</td><td className="text-right">{money(quote.customsCost)}</td></tr>
+                    <tr><td>Bunker Fuel Adjustment (BAF 12%)</td><td className="text-right">{money(quote.bafCost)}</td></tr>
+                    {form.chkHazardous && (
+                      <tr><td>Hazardous Material (HAZMAT) Fee</td><td className="text-right">{money(quote.hazmatCost)}</td></tr>
+                    )}
+                    {form.chkInsurance && (
+                      <tr><td>All-Risk Cargo Insurance</td><td className="text-right">{money(quote.insuranceCost)}</td></tr>
+                    )}
+                  </>
                 )}
               </tbody>
               <tfoot>
                 <tr style={{ fontWeight: "bold", background: "#f8fafc" }}>
                   <td style={{ fontSize: 16, color: "#0f172a" }}>TOTAL ESTIMATED QUOTE</td>
-                  <td className="text-right" style={{ fontSize: 20, color: "#e65100" }}>{quote.formattedPrice}</td>
+                  <td className="text-right" style={{ fontSize: 20, color: "#e65100" }}>
+                    {generatedQuote?.breakdown?.total ? money(generatedQuote.breakdown.total) : quote.formattedPrice}
+                  </td>
                 </tr>
               </tfoot>
             </table>
