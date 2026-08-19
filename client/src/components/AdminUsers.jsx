@@ -348,74 +348,109 @@ export default function AdminUsers() {
           </button>
         </form>
 
-        {/* Add User Form Drawer */}
+        {/* Add User Modal Overlay */}
         {showCreate && (
-          <form onSubmit={handleCreateSubmit} style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "14px", padding: "20px", marginBottom: "24px" }}>
-            <h3 style={{ margin: "0 0 14px 0", fontSize: "15px", fontWeight: "700", color: "#0f172a" }}>Provision New Account</h3>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "14px" }}>
-              <div className="modal-field">
-                <label>Full Name</label>
-                <input
-                  type="text"
-                  className="desk-select"
-                  required
-                  value={createForm.full_name}
-                  onChange={(e) => setCreateForm((f) => ({ ...f, full_name: e.target.value }))}
-                />
-              </div>
-              <div className="modal-field">
-                <label>Email Address</label>
-                <input
-                  type="email"
-                  className="desk-select"
-                  required
-                  value={createForm.email}
-                  onChange={(e) => setCreateForm((f) => ({ ...f, email: e.target.value }))}
-                />
-              </div>
-              <div className="modal-field">
-                <label>Temporary Password</label>
-                <input
-                  type="password"
-                  className="desk-select"
-                  required
-                  minLength={8}
-                  value={createForm.password}
-                  onChange={(e) => setCreateForm((f) => ({ ...f, password: e.target.value }))}
-                />
-              </div>
-              <div className="modal-field">
-                <label>Account Role</label>
-                <select
-                  className="desk-select"
-                  value={createForm.role}
-                  onChange={(e) => setCreateForm((f) => ({ ...f, role: e.target.value }))}
+          <div className="admin-modal-backdrop" onClick={() => setShowCreate(false)}>
+            <div className="admin-modal-card" onClick={(e) => e.stopPropagation()}>
+              <div className="admin-modal-header">
+                <div>
+                  <h3 className="admin-modal-title">Provision New Account</h3>
+                  <p className="admin-modal-subtitle">Create and assign system access for new personnel or organizations</p>
+                </div>
+                <button
+                  type="button"
+                  className="admin-modal-close-btn"
+                  onClick={() => setShowCreate(false)}
+                  aria-label="Close modal"
                 >
-                  {ROLE_OPTIONS.map((r) => (
-                    <option key={r} value={r}>{ROLE_LABELS[r]}</option>
-                  ))}
-                </select>
+                  &times;
+                </button>
               </div>
-              <div className="modal-field">
-                <label>Company / Organization {createForm.role === "business" ? "(Required)" : "(Optional)"}</label>
-                <input
-                  type="text"
-                  className="desk-select"
-                  placeholder={createForm.role === "business" ? "e.g. Apex Exports Pvt Ltd" : "e.g. Forwarding Agency"}
-                  required={createForm.role === "business"}
-                  value={createForm.company_name}
-                  onChange={(e) => setCreateForm((f) => ({ ...f, company_name: e.target.value }))}
-                />
-              </div>
-            </div>
 
-            <div style={{ marginTop: "16px", display: "flex", justifyContent: "flex-end", gap: "10px" }}>
-              <button type="button" className="agent-btn-sm" onClick={() => setShowCreate(false)}>Cancel</button>
-              <button type="submit" className="agent-action-btn" style={{ padding: "8px 20px" }} disabled={creating}>
-                {creating ? "Creating..." : "Create User"}
-              </button>
+              <form onSubmit={handleCreateSubmit}>
+                <div className="admin-modal-grid">
+                  <div className="admin-modal-field">
+                    <label>Full Name *</label>
+                    <input
+                      type="text"
+                      className="desk-select"
+                      required
+                      placeholder="e.g. Rajesh Sharma"
+                      value={createForm.full_name}
+                      onChange={(e) => setCreateForm((f) => ({ ...f, full_name: e.target.value }))}
+                    />
+                  </div>
+
+                  <div className="admin-modal-field">
+                    <label>Email Address *</label>
+                    <input
+                      type="email"
+                      className="desk-select"
+                      required
+                      placeholder="e.g. user@company.com"
+                      value={createForm.email}
+                      onChange={(e) => setCreateForm((f) => ({ ...f, email: e.target.value }))}
+                    />
+                  </div>
+
+                  <div className="admin-modal-field">
+                    <label>Temporary Password *</label>
+                    <input
+                      type="password"
+                      className="desk-select"
+                      required
+                      minLength={8}
+                      placeholder="Min 8 characters"
+                      value={createForm.password}
+                      onChange={(e) => setCreateForm((f) => ({ ...f, password: e.target.value }))}
+                    />
+                  </div>
+
+                  <div className="admin-modal-field">
+                    <label>Account Role *</label>
+                    <select
+                      className="desk-select"
+                      value={createForm.role}
+                      onChange={(e) => setCreateForm((f) => ({ ...f, role: e.target.value }))}
+                    >
+                      {ROLE_OPTIONS.map((r) => (
+                        <option key={r} value={r}>{ROLE_LABELS[r]}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="admin-modal-field full-width">
+                    <label>Company / Organization {createForm.role === "business" ? "(Required)" : "(Optional)"}</label>
+                    <input
+                      type="text"
+                      className="desk-select"
+                      placeholder={createForm.role === "business" ? "e.g. Apex Exports Pvt Ltd" : "e.g. Forwarding Agency"}
+                      required={createForm.role === "business"}
+                      value={createForm.company_name}
+                      onChange={(e) => setCreateForm((f) => ({ ...f, company_name: e.target.value }))}
+                    />
+                  </div>
+                </div>
+
+                <div className="admin-modal-footer">
+                  <button
+                    type="button"
+                    className="admin-modal-cancel-btn"
+                    onClick={() => setShowCreate(false)}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="admin-modal-submit-btn"
+                    disabled={creating}
+                  >
+                    {creating ? "Creating..." : "Create User"}
+                  </button>
+                </div>
+              </form>
             </div>
-          </form>
+          </div>
         )}
 
         {/* Users Light Table */}
