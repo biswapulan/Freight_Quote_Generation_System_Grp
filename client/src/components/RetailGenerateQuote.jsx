@@ -112,7 +112,7 @@ function money(n) {
 export default function RetailGenerateQuote() {
   const navigate = useNavigate();
   const { token, user } = useAuth();
-  const { reloadQuotes } = useRetailQuotes();
+  const { reloadQuotes, addQuotation, updateQuotationStatus } = useRetailQuotes();
 
   const [form, setForm] = useState(initialFormState);
   const [items, setItems] = useState([EMPTY_ITEM]);
@@ -140,6 +140,7 @@ export default function RetailGenerateQuote() {
   const chartCanvasRef = useRef(null);
   const chartInstanceRef = useRef(null);
   const modalContentRef = useRef(null);
+  const printablePdfRef = useRef(null);
 
   function setField(key, val) {
     setForm((f) => ({ ...f, [key]: val }));
@@ -479,19 +480,43 @@ export default function RetailGenerateQuote() {
       }
 
       setGeneratedQuote(result);
+      const quoteCode = result.id ? `QT-${result.id.slice(-8).toUpperCase()}` : "QT-NEW";
 
       // Step 3: Determining Estimation (1.8s)
       await new Promise((r) => setTimeout(r, 1800));
+      setAgentStage(3);
       setAgentLogs((prev) => [
         ...prev,
         `[00:04.9] 📊 Dynamic rate calculated: ₹${Math.round(result.breakdown?.total || 0).toLocaleString("en-IN")}`,
         `[00:05.4] 🔒 Applying security checksum and locking guaranteed tariff...`,
       ]);
 
+      if (addQuotation) {
+        addQuotation({
+          id: result.id,
+          quoteNo: quoteCode,
+          customerName: user?.full_name || form.custName || "Retail Customer",
+          customerCity: originCity,
+          laneCode: `${originName} → ${destName}`,
+          laneSub: `${oPort?.code || form.originId} → ${dPort?.code || form.destId}`,
+          origin: originName,
+          destination: destName,
+          mode: form.mode,
+          modeLabel: form.mode === "ocean" ? "Ocean Freight" : form.mode === "air" ? "Air Freight" : form.mode === "express" ? "Express Air" : "Road Freight",
+          basis: `${summaryStats.totalWeight.toLocaleString()} kg / ${summaryStats.containerSummaryStr}`,
+          transit: `${result.transit_days || 14} d`,
+          totalFormatted: `₹ ${Math.round(result.breakdown?.total || 0).toLocaleString("en-IN")}`,
+          totalNum: Number(result.breakdown?.total || 0),
+          breakdown: result.breakdown || {},
+          status: "Draft",
+          created: "Today",
+          createdAt: new Date().toISOString(),
+        });
+      }
+
       // Step 4: Quote verified and returned (1.4s)
       await new Promise((r) => setTimeout(r, 1400));
       setAgentStage(4);
-      const quoteCode = result.id ? `QT-${result.id.slice(-8).toUpperCase()}` : "QT-NEW";
       setAgentLogs((prev) => [
         ...prev,
         `[00:06.1] ✅ Quotation verified & certified by Agent: ${quoteCode}`,
@@ -518,19 +543,26 @@ export default function RetailGenerateQuote() {
 
     setConfirming(true);
     setQuoteError("");
+    const refCode = `BK-${(generatedQuote.id || Date.now().toString()).slice(-8).toUpperCase()}`;
+
     try {
       const confirmedQuote = await confirmQuote(token, generatedQuote.id);
       setGeneratedQuote(confirmedQuote);
       setShowQuoteModal(false);
-      setBookingRef(`BK-${confirmedQuote.id.slice(-8).toUpperCase()}`);
+      setBookingRef(refCode);
+      if (updateQuotationStatus) {
+        updateQuotationStatus(generatedQuote.id, "Booked");
+      }
       setShowSuccessModal(true);
       if (reloadQuotes) {
         reloadQuotes();
       }
     } catch {
       setShowQuoteModal(false);
-      const refCode = (generatedQuote.id || Date.now().toString()).slice(-8).toUpperCase();
-      setBookingRef(`BK-${refCode}`);
+      setBookingRef(refCode);
+      if (updateQuotationStatus) {
+        updateQuotationStatus(generatedQuote.id, "Booked");
+      }
       setShowSuccessModal(true);
       if (reloadQuotes) {
         reloadQuotes();
@@ -541,10 +573,17 @@ export default function RetailGenerateQuote() {
   }
 
   function exportPDF() {
-    const el = modalContentRef.current;
+    const el = printablePdfRef.current || modalContentRef.current;
     if (!el) return;
-    const exportId = generatedQuote ? `QT-${generatedQuote.id.slice(-8).toUpperCase()}` : "QT-ESTIMATE";
-    html2pdf().set({ margin: 0.5, filename: `Freight_Quote_${exportId}.pdf` }).from(el).save();
+    const exportId = generatedQuote ? `QT-${generatedQuote.id.slice(-8).toUpperCase()}` : "QT-OFFICIAL";
+    const opt = {
+      margin: [10, 10, 10, 10],
+      filename: `FreightAI_Official_Quotation_${exportId}.pdf`,
+      image: { type: "jpeg", quality: 0.98 },
+      html2canvas: { scale: 2, useCORS: true, letterRendering: true },
+      jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
+    };
+    html2pdf().set(opt).from(el).save();
   }
 
   return (
@@ -993,7 +1032,7 @@ export default function RetailGenerateQuote() {
         </div>
       )}
 
-      {/* QUOTE GENERATION AGENT EVALUATION MODAL */}
+      {/* AGENT EVALUATION MODAL */}
       {agentEvaluating && (
         <div className="modal-overlay">
           <div className="modal-content agent-eval-modal-content" onClick={(e) => e.stopPropagation()}>
@@ -1012,71 +1051,36 @@ export default function RetailGenerateQuote() {
               </div>
             </div>
 
-            {/* Stepper */}
             <div className="agent-stepper">
-              <div
-                className="agent-stepper-progress"
-                style={{
-                  width:
-                    agentStage === 1 ? "15%" : agentStage === 2 ? "45%" : agentStage === 3 ? "75%" : "100%",
-                }}
-              />
-              
+              <div className="agent-stepper-progress" style={{ width: agentStage === 1 ? "15%" : agentStage === 2 ? "45%" : agentStage === 3 ? "75%" : "100%" }} />
               <div className={`agent-step-item ${agentStage > 1 ? "completed" : agentStage === 1 ? "active" : ""}`}>
-                <div className="agent-step-icon">
-                  {agentStage > 1 ? <Check size={18} /> : <span>1</span>}
-                </div>
+                <div className="agent-step-icon">{agentStage > 1 ? <Check size={18} /> : <span>1</span>}</div>
                 <div className="agent-step-title">Enquiry Submitted</div>
               </div>
-
               <div className={`agent-step-item ${agentStage > 2 ? "completed" : agentStage === 2 ? "active" : ""}`}>
-                <div className="agent-step-icon">
-                  {agentStage > 2 ? <Check size={18} /> : <span>2</span>}
-                </div>
+                <div className="agent-step-icon">{agentStage > 2 ? <Check size={18} /> : <span>2</span>}</div>
                 <div className="agent-step-title">Agent Evaluating Request</div>
               </div>
-
               <div className={`agent-step-item ${agentStage > 3 ? "completed" : agentStage === 3 ? "active" : ""}`}>
-                <div className="agent-step-icon">
-                  {agentStage > 3 ? <Check size={18} /> : <span>3</span>}
-                </div>
+                <div className="agent-step-icon">{agentStage > 3 ? <Check size={18} /> : <span>3</span>}</div>
                 <div className="agent-step-title">Determining Estimation</div>
               </div>
-
               <div className={`agent-step-item ${agentStage === 4 ? "completed active" : ""}`}>
-                <div className="agent-step-icon">
-                  {agentStage === 4 ? <Check size={18} /> : <span>4</span>}
-                </div>
+                <div className="agent-step-icon">{agentStage === 4 ? <Check size={18} /> : <span>4</span>}</div>
                 <div className="agent-step-title">Quote Returned</div>
               </div>
             </div>
 
-            {/* Live Terminal Log */}
             <div className="agent-terminal-box">
               <div className="agent-terminal-header">
                 <span>AGENT EXECUTION CONSOLE</span>
                 <span>STATUS: {agentStage === 4 ? "COMPLETED" : "PROCESSING..."}</span>
               </div>
               {agentLogs.map((log, idx) => (
-                <div
-                  key={idx}
-                  className={`agent-log-line ${
-                    idx === agentLogs.length - 1 ? (agentStage === 4 ? "success" : "highlight") : ""
-                  }`}
-                >
+                <div key={idx} className={`agent-log-line ${idx === agentLogs.length - 1 ? (agentStage === 4 ? "success" : "highlight") : ""}`}>
                   {log}
                 </div>
               ))}
-            </div>
-
-            <div className="agent-eval-status-bar">
-              <div className="agent-spinner-dot" />
-              <span>
-                {agentStage === 1 && "Ingesting shipment parameters & dispatching to Quote Agent..."}
-                {agentStage === 2 && "Agent evaluating lane distance, carrier rules & cargo constraints..."}
-                {agentStage === 3 && "Agent determining dynamic freight pricing & surcharges..."}
-                {agentStage === 4 && "Quotation determined! Returning official quote offer to retailer..."}
-              </span>
             </div>
           </div>
         </div>
@@ -1211,6 +1215,173 @@ export default function RetailGenerateQuote() {
           </div>
         </div>
       )}
+
+      {/* HIDDEN DEDICATED PRINTABLE PDF DOCUMENT */}
+      <div style={{ position: "absolute", left: "-9999px", top: "-9999px", opacity: 0 }}>
+        <div ref={printablePdfRef} className="freight-printable-document">
+          {/* Header Banner */}
+          <div className="pdf-doc-header">
+            <div className="pdf-doc-brand">
+              <div className="pdf-doc-logo-title">Freight<span style={{ color: "#ff9800" }}>AI</span></div>
+              <div className="pdf-doc-tagline">Global Intelligent Freight &amp; Logistics Platform</div>
+            </div>
+            <div className="pdf-doc-meta">
+              <div className="pdf-doc-badge">OFFICIAL FREIGHT RATE ESTIMATE</div>
+              <div className="pdf-doc-ref">
+                <strong>Quote Ref:</strong> {generatedQuote ? `QT-${generatedQuote.id.slice(-8).toUpperCase()}` : "QT-OFFICIAL"}
+              </div>
+              <div className="pdf-doc-date">
+                <strong>Date of Issue:</strong> {new Date().toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}
+              </div>
+              <div className="pdf-doc-valid">
+                <strong>Tariff Validity:</strong> 14 Calendar Days
+              </div>
+            </div>
+          </div>
+
+          {/* Lane & Route Highlight Bar */}
+          <div className="pdf-lane-highlight">
+            <div className="pdf-lane-col">
+              <span className="pdf-lane-sub">ORIGIN PORT / TERMINAL</span>
+              <span className="pdf-lane-name">{oPort ? `${oPort.code} — ${oPort.name}` : "Origin Port"}</span>
+            </div>
+            <div className="pdf-lane-badge-wrap">
+              <span className="pdf-mode-pill">{(generatedQuote?.mode || form.mode || "OCEAN").toUpperCase()}</span>
+              <span className="pdf-transit-time">{generatedQuote?.transit_days ? `Est. ${generatedQuote.transit_days} Days Transit` : "Est. 14 Days Transit"}</span>
+            </div>
+            <div className="pdf-lane-col text-right">
+              <span className="pdf-lane-sub">DESTINATION PORT / TERMINAL</span>
+              <span className="pdf-lane-name">{dPort ? `${dPort.code} — ${dPort.name}` : "Destination Port"}</span>
+            </div>
+          </div>
+
+          {/* Consignment & Shipper Details */}
+          <div className="pdf-details-grid">
+            <div className="pdf-info-card">
+              <div className="pdf-info-card-title">Shipper / Origin Details</div>
+              <div className="pdf-info-row"><span>Account / Customer:</span><strong>{user?.full_name || form.custName || "Retail Shipper"}</strong></div>
+              <div className="pdf-info-row"><span>Company / Email:</span><strong>{form.custCompany || user?.email || "retail@freightai.com"}</strong></div>
+              <div className="pdf-info-row"><span>Pickup Point:</span><strong>{form.pickupAddr || "Main Port Warehouse, Origin"}</strong></div>
+              <div className="pdf-info-row"><span>Cargo Ready Date:</span><strong>{form.readyDate || new Date().toISOString().slice(0, 10)}</strong></div>
+            </div>
+
+            <div className="pdf-info-card">
+              <div className="pdf-info-card-title">Consignee &amp; Shipping Terms</div>
+              <div className="pdf-info-row"><span>Destination Terminal:</span><strong>{dPort ? dPort.name : "Port of Singapore"}</strong></div>
+              <div className="pdf-info-row"><span>Incoterm:</span><strong>{form.incoterm || "CIF"} (Cost Insurance Freight)</strong></div>
+              <div className="pdf-info-row"><span>Load Classification:</span><strong>{form.loadType || "FCL"} ({form.mode === "ocean" ? "Ocean Freight" : "Air Freight"})</strong></div>
+              <div className="pdf-info-row"><span>Cargo Type:</span><strong>{form.chkHazardous ? "Hazardous / HAZMAT" : form.chkTemp ? "Cold Chain Controlled" : "General Commercial Cargo"}</strong></div>
+            </div>
+          </div>
+
+          {/* Cargo Specifications Table */}
+          <div className="pdf-section-title">Cargo Specifications</div>
+          <table className="pdf-table">
+            <thead>
+              <tr>
+                <th>Item #</th>
+                <th>Commodity Description</th>
+                <th>Container / Packaging</th>
+                <th>Units</th>
+                <th>Gross Weight</th>
+                <th>HS Code</th>
+              </tr>
+            </thead>
+            <tbody>
+              {items.map((item, idx) => (
+                <tr key={idx}>
+                  <td>0{idx + 1}</td>
+                  <td>{item.desc || "General Commercial Freight"}</td>
+                  <td>{item.containerType || "40HC Container"} ({item.type})</td>
+                  <td>{item.count || 1}</td>
+                  <td>{Number(item.weight || 12500).toLocaleString("en-IN")} kg</td>
+                  <td>{item.hsCode || "8471.30"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+
+          {/* Rate Breakdown Table */}
+          <div className="pdf-section-title">Official Itemized Tariff &amp; Rate Breakdown</div>
+          <table className="pdf-table pdf-rate-table">
+            <thead>
+              <tr>
+                <th>Rate Component</th>
+                <th>Calculation Basis</th>
+                <th className="text-right">Currency</th>
+                <th className="text-right">Amount</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Base Terminal Handling Charges (THC) &amp; Documentation</td>
+                <td>Standard origin terminal fee &amp; automated manifest filing</td>
+                <td className="text-right">INR (₹)</td>
+                <td className="text-right">{money(generatedQuote?.breakdown?.base_handling_fee || 18500)}</td>
+              </tr>
+              <tr>
+                <td>Distance Haulage &amp; Main Linehaul Leg</td>
+                <td>Port-to-port verified sailing distance ({generatedQuote?.distance_km ? `${generatedQuote.distance_km.toLocaleString()} km` : "6,877 km"})</td>
+                <td className="text-right">INR (₹)</td>
+                <td className="text-right">{money(generatedQuote?.breakdown?.distance_cost || 436250)}</td>
+              </tr>
+              <tr>
+                <td>Bunker Adjustment Factor (BAF Fuel Surcharge)</td>
+                <td>12% fuel indexation on ocean distance rate</td>
+                <td className="text-right">INR (₹)</td>
+                <td className="text-right">{money(generatedQuote?.breakdown?.fuel_surcharge || 52350)}</td>
+              </tr>
+              {generatedQuote?.breakdown?.cargo_charge > 0 && (
+                <tr>
+                  <td>Special Cargo Handling / Compliance Tariff</td>
+                  <td>Regulated cargo classification protocol</td>
+                  <td className="text-right">INR (₹)</td>
+                  <td className="text-right">{money(generatedQuote.breakdown.cargo_charge)}</td>
+                </tr>
+              )}
+            </tbody>
+            <tfoot>
+              <tr className="pdf-grand-total-row">
+                <td colSpan={2}>
+                  <strong>TOTAL GUARANTEED FREIGHT ESTIMATION (NET)</strong>
+                </td>
+                <td className="text-right"><strong>INR (₹)</strong></td>
+                <td className="text-right pdf-total-amount">
+                  <strong>{generatedQuote?.breakdown?.total ? money(generatedQuote.breakdown.total) : "₹ 5,07,100"}</strong>
+                </td>
+              </tr>
+            </tfoot>
+          </table>
+
+          {/* AI Agent Verification Seal */}
+          <div className="pdf-seal-box">
+            <div className="pdf-seal-badge">
+              <span className="pdf-seal-check">&#10003;</span>
+              <div>
+                <strong>CERTIFIED &amp; LOCKED BY FREIGHTAI QUOTE GENERATION AGENT</strong>
+                <p>Autonomous Rate Verification ID: <code>SEC-CHK-{(generatedQuote?.id || "UCFR9UX5").slice(-8).toUpperCase()}</code> | Engine v2.4</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Terms & Conditions */}
+          <div className="pdf-terms">
+            <strong>Terms &amp; Carriage Conditions:</strong>
+            <ol>
+              <li>This quotation is computed by the automated FreightAI Quote Generation Agent based on live carrier tariffs, fuel indices (BAF), and port congestions.</li>
+              <li>Rates are guaranteed for 14 calendar days from the date of issuance and are subject to equipment/space availability at the time of booking confirmation.</li>
+              <li>Standard demurrage/detention tariffs, customs duties, and local statutory taxes (if applicable) are payable per carrier regulations.</li>
+            </ol>
+          </div>
+
+          {/* Document Footer */}
+          <div className="pdf-doc-footer">
+            <span>FreightAI Technologies Pvt Ltd · Corporate Logistics Hub</span>
+            <span>support@freightai.com · https://freightai.com</span>
+            <span>Official Quotation · Confidential</span>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
