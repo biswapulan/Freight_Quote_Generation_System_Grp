@@ -691,33 +691,35 @@
    HIGH-RESOLUTION PRINTABLE FREIGHT QUOTATION PDF DOCUMENT
    ========================================================================== */
 .freight-printable-document {
-  width: 780px;
+  width: 660px;
+  max-width: 660px;
   background: #ffffff;
   color: #0f172a;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-  padding: 30px 36px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+  padding: 22px 24px;
   box-sizing: border-box;
   border: 1px solid #e2e8f0;
+  margin: 0 auto;
 }
 
 .pdf-doc-header {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  border-bottom: 3px solid #08162d;
-  padding-bottom: 16px;
-  margin-bottom: 20px;
+  border-bottom: 2.5px solid #08162d;
+  padding-bottom: 12px;
+  margin-bottom: 14px;
 }
 
 .pdf-doc-brand .pdf-doc-logo-title {
-  font-size: 28px;
+  font-size: 24px;
   font-weight: 900;
   color: #08162d;
   letter-spacing: -0.5px;
 }
 
 .pdf-doc-brand .pdf-doc-tagline {
-  font-size: 11px;
+  font-size: 10px;
   color: #64748b;
   text-transform: uppercase;
   letter-spacing: 0.5px;
@@ -726,21 +728,21 @@
 
 .pdf-doc-meta {
   text-align: right;
-  font-size: 12px;
+  font-size: 11px;
   color: #334155;
-  line-height: 1.5;
+  line-height: 1.4;
 }
 
 .pdf-doc-badge {
   background: #08162d;
   color: #ffffff;
-  font-size: 10px;
+  font-size: 9px;
   font-weight: 800;
   letter-spacing: 0.8px;
-  padding: 4px 10px;
+  padding: 3px 8px;
   border-radius: 4px;
   display: inline-block;
-  margin-bottom: 6px;
+  margin-bottom: 4px;
 }
 
 .pdf-doc-ref {
@@ -755,14 +757,18 @@
   background: #f8fafc;
   border: 1px solid #e2e8f0;
   border-left: 4px solid #ff9800;
-  padding: 14px 18px;
-  border-radius: 8px;
-  margin-bottom: 20px;
+  padding: 10px 14px;
+  border-radius: 6px;
+  margin-bottom: 14px;
+}
+
+.pdf-lane-col {
+  flex: 1;
 }
 
 .pdf-lane-col .pdf-lane-sub {
   display: block;
-  font-size: 9.5px;
+  font-size: 9px;
   font-weight: 800;
   color: #64748b;
   letter-spacing: 0.5px;
@@ -770,87 +776,96 @@
 }
 
 .pdf-lane-col .pdf-lane-name {
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 800;
   color: #0f172a;
 }
 
 .pdf-lane-badge-wrap {
   text-align: center;
+  padding: 0 10px;
 }
 
 .pdf-mode-pill {
   background: #08162d;
   color: #ffffff;
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 800;
-  padding: 3px 10px;
+  padding: 2px 8px;
   border-radius: 4px;
   display: inline-block;
 }
 
 .pdf-transit-time {
   display: block;
-  font-size: 11px;
+  font-size: 10px;
   color: #64748b;
-  margin-top: 3px;
+  margin-top: 2px;
   font-weight: 600;
 }
 
 .pdf-details-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 16px;
-  margin-bottom: 20px;
+  gap: 12px;
+  margin-bottom: 14px;
 }
 
 .pdf-info-card {
   background: #ffffff;
   border: 1px solid #e2e8f0;
-  border-radius: 8px;
-  padding: 12px 16px;
+  border-radius: 6px;
+  padding: 10px 12px;
+  box-sizing: border-box;
 }
 
 .pdf-info-card-title {
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 800;
   color: #08162d;
   text-transform: uppercase;
   letter-spacing: 0.5px;
   border-bottom: 1px solid #f1f5f9;
-  padding-bottom: 6px;
-  margin-bottom: 8px;
+  padding-bottom: 4px;
+  margin-bottom: 6px;
 }
 
 .pdf-info-row {
   display: flex;
   justify-content: space-between;
-  font-size: 11.5px;
-  margin-bottom: 4px;
+  align-items: baseline;
+  font-size: 10.5px;
+  margin-bottom: 3px;
+  gap: 6px;
 }
 
 .pdf-info-row span {
   color: #64748b;
+  white-space: nowrap;
 }
 
 .pdf-info-row strong {
   color: #0f172a;
+  text-align: right;
+  word-break: break-word;
+  max-width: 60%;
 }
 
 .pdf-section-title {
-  font-size: 13px;
+  font-size: 11.5px;
   font-weight: 800;
   color: #08162d;
   text-transform: uppercase;
   letter-spacing: 0.5px;
-  margin: 18px 0 8px 0;
+  margin: 12px 0 6px 0;
 }
 
 .pdf-table {
   width: 100%;
   border-collapse: collapse;
-  margin-bottom: 16px;
-  font-size: 11.5px;
+  table-layout: fixed;
+  margin-bottom: 12px;
+  font-size: 10.5px;
 }
 
 .pdf-table th {
@@ -858,17 +873,20 @@
   color: #334155;
   font-weight: 800;
   text-align: left;
-  padding: 8px 12px;
+  padding: 6px 8px;
   border: 1px solid #cbd5e1;
-  font-size: 11px;
+  font-size: 10px;
   text-transform: uppercase;
-  letter-spacing: 0.4px;
+  letter-spacing: 0.3px;
+  box-sizing: border-box;
 }
 
 .pdf-table td {
-  padding: 8px 12px;
+  padding: 6px 8px;
   border: 1px solid #e2e8f0;
   color: #1e293b;
+  box-sizing: border-box;
+  word-wrap: break-word;
 }
 
 .pdf-table tbody tr:nth-child(even) {
@@ -879,35 +897,40 @@
   text-align: right;
 }
 
+.pdf-table .text-center {
+  text-align: center;
+}
+
 .pdf-rate-table tfoot .pdf-grand-total-row td {
   background: #f8fafc;
   border-top: 2px solid #08162d;
-  padding: 10px 12px;
-  font-size: 13px;
+  padding: 8px;
+  font-size: 11.5px;
 }
 
 .pdf-rate-table .pdf-total-amount strong {
-  font-size: 16px;
+  font-size: 14px;
   color: #ea580c;
 }
 
 .pdf-seal-box {
   background: #f0fdf4;
   border: 1px solid #bbf7d0;
-  border-radius: 8px;
-  padding: 10px 14px;
-  margin: 16px 0;
+  border-radius: 6px;
+  padding: 8px 12px;
+  margin: 10px 0;
+  box-sizing: border-box;
 }
 
 .pdf-seal-badge {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
 }
 
 .pdf-seal-check {
-  width: 28px;
-  height: 28px;
+  width: 24px;
+  height: 24px;
   border-radius: 50%;
   background: #16a34a;
   color: #ffffff;
@@ -915,46 +938,46 @@
   align-items: center;
   justify-content: center;
   font-weight: 900;
-  font-size: 16px;
+  font-size: 13px;
   flex-shrink: 0;
 }
 
 .pdf-seal-badge strong {
-  font-size: 11.5px;
+  font-size: 10.5px;
   color: #166534;
   display: block;
 }
 
 .pdf-seal-badge p {
-  font-size: 10px;
+  font-size: 9.5px;
   color: #15803d;
-  margin: 2px 0 0 0;
+  margin: 1px 0 0 0;
 }
 
 .pdf-terms {
-  font-size: 9.5px;
+  font-size: 8.5px;
   color: #64748b;
-  line-height: 1.5;
+  line-height: 1.4;
   border-top: 1px solid #e2e8f0;
-  padding-top: 10px;
-  margin-top: 14px;
+  padding-top: 6px;
+  margin-top: 8px;
 }
 
 .pdf-terms ol {
-  margin: 4px 0 0 16px;
+  margin: 3px 0 0 14px;
   padding: 0;
 }
 
 .pdf-doc-footer {
   display: flex;
   justify-content: space-between;
-  font-size: 9px;
+  font-size: 8px;
   color: #94a3b8;
   border-top: 1px solid #f1f5f9;
-  padding-top: 10px;
-  margin-top: 16px;
+  padding-top: 6px;
+  margin-top: 8px;
   text-transform: uppercase;
-  letter-spacing: 0.5px;
+  letter-spacing: 0.4px;
 }
 
 @media (max-width: 768px) {

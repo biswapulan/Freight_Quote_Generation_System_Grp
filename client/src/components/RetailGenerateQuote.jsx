@@ -66,6 +66,146 @@ const getPlus7DaysStr = () => {
   return d.toISOString().slice(0, 10);
 };
 
+// Dynamic Haversine distance calculator between geographic coordinates
+function calculateGeoDistance(lat1, lon1, lat2, lon2) {
+  if (!lat1 || !lon1 || !lat2 || !lon2) return 2500;
+  const R = 6371; // Earth radius in km
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLon = ((lon2 - lon1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos((lat1 * Math.PI) / 180) *
+      Math.cos((lat2 * Math.PI) / 180) *
+      Math.sin(dLon / 2) *
+      Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return Math.max(Math.round(R * c), 80);
+}
+
+// Master authoritative rate calculation engine utilizing active Admin configuration
+function calculateAuthoritativeFreightQuote({
+  originPort,
+  destPort,
+  mode,
+  loadType,
+  incoterm,
+  items,
+  chkHazardous,
+  chkTemp,
+  chkInsurance,
+  declaredVal,
+  currency = "INR",
+}) {
+  let adminConfig = {
+    currency: "INR",
+    base_handling_fee: 1500,
+    rate_per_km_per_tonne: 4.5,
+    fuel_surcharge_pct: 12.5,
+    quote_validity_days: 14,
+    cargo_multipliers: { general: 1.0, express: 1.4, cold_chain: 1.75, hazardous: 2.2 },
+    mode_multipliers: { road: 1.0, rail: 0.85, air: 2.8, ocean: 0.65 },
+  };
+
+  try {
+    const saved = localStorage.getItem("freightai_rate_config");
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      adminConfig = {
+        ...adminConfig,
+        ...parsed,
+        cargo_multipliers: { ...adminConfig.cargo_multipliers, ...(parsed.cargo_multipliers || {}) },
+        mode_multipliers: { ...adminConfig.mode_multipliers, ...(parsed.mode_multipliers || {}) },
+      };
+    }
+  } catch (e) {
+    console.warn("Could not read local freightai_rate_config:", e);
+  }
+
+  const rawDist = calculateGeoDistance(originPort?.lat, originPort?.lng, destPort?.lat, destPort?.lng);
+  // Sea transit accounts for nautical lane routing
+  const distanceKm = mode === "ocean" ? Math.round(rawDist * 1.25) : rawDist;
+
+  let totalGrossKg = 0;
+  let totalContainers = 0;
+  let totalVolumeM3 = 0;
+
+  (items || []).forEach((item) => {
+    const count = Math.max(parseInt(item.count, 10) || 1, 1);
+    const weight = parseFloat(item.weight) || 0;
+    totalGrossKg += weight;
+    totalContainers += count;
+
+    if (item.length && item.width && item.height) {
+      const cbm = (parseFloat(item.length) * parseFloat(item.width) * parseFloat(item.height)) / 1000000;
+      totalVolumeM3 += cbm * count;
+    } else {
+      const cbmPerUnit = item.containerType?.includes("20") ? 33 : 67;
+      totalVolumeM3 += cbmPerUnit * count;
+    }
+  });
+
+  totalGrossKg = Math.max(totalGrossKg, totalContainers * (mode === "ocean" ? 8000 : 400), 50);
+  const volumetricKg = totalVolumeM3 * 250;
+  const chargeableKg = Math.max(totalGrossKg, volumetricKg);
+  const chargeableTonnes = Math.max(chargeableKg / 1000, 0.1);
+
+  const normMode = mode === "ground" ? "road" : mode === "express" ? "air" : mode || "ocean";
+  const modeMultiplier = Number(adminConfig.mode_multipliers?.[normMode] ?? (normMode === "air" ? 2.8 : normMode === "ocean" ? 0.65 : 1.0));
+
+  const cargoCategory = chkHazardous ? "hazardous" : chkTemp ? "cold_chain" : mode === "express" ? "express" : "general";
+  const cargoMultiplier = Number(adminConfig.cargo_multipliers?.[cargoCategory] ?? 1.0);
+
+  const ratePerKmPerTonne = Number(adminConfig.rate_per_km_per_tonne) || 4.5;
+  const baseHandlingFee = Number(adminConfig.base_handling_fee) || 1500;
+  const fuelSurchargePct = Number(adminConfig.fuel_surcharge_pct) || 12.5;
+
+  const incotermAddon = incoterm === "DDP" ? 4500 : incoterm === "CIF" ? 2000 : 0;
+  const handlingFeeCalculated = Math.round(
+    baseHandlingFee * (mode === "ocean" ? totalContainers * 3.5 : 1) + 6500 + incotermAddon
+  );
+
+  const distanceCost = Math.round(ratePerKmPerTonne * distanceKm * chargeableTonnes * modeMultiplier);
+  const cargoCharge = Math.round(distanceCost * (cargoMultiplier - 1));
+  const declaredValNum = Number(declaredVal) || 500000;
+  const insuranceCost = chkInsurance ? Math.round(Math.max(declaredValNum * 0.0035, 1800)) : 0;
+
+  const subtotal = handlingFeeCalculated + distanceCost + cargoCharge + insuranceCost;
+  const fuelSurcharge = Math.round(subtotal * (fuelSurchargePct / 100));
+  const total = subtotal + fuelSurcharge;
+
+  const transitDays =
+    mode === "air"
+      ? Math.max(Math.ceil(distanceKm / 3500) + 1, 2)
+      : mode === "express"
+      ? 2
+      : Math.max(Math.ceil(distanceKm / 450) + 4, 6);
+
+  return {
+    distance_km: distanceKm,
+    actual_weight_kg: Math.round(totalGrossKg),
+    volumetric_weight_kg: Math.round(volumetricKg),
+    chargeable_weight_kg: Math.round(chargeableKg),
+    chargeable_tonnes: Number(chargeableTonnes.toFixed(2)),
+    transit_days: transitDays,
+    currency: currency || adminConfig.currency || "INR",
+    breakdown: {
+      base_handling_fee: handlingFeeCalculated,
+      distance_cost: distanceCost,
+      cargo_charge: cargoCharge,
+      insurance_cost: insuranceCost,
+      fuel_surcharge: fuelSurcharge,
+      total: total,
+    },
+    rates_used: {
+      rate_per_km_per_tonne: ratePerKmPerTonne,
+      mode_multiplier: modeMultiplier,
+      cargo_multiplier: cargoMultiplier,
+      fuel_surcharge_pct: fuelSurchargePct,
+      validity_days: adminConfig.quote_validity_days || 14,
+    },
+  };
+}
+
 const EMPTY_ITEM = { id: 1, type: "", containerType: "", count: "", weight: "", desc: "", hs: "" };
 
 const EMPTY_ADDRESS = {
@@ -394,11 +534,8 @@ export default function RetailGenerateQuote() {
 
     const originName = oPort?.name || form.originId;
     const destName = dPort?.name || form.destId;
-
-    setAgentLogs([
-      `[00:00.1] 🚀 Retailer submitted shipment enquiry for lane: ${originName} → ${destName}`,
-      `[00:00.3] 📡 Dispatching enquiry parameters to AI Quote Generation Agent...`,
-    ]);
+    const originKey = oPort?.id || form.originId || "INNSA";
+    const destKey = dPort?.id || form.destId || "SGSIN";
 
     const cityByPort = {
       INNSA: "Mumbai",
@@ -409,8 +546,16 @@ export default function RetailGenerateQuote() {
       CNSHA: "Shanghai",
       DEL: "Delhi",
     };
+    const originCity = cityByPort[originKey] || oPort?.name?.split(",")[0] || "Mumbai";
+    const destCity = cityByPort[destKey] || dPort?.name?.split(",")[0] || "Singapore";
+
     const apiMode = form.mode === "ground" ? "road" : form.mode === "express" ? "air" : form.mode;
     const cargoType = form.chkHazardous ? "hazardous" : form.chkTemp ? "cold_chain" : form.mode === "express" ? "express" : "general";
+
+    setAgentLogs([
+      `[00:00.1] 🚀 Retailer submitted shipment enquiry for lane: ${originName} → ${destName}`,
+      `[00:00.3] 📡 Ingesting specifications & dispatching to AI Quote Generation Agent...`,
+    ]);
 
     try {
       // Step 1: Ingest & Dispatch (1.4s)
@@ -418,9 +563,9 @@ export default function RetailGenerateQuote() {
       setAgentStage(2);
       setAgentLogs((prev) => [
         ...prev,
-        `[00:01.4] 🔍 Quote Generation Agent evaluating routing options & vessel schedules...`,
-        `[00:01.9] 📦 Analyzing cargo profile: ${summaryStats.totalWeight.toLocaleString()} kg, ${summaryStats.containerSummaryStr}, ${cargoType} classification...`,
-        `[00:02.5] ⚓ Checking port handling tariffs, customs rules & port congestion indices...`,
+        `[00:01.4] 🔍 Agent evaluating carrier tariffs, port handling fees & congestion indices...`,
+        `[00:01.9] 📦 Cargo specs: ${summaryStats.totalWeight.toLocaleString()} kg gross, ${summaryStats.containerSummaryStr}, ${cargoType.toUpperCase()} classification...`,
+        `[00:02.5] 📍 Resolving waypoint coordinates for route: ${oPort?.code || originKey} → ${dPort?.code || destKey}...`,
       ]);
 
       // Step 2: Agent evaluates request & route (1.8s)
@@ -428,20 +573,30 @@ export default function RetailGenerateQuote() {
       setAgentStage(3);
       setAgentLogs((prev) => [
         ...prev,
-        `[00:03.3] ⚙️ Agent determining dynamic rate matrix, BAF fuel surcharge & handling fees...`,
-        `[00:03.9] 🧮 Calling pricing engine algorithms for authoritative rate estimation...`,
+        `[00:03.3] ⚙️ Applying Admin Rate Configuration matrix & BAF fuel indexation...`,
+        `[00:03.9] 🧮 Calculating linehaul distance tariff, handling, and guaranteed pricing...`,
       ]);
 
-      const originKey = oPort?.id || form.originId || "INNSA";
-      const destKey = dPort?.id || form.destId || "SGSIN";
-      const originCity = cityByPort[originKey] || oPort?.name?.split(",")[0] || "Mumbai";
-      const destCity = cityByPort[destKey] || dPort?.name?.split(",")[0] || "Singapore";
+      // Calculate dynamic authoritative rate based on Admin config & route parameters
+      const calcResult = calculateAuthoritativeFreightQuote({
+        originPort: oPort,
+        destPort: dPort,
+        mode: form.mode,
+        loadType: form.loadType,
+        incoterm: form.incoterm,
+        items,
+        chkHazardous: form.chkHazardous,
+        chkTemp: form.chkTemp,
+        chkInsurance: form.chkInsurance,
+        declaredVal: form.declaredVal,
+        currency: form.currency || "INR",
+      });
 
       const isValidMongoId = (id) => typeof id === "string" && /^[a-fA-F0-9]{24}$/.test(id);
+      let result = null;
 
-      let result;
       try {
-        result = await estimateQuote(token, {
+        const apiRes = await estimateQuote(token, {
           origin: originCity,
           destination: destCity,
           weightKg: Math.max(summaryStats.totalWeight, 1),
@@ -451,29 +606,24 @@ export default function RetailGenerateQuote() {
           pickupAddressId: isValidMongoId(form.pickupAddr) ? form.pickupAddr : undefined,
           deliveryAddressId: isValidMongoId(form.deliveryAddr) ? form.deliveryAddr : undefined,
         });
-      } catch {
-        // Deterministic Agent calculation fallback
-        const baseCost = form.mode === "ocean" ? 285000 : form.mode === "air" ? 195000 : 95000;
-        const weightAdd = Math.round(summaryStats.totalWeight * 8.5);
-        const containerAdd = summaryStats.totalContainers * 45000;
-        const distanceCost = baseCost + weightAdd + containerAdd;
-        const baseHandlingFee = 18500;
-        const fuelSurcharge = Math.round(distanceCost * 0.12);
-        const total = distanceCost + baseHandlingFee + fuelSurcharge;
+        if (apiRes && apiRes.breakdown) {
+          result = apiRes;
+        }
+      } catch (err) {
+        console.info("Using authoritative client Quote Agent calculation engine.");
+      }
 
+      if (!result) {
         result = {
           id: "qt_" + Math.random().toString(36).slice(2, 10),
           origin: originName,
           destination: destName,
           mode: form.mode,
-          transit_days: form.mode === "air" ? 3 : form.mode === "express" ? 2 : 14,
+          distance_km: calcResult.distance_km,
+          chargeable_weight_kg: calcResult.chargeable_weight_kg,
+          transit_days: calcResult.transit_days,
           currency: form.currency || "INR",
-          breakdown: {
-            base_handling_fee: baseHandlingFee,
-            distance_cost: distanceCost,
-            fuel_surcharge: fuelSurcharge,
-            total,
-          },
+          breakdown: calcResult.breakdown,
           status: "issued",
           created_at: new Date().toISOString(),
         };
@@ -487,7 +637,7 @@ export default function RetailGenerateQuote() {
       setAgentStage(3);
       setAgentLogs((prev) => [
         ...prev,
-        `[00:04.9] 📊 Dynamic rate calculated: ₹${Math.round(result.breakdown?.total || 0).toLocaleString("en-IN")}`,
+        `[00:04.9] 📊 Authoritative dynamic rate computed: ₹${Math.round(result.breakdown?.total || 0).toLocaleString("en-IN")}`,
         `[00:05.4] 🔒 Applying security checksum and locking guaranteed tariff...`,
       ]);
 
@@ -577,10 +727,10 @@ export default function RetailGenerateQuote() {
     if (!el) return;
     const exportId = generatedQuote ? `QT-${generatedQuote.id.slice(-8).toUpperCase()}` : "QT-OFFICIAL";
     const opt = {
-      margin: [10, 10, 10, 10],
+      margin: [6, 6, 6, 6],
       filename: `FreightAI_Official_Quotation_${exportId}.pdf`,
       image: { type: "jpeg", quality: 0.98 },
-      html2canvas: { scale: 2, useCORS: true, letterRendering: true },
+      html2canvas: { scale: 2, useCORS: true, scrollX: 0, scrollY: 0, windowWidth: 680 },
       jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
     };
     html2pdf().set(opt).from(el).save();
@@ -1259,18 +1409,46 @@ export default function RetailGenerateQuote() {
           <div className="pdf-details-grid">
             <div className="pdf-info-card">
               <div className="pdf-info-card-title">Shipper / Origin Details</div>
-              <div className="pdf-info-row"><span>Account / Customer:</span><strong>{user?.full_name || form.custName || "Retail Shipper"}</strong></div>
-              <div className="pdf-info-row"><span>Company / Email:</span><strong>{form.custCompany || user?.email || "retail@freightai.com"}</strong></div>
-              <div className="pdf-info-row"><span>Pickup Point:</span><strong>{form.pickupAddr || "Main Port Warehouse, Origin"}</strong></div>
-              <div className="pdf-info-row"><span>Cargo Ready Date:</span><strong>{form.readyDate || new Date().toISOString().slice(0, 10)}</strong></div>
+              <div className="pdf-info-row">
+                <span>Account / Customer:</span>
+                <strong>{user?.full_name || form.custName || "Retail Shipper"}</strong>
+              </div>
+              <div className="pdf-info-row">
+                <span>Company / Email:</span>
+                <strong>{form.custCompany || user?.email || "retail@freightai.com"}</strong>
+              </div>
+              <div className="pdf-info-row">
+                <span>Pickup Location:</span>
+                <strong>
+                  {savedAddresses.find((a) => a.id === form.pickupAddr)
+                    ? `${savedAddresses.find((a) => a.id === form.pickupAddr).label} — ${savedAddresses.find((a) => a.id === form.pickupAddr).city}`
+                    : oPort ? `${oPort.name} Terminal` : "Origin Hub"}
+                </strong>
+              </div>
+              <div className="pdf-info-row">
+                <span>Cargo Ready Date:</span>
+                <strong>{form.readyDate || new Date().toISOString().slice(0, 10)}</strong>
+              </div>
             </div>
 
             <div className="pdf-info-card">
               <div className="pdf-info-card-title">Consignee &amp; Shipping Terms</div>
-              <div className="pdf-info-row"><span>Destination Terminal:</span><strong>{dPort ? dPort.name : "Port of Singapore"}</strong></div>
-              <div className="pdf-info-row"><span>Incoterm:</span><strong>{form.incoterm || "CIF"} (Cost Insurance Freight)</strong></div>
-              <div className="pdf-info-row"><span>Load Classification:</span><strong>{form.loadType || "FCL"} ({form.mode === "ocean" ? "Ocean Freight" : "Air Freight"})</strong></div>
-              <div className="pdf-info-row"><span>Cargo Type:</span><strong>{form.chkHazardous ? "Hazardous / HAZMAT" : form.chkTemp ? "Cold Chain Controlled" : "General Commercial Cargo"}</strong></div>
+              <div className="pdf-info-row">
+                <span>Destination Port:</span>
+                <strong>{dPort ? dPort.name : "Port of Singapore"}</strong>
+              </div>
+              <div className="pdf-info-row">
+                <span>Incoterm:</span>
+                <strong>{form.incoterm || "CIF"} ({form.incoterm === "DDP" ? "Delivered Duty Paid" : form.incoterm === "FOB" ? "Free On Board" : "Cost Insurance Freight"})</strong>
+              </div>
+              <div className="pdf-info-row">
+                <span>Load Classification:</span>
+                <strong>{form.loadType || "FCL"} ({form.mode === "ocean" ? "Ocean Freight" : form.mode === "air" ? "Air Freight" : "Road Freight"})</strong>
+              </div>
+              <div className="pdf-info-row">
+                <span>Cargo Type:</span>
+                <strong>{form.chkHazardous ? "Hazardous (HAZMAT)" : form.chkTemp ? "Cold Chain" : "General Commercial Cargo"}</strong>
+              </div>
             </div>
           </div>
 
@@ -1279,12 +1457,12 @@ export default function RetailGenerateQuote() {
           <table className="pdf-table">
             <thead>
               <tr>
-                <th>Item #</th>
-                <th>Commodity Description</th>
-                <th>Container / Packaging</th>
-                <th>Units</th>
-                <th>Gross Weight</th>
-                <th>HS Code</th>
+                <th style={{ width: "10%" }}>Item #</th>
+                <th style={{ width: "38%" }}>Commodity Description</th>
+                <th style={{ width: "20%" }}>Container / Packaging</th>
+                <th className="text-center" style={{ width: "8%" }}>Units</th>
+                <th className="text-right" style={{ width: "12%" }}>Gross Weight</th>
+                <th className="text-right" style={{ width: "12%" }}>HS Code</th>
               </tr>
             </thead>
             <tbody>
@@ -1292,10 +1470,10 @@ export default function RetailGenerateQuote() {
                 <tr key={idx}>
                   <td>0{idx + 1}</td>
                   <td>{item.desc || "General Commercial Freight"}</td>
-                  <td>{item.containerType || "40HC Container"} ({item.type})</td>
-                  <td>{item.count || 1}</td>
-                  <td>{Number(item.weight || 12500).toLocaleString("en-IN")} kg</td>
-                  <td>{item.hsCode || "8471.30"}</td>
+                  <td>{item.containerType ? `${item.containerType} Container` : item.type || "Container"}</td>
+                  <td className="text-center">{item.count || 1}</td>
+                  <td className="text-right">{Number(item.weight || 12500).toLocaleString("en-IN")} kg</td>
+                  <td className="text-right">{item.hs || item.hsCode || "8471.30"}</td>
                 </tr>
               ))}
             </tbody>
@@ -1306,48 +1484,56 @@ export default function RetailGenerateQuote() {
           <table className="pdf-table pdf-rate-table">
             <thead>
               <tr>
-                <th>Rate Component</th>
-                <th>Calculation Basis</th>
-                <th className="text-right">Currency</th>
-                <th className="text-right">Amount</th>
+                <th style={{ width: "42%" }}>Rate Component</th>
+                <th style={{ width: "32%" }}>Calculation Basis</th>
+                <th className="text-right" style={{ width: "10%" }}>Currency</th>
+                <th className="text-right" style={{ width: "16%" }}>Amount</th>
               </tr>
             </thead>
             <tbody>
               <tr>
                 <td>Base Terminal Handling Charges (THC) &amp; Documentation</td>
-                <td>Standard origin terminal fee &amp; automated manifest filing</td>
-                <td className="text-right">INR (₹)</td>
-                <td className="text-right">{money(generatedQuote?.breakdown?.base_handling_fee || 18500)}</td>
+                <td>Origin terminal handling &amp; automated manifest filing</td>
+                <td className="text-right">{generatedQuote?.currency || "INR"}</td>
+                <td className="text-right">{money(generatedQuote?.breakdown?.base_handling_fee || 0)}</td>
               </tr>
               <tr>
-                <td>Distance Haulage &amp; Main Linehaul Leg</td>
-                <td>Port-to-port verified sailing distance ({generatedQuote?.distance_km ? `${generatedQuote.distance_km.toLocaleString()} km` : "6,877 km"})</td>
-                <td className="text-right">INR (₹)</td>
-                <td className="text-right">{money(generatedQuote?.breakdown?.distance_cost || 436250)}</td>
-              </tr>
-              <tr>
-                <td>Bunker Adjustment Factor (BAF Fuel Surcharge)</td>
-                <td>12% fuel indexation on ocean distance rate</td>
-                <td className="text-right">INR (₹)</td>
-                <td className="text-right">{money(generatedQuote?.breakdown?.fuel_surcharge || 52350)}</td>
+                <td>Linehaul Leg ({generatedQuote?.distance_km ? `${generatedQuote.distance_km.toLocaleString("en-IN")} km` : "Distance Haulage"})</td>
+                <td>{form.mode === "ocean" ? "Ocean container linehaul" : form.mode === "air" ? "Air cargo linehaul" : "Road freight haulage"}</td>
+                <td className="text-right">{generatedQuote?.currency || "INR"}</td>
+                <td className="text-right">{money(generatedQuote?.breakdown?.distance_cost || 0)}</td>
               </tr>
               {generatedQuote?.breakdown?.cargo_charge > 0 && (
                 <tr>
-                  <td>Special Cargo Handling / Compliance Tariff</td>
-                  <td>Regulated cargo classification protocol</td>
-                  <td className="text-right">INR (₹)</td>
+                  <td>Special Cargo Compliance Tariff ({form.chkHazardous ? "HAZMAT" : form.chkTemp ? "Cold Chain" : "Express"})</td>
+                  <td>Regulated cargo safety handling protocol</td>
+                  <td className="text-right">{generatedQuote?.currency || "INR"}</td>
                   <td className="text-right">{money(generatedQuote.breakdown.cargo_charge)}</td>
                 </tr>
               )}
+              {generatedQuote?.breakdown?.insurance_cost > 0 && (
+                <tr>
+                  <td>All-Risk Cargo Insurance</td>
+                  <td>Comprehensive transit liability coverage</td>
+                  <td className="text-right">{generatedQuote?.currency || "INR"}</td>
+                  <td className="text-right">{money(generatedQuote.breakdown.insurance_cost)}</td>
+                </tr>
+              )}
+              <tr>
+                <td>Bunker Adjustment Factor (BAF Fuel Surcharge)</td>
+                <td>Indexation on verified linehaul tariff</td>
+                <td className="text-right">{generatedQuote?.currency || "INR"}</td>
+                <td className="text-right">{money(generatedQuote?.breakdown?.fuel_surcharge || 0)}</td>
+              </tr>
             </tbody>
             <tfoot>
               <tr className="pdf-grand-total-row">
                 <td colSpan={2}>
                   <strong>TOTAL GUARANTEED FREIGHT ESTIMATION (NET)</strong>
                 </td>
-                <td className="text-right"><strong>INR (₹)</strong></td>
+                <td className="text-right"><strong>{generatedQuote?.currency || "INR"}</strong></td>
                 <td className="text-right pdf-total-amount">
-                  <strong>{generatedQuote?.breakdown?.total ? money(generatedQuote.breakdown.total) : "₹ 5,07,100"}</strong>
+                  <strong>{money(generatedQuote?.breakdown?.total || 0)}</strong>
                 </td>
               </tr>
             </tfoot>
@@ -1359,7 +1545,7 @@ export default function RetailGenerateQuote() {
               <span className="pdf-seal-check">&#10003;</span>
               <div>
                 <strong>CERTIFIED &amp; LOCKED BY FREIGHTAI QUOTE GENERATION AGENT</strong>
-                <p>Autonomous Rate Verification ID: <code>SEC-CHK-{(generatedQuote?.id || "UCFR9UX5").slice(-8).toUpperCase()}</code> | Engine v2.4</p>
+                <p>Autonomous Rate Verification ID: <code>SEC-CHK-{(generatedQuote?.id || "QT-VALID").slice(-8).toUpperCase()}</code> | Engine v2.4</p>
               </div>
             </div>
           </div>
