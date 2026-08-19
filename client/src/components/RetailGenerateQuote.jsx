@@ -26,12 +26,33 @@ const MODE_PILLS = [
   { value: "express", label: "Express Air", Icon: Zap },
 ];
 
-const CONTAINER_TYPES = [
-  { value: "40HC", label: "40HC — 40ft High Cube" },
-  { value: "20FT", label: "20FT — 20ft Standard" },
-  { value: "40FT", label: "40FT — 40ft Standard" },
-  { value: "45HC", label: "45HC — 45ft Reefer" },
-];
+const PACKAGING_BY_MODE = {
+  ocean: [
+    { value: "40HC", label: "40HC — 40ft High Cube Container" },
+    { value: "20FT", label: "20FT — 20ft Standard Container" },
+    { value: "40FT", label: "40FT — 40ft Standard Container" },
+    { value: "45HC", label: "45HC — 45ft Reefer Container" },
+  ],
+  air: [
+    { value: "ULD-AKE", label: "AKE / LD3 — Standard Air Container" },
+    { value: "ULD-PMC", label: "PMC — 10ft Main Deck Air Pallet" },
+    { value: "AIR-PALLET", label: "Standard Euro/ISO Cargo Pallet" },
+    { value: "AIR-BOX", label: "Loose Air Freight Cartons / Boxes" },
+  ],
+  express: [
+    { value: "AIR-BOX", label: "Expedited Air Cartons / Boxes" },
+    { value: "ULD-AKE", label: "Priority AKE Air Container" },
+    { value: "AIR-PALLET", label: "Priority Air Cargo Pallet" },
+  ],
+  ground: [
+    { value: "32FT-MX", label: "32ft Multi-Axle Container Truck" },
+    { value: "20FT-TRK", label: "20ft Closed Body Truck" },
+    { value: "RAIL-WGN", label: "Concor Rail Freight Flat Wagon" },
+    { value: "PART-LOAD", label: "LTL Part Load Palletized Cargo" },
+  ],
+};
+
+const CONTAINER_TYPES = PACKAGING_BY_MODE.ocean;
 
 const DEFAULT_SAVED_ADDRESSES = [
   { id: "addr_1", label: "Mumbai Central Warehouse", type: "Pickup (Origin)", contact: "Rajesh Kumar", phone: "+91 98200 12345", email: "warehouse@company.com", street: "Plot 42, MIDC Industrial Area", city: "Mumbai", state: "Maharashtra", postal: "400093", country: "India", isDefault: true },
@@ -214,16 +235,16 @@ const EMPTY_ADDRESS = {
 };
 
 const initialFormState = {
-  originId: "",
-  destId: "",
+  originId: "INNSA",
+  destId: "SGSIN",
   pickupAddr: "",
   deliveryAddr: "",
   readyDate: getTodayStr(),
   deliveryDate: getPlus7DaysStr(),
-  mode: "",
-  loadType: "",
-  incoterm: "",
-  declaredVal: "",
+  mode: "ocean",
+  loadType: "fcl",
+  incoterm: "CIF",
+  declaredVal: "500000",
   currency: "INR",
   specialInst: "",
   chkFragile: false,
@@ -346,20 +367,103 @@ export default function RetailGenerateQuote() {
     };
   }, [token]);
 
+  // Dynamically filter ports and terminals by the selected service mode
+  const availablePorts = useMemo(() => {
+    const m = form.mode || "ocean";
+    const filtered = PORTS_MASTER.filter((p) => {
+      if (!p.modes) return true;
+      if (m === "express" || m === "air") return p.modes.includes("air") || p.modes.includes("express");
+      if (m === "ground") return p.modes.includes("ground") || p.modes.includes("road") || p.modes.includes("rail");
+      return p.modes.includes("ocean");
+    });
+    return filtered.length > 0 ? filtered : PORTS_MASTER;
+  }, [form.mode]);
+
+  const availablePackaging = useMemo(() => {
+    return PACKAGING_BY_MODE[form.mode || "ocean"] || PACKAGING_BY_MODE.ocean;
+  }, [form.mode]);
+
+  function handleModeChange(newMode) {
+    const matchingPorts = PORTS_MASTER.filter((p) => {
+      if (newMode === "express" || newMode === "air") return p.modes?.includes("air") || p.modes?.includes("express");
+      if (newMode === "ground") return p.modes?.includes("ground") || p.modes?.includes("road") || p.modes?.includes("rail");
+      return p.modes?.includes("ocean");
+    });
+
+    const isOriginValid = matchingPorts.some((p) => p.id === form.originId);
+    const isDestValid = matchingPorts.some((p) => p.id === form.destId);
+
+    let defaultOrigin = matchingPorts[0]?.id || "";
+    let defaultDest = matchingPorts.find((p) => p.id !== defaultOrigin)?.id || matchingPorts[1]?.id || "";
+
+    if (newMode === "ocean") {
+      defaultOrigin = "INNSA";
+      defaultDest = "SGSIN";
+    } else if (newMode === "air" || newMode === "express") {
+      defaultOrigin = "DEL";
+      defaultDest = "SIN-AIR";
+    } else if (newMode === "ground") {
+      defaultOrigin = "IN-TKD";
+      defaultDest = "IN-BHI";
+    }
+
+    const defaultPkg = PACKAGING_BY_MODE[newMode]?.[0]?.value || "40HC";
+
+    setForm((prev) => ({
+      ...prev,
+      mode: newMode,
+      originId: isOriginValid ? prev.originId : defaultOrigin,
+      destId: isDestValid ? prev.destId : defaultDest,
+      loadType: newMode === "ocean" ? "fcl" : newMode === "ground" ? "ftl" : "standard",
+    }));
+
+    setItems((prevItems) =>
+      prevItems.map((item) => ({
+        ...item,
+        containerType: defaultPkg,
+        type: newMode === "ocean" ? "Container" : newMode === "ground" ? "Container" : "Pallet",
+      }))
+    );
+  }
+
   function quickFillDemo() {
     const addresses = savedAddresses.length > 0 ? savedAddresses : getLocalSavedAddresses();
     const pAddr = addresses.find((a) => a.type.includes("Pickup")) || addresses[0];
     const dAddr = addresses.find((a) => a.type.includes("Delivery")) || addresses[1] || addresses[0];
 
+    const currentMode = form.mode || "ocean";
+    let o = "INMAA";
+    let d = "SGSIN";
+    let load = "fcl";
+    let packageType = "Container";
+    let cType = "40HC";
+    let desc = "40ft High Cube Container of Laptops & Accessories";
+
+    if (currentMode === "air" || currentMode === "express") {
+      o = "DEL";
+      d = "SIN-AIR";
+      load = "standard";
+      packageType = "Pallet";
+      cType = "ULD-AKE";
+      desc = "Commercial Avionics & High-Value Microchips";
+    } else if (currentMode === "ground") {
+      o = "IN-TKD";
+      d = "IN-BHI";
+      load = "ftl";
+      packageType = "Container";
+      cType = "32FT-MX";
+      desc = "Industrial FMCG & Automotive Assemblies";
+    }
+
     setForm({
-      originId: "INMAA",
-      destId: "SGSIN",
+      originId: o,
+      destId: d,
       pickupAddr: pAddr?.id || "addr_1",
       deliveryAddr: dAddr?.id || "addr_3",
       readyDate: getTodayStr(),
       deliveryDate: getPlus7DaysStr(),
-      mode: "ocean",
-      loadType: "FCL",
+      mode: currentMode,
+      loadType: load,
       incoterm: "CIF",
       declaredVal: "500000",
       currency: "INR",
@@ -376,7 +480,15 @@ export default function RetailGenerateQuote() {
       custCountry: "India",
     });
     setItems([
-      { id: Date.now(), type: "Consumer Electronics", containerType: "40HC", count: "1", weight: "12500", desc: "40ft High Cube Container of Laptops & Accessories", hs: "847130" },
+      {
+        id: Date.now(),
+        type: packageType,
+        containerType: cType,
+        count: "1",
+        weight: currentMode === "air" || currentMode === "express" ? "3200" : "12500",
+        desc: desc,
+        hs: "847130",
+      },
     ]);
   }
 
@@ -760,30 +872,49 @@ export default function RetailGenerateQuote() {
             <div className="section-header">
               <div className="sec-num">1</div>
               <div className="sec-title">
-                <h3>Route</h3>
-                <p>Where the cargo moves from and to</p>
+                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                  <h3>Route</h3>
+                  <span style={{
+                    fontSize: "11px",
+                    fontWeight: "700",
+                    padding: "2px 9px",
+                    borderRadius: "12px",
+                    background: form.mode === "air" || form.mode === "express" ? "#e0f2fe" : form.mode === "ground" ? "#fef3c7" : "#e0e7ff",
+                    color: form.mode === "air" || form.mode === "express" ? "#0369a1" : form.mode === "ground" ? "#92400e" : "#3730a3"
+                  }}>
+                    {form.mode === "air" || form.mode === "express" ? "✈️ Airport Network" : form.mode === "ground" ? "🚛 Inland Depot Network" : "⚓ Seaport Network"}
+                  </span>
+                </div>
+                <p>
+                  {form.mode === "air" || form.mode === "express"
+                    ? "International Air Cargo Terminals & Runways"
+                    : form.mode === "ground"
+                    ? "Inland Container Depots (ICDs) & Multi-modal Freight Hubs"
+                    : "Deep-sea Container Seaports & Maritime Terminals"}
+                </p>
               </div>
             </div>
 
             <div className="form-row">
               <div className="form-group">
-                <label>Origin port / airport <span className="req">*</span></label>
+                <label>Origin {form.mode === "ocean" ? "Seaport" : form.mode === "ground" ? "Inland Hub" : "Airport"} <span className="req">*</span></label>
                 <select className="form-select" value={form.originId} onChange={(e) => setField("originId", e.target.value)}>
-                  <option value="" disabled>Select an origin port / airport</option>
-                  {PORTS_MASTER.map((p) => (
-                    <option key={p.id} value={p.id}>{p.code} — {p.name}, {p.country}</option>
+                  <option value="" disabled>Select an origin terminal</option>
+                  {availablePorts.map((p) => (
+                    <option key={p.id} value={p.id}>{p.code} — {p.name}, {p.country} ({p.type})</option>
                   ))}
                 </select>
-                <span className="subtext">Searchable — select from master data, not free text</span>
+                <span className="subtext">Auto-filtered for {form.mode?.toUpperCase() || "OCEAN"} transport mode</span>
               </div>
               <div className="form-group">
-                <label>Destination port / airport <span className="req">*</span></label>
+                <label>Destination {form.mode === "ocean" ? "Seaport" : form.mode === "ground" ? "Inland Hub" : "Airport"} <span className="req">*</span></label>
                 <select className="form-select" value={form.destId} onChange={(e) => setField("destId", e.target.value)}>
-                  <option value="" disabled>Select a destination port / airport</option>
-                  {PORTS_MASTER.map((p) => (
-                    <option key={p.id} value={p.id}>{p.code} — {p.name}, {p.country}</option>
+                  <option value="" disabled>Select a destination terminal</option>
+                  {availablePorts.map((p) => (
+                    <option key={p.id} value={p.id}>{p.code} — {p.name}, {p.country} ({p.type})</option>
                   ))}
                 </select>
+                <span className="subtext">Verified destination nodes on active carrier network</span>
               </div>
             </div>
 
@@ -848,7 +979,7 @@ export default function RetailGenerateQuote() {
                   key={value}
                   type="button"
                   className={`mode-pill${form.mode === value ? " active" : ""}`}
-                  onClick={() => setField("mode", value)}
+                  onClick={() => handleModeChange(value)}
                 >
                   <Icon size={18} /> {label}
                 </button>
@@ -856,14 +987,37 @@ export default function RetailGenerateQuote() {
             </div>
 
             <div className="alert-banner">
-              <div className="alert-banner-title">SHOWN BECAUSE MODE = OCEAN</div>
+              <div className="alert-banner-title">
+                {form.mode === "air"
+                  ? "ACTIVE MODE = AIR FREIGHT (Air Cargo Terminals Auto-Selected)"
+                  : form.mode === "express"
+                  ? "ACTIVE MODE = EXPRESS AIR (Priority Expedited Air Cargo)"
+                  : form.mode === "ground"
+                  ? "ACTIVE MODE = GROUND & RAIL (Domestic Inland Container Depots)"
+                  : "ACTIVE MODE = OCEAN FREIGHT (Deep-Sea Maritime Container Berths)"}
+              </div>
               <div className="form-row" style={{ marginBottom: 0 }}>
                 <div className="form-group">
                   <label>Load type <span className="req">*</span> <span className="badge-new">NEW</span></label>
                   <select className="form-select" value={form.loadType} onChange={(e) => setField("loadType", e.target.value)}>
-                    <option value="" disabled>Select load type</option>
-                    <option value="fcl">FCL — Full container</option>
-                    <option value="lcl">LCL — Consolidated</option>
+                    {form.mode === "ocean" ? (
+                      <>
+                        <option value="fcl">FCL — Full Container Load</option>
+                        <option value="lcl">LCL — Less than Container Load</option>
+                      </>
+                    ) : form.mode === "ground" ? (
+                      <>
+                        <option value="ftl">FTL — Full Truckload</option>
+                        <option value="ltl">LTL — Part Truckload</option>
+                        <option value="rail">Rail Flat Wagon Container</option>
+                      </>
+                    ) : (
+                      <>
+                        <option value="standard">Standard General Air Cargo</option>
+                        <option value="priority">Priority Expedited Air</option>
+                        <option value="charter">Dedicated Air Charter</option>
+                      </>
+                    )}
                   </select>
                 </div>
                 <div className="form-group">
@@ -908,14 +1062,14 @@ export default function RetailGenerateQuote() {
                       <option value="" disabled>Select package type</option>
                       <option value="Container">Container</option>
                       <option value="Pallet">Pallet</option>
-                      <option value="Box">Box</option>
+                      <option value="Box">Box / Carton</option>
                     </select>
                   </div>
                   <div className="form-group">
-                    <label>Container type <span className="req">*</span> <span className="badge-new">NEW</span></label>
+                    <label>Packaging / Equipment Type <span className="req">*</span> <span className="badge-new">AUTO</span></label>
                     <select className="form-select" value={item.containerType} onChange={(e) => updateItem(idx, "containerType", e.target.value)}>
-                      <option value="" disabled>Select container type</option>
-                      {CONTAINER_TYPES.map((c) => (
+                      <option value="" disabled>Select packaging / container type</option>
+                      {availablePackaging.map((c) => (
                         <option key={c.value} value={c.value}>{c.label}</option>
                       ))}
                     </select>
@@ -924,7 +1078,7 @@ export default function RetailGenerateQuote() {
 
                 <div className="alert-banner" style={{ marginBottom: 12, padding: "10px 14px" }}>
                   <div style={{ fontSize: 10, fontWeight: 800, color: "#c2410c" }}>
-                    CONTAINER SELECTED → FCL FIELDS (no dimensions — FCL is priced per box)
+                    EQUIPMENT SPECIFICATIONS CONFIGURED FOR {(form.mode || "OCEAN").toUpperCase()} TRANSIT
                   </div>
                   <div className="form-row" style={{ marginBottom: 0, marginTop: 8 }}>
                     <div className="form-group">
