@@ -412,23 +412,23 @@ export default function RetailGenerateQuote() {
     const cargoType = form.chkHazardous ? "hazardous" : form.chkTemp ? "cold_chain" : form.mode === "express" ? "express" : "general";
 
     try {
-      // Step 2: Agent evaluates request & route (approx 750ms)
-      await new Promise((r) => setTimeout(r, 750));
+      // Step 1: Ingest & Dispatch (1.4s)
+      await new Promise((r) => setTimeout(r, 1400));
       setAgentStage(2);
       setAgentLogs((prev) => [
         ...prev,
-        `[00:00.9] 🔍 Quote Generation Agent evaluating routing options & vessel schedules...`,
-        `[00:01.4] 📦 Evaluating cargo profile: ${summaryStats.totalWeight.toLocaleString()} kg, ${summaryStats.containerSummaryStr}, ${cargoType} classification...`,
-        `[00:01.8] ⚓ Checking port handling tariffs, customs rules & congestion factors...`,
+        `[00:01.4] 🔍 Quote Generation Agent evaluating routing options & vessel schedules...`,
+        `[00:01.9] 📦 Analyzing cargo profile: ${summaryStats.totalWeight.toLocaleString()} kg, ${summaryStats.containerSummaryStr}, ${cargoType} classification...`,
+        `[00:02.5] ⚓ Checking port handling tariffs, customs rules & port congestion indices...`,
       ]);
 
-      // Step 3: Agent determines quote estimation (approx 850ms)
-      await new Promise((r) => setTimeout(r, 850));
+      // Step 2: Agent evaluates request & route (1.8s)
+      await new Promise((r) => setTimeout(r, 1800));
       setAgentStage(3);
       setAgentLogs((prev) => [
         ...prev,
-        `[00:02.3] ⚙️ Agent determining dynamic rate matrix, BAF fuel surcharge & handling fees...`,
-        `[00:02.6] 🧮 Calling pricing engine algorithms for authoritative rate estimation...`,
+        `[00:03.3] ⚙️ Agent determining dynamic rate matrix, BAF fuel surcharge & handling fees...`,
+        `[00:03.9] 🧮 Calling pricing engine algorithms for authoritative rate estimation...`,
       ]);
 
       const originKey = oPort?.id || form.originId || "INNSA";
@@ -479,23 +479,27 @@ export default function RetailGenerateQuote() {
       }
 
       setGeneratedQuote(result);
+
+      // Step 3: Determining Estimation (1.8s)
+      await new Promise((r) => setTimeout(r, 1800));
       setAgentLogs((prev) => [
         ...prev,
-        `[00:03.2] 📊 Dynamic rate calculated: ₹${Math.round(result.breakdown?.total || 0).toLocaleString("en-IN")}`,
+        `[00:04.9] 📊 Dynamic rate calculated: ₹${Math.round(result.breakdown?.total || 0).toLocaleString("en-IN")}`,
+        `[00:05.4] 🔒 Applying security checksum and locking guaranteed tariff...`,
       ]);
 
-      // Step 4: Quote verified and returned
-      await new Promise((r) => setTimeout(r, 750));
+      // Step 4: Quote verified and returned (1.4s)
+      await new Promise((r) => setTimeout(r, 1400));
       setAgentStage(4);
       const quoteCode = result.id ? `QT-${result.id.slice(-8).toUpperCase()}` : "QT-NEW";
       setAgentLogs((prev) => [
         ...prev,
-        `[00:03.8] ✅ Quotation verified & certified by Agent: ${quoteCode}`,
-        `[00:04.1] 📋 Returning official quotation to retailer...`,
+        `[00:06.1] ✅ Quotation verified & certified by Agent: ${quoteCode}`,
+        `[00:06.6] 📋 Presenting official quotation to retailer...`,
       ]);
 
-      // Reveal quote to retailer
-      await new Promise((r) => setTimeout(r, 650));
+      // Reveal quote to retailer (~0.8s)
+      await new Promise((r) => setTimeout(r, 800));
       setAgentEvaluating(false);
       setShowQuoteModal(true);
       if (reloadQuotes) {
