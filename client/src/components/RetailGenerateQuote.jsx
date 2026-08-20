@@ -540,6 +540,17 @@ export default function RetailGenerateQuote() {
     };
   }, [items]);
 
+  const quote = {
+    id: "QT-OFFICIAL",
+    containerSummaryStr: summaryStats.containerSummaryStr,
+    baseFreight: 0,
+    thcCost: 0,
+    customsCost: 0,
+    bafCost: 0,
+    hazmatCost: 0,
+    insuranceCost: 0,
+    formattedPrice: money(0),
+  };
   // ---- Leaflet map: init once ----
   useEffect(() => {
     if (!mapElRef.current || mapInstanceRef.current) return;
