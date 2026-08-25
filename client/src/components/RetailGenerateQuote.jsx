@@ -103,58 +103,83 @@ function calculateGeoDistance(lat1, lon1, lat2, lon2) {
   return Math.max(Math.round(R * c), 80);
 }
 
-// Master authoritative rate calculation engine utilizing active Admin configuration
+// Master Rate Card Repository for Deterministic & Defensible Quotes
+const OCEAN_RATE_CARDS = {
+  "INMAA-SGSIN": { "20FT": 35000, "40FT": 48000, "40HC": 50000, "45HC": 58000, transit_days: 7 },
+  "INNSA-SGSIN": { "20FT": 38000, "40FT": 52000, "40HC": 55000, "45HC": 62000, transit_days: 9 },
+  "INNSA-AEJEA": { "20FT": 120000, "40FT": 160000, "40HC": 178000, "45HC": 195000, transit_days: 5 },
+  "INMAA-AEJEA": { "20FT": 125000, "40FT": 165000, "40HC": 182000, "45HC": 200000, transit_days: 7 },
+  "INNSA-NLRTM": { "20FT": 210000, "40FT": 270000, "40HC": 290000, "45HC": 320000, transit_days: 22 },
+  "INMAA-NLRTM": { "20FT": 215000, "40FT": 275000, "40HC": 295000, "45HC": 325000, transit_days: 24 },
+  "INNSA-CNSHA": { "20FT": 45000, "40FT": 62000, "40HC": 68000, "45HC": 76000, transit_days: 14 },
+  "INMAA-CNSHA": { "20FT": 42000, "40FT": 58000, "40HC": 65000, "45HC": 72000, transit_days: 12 },
+  "INNSA-USLAX": { "20FT": 260000, "40FT": 340000, "40HC": 370000, "45HC": 410000, transit_days: 28 },
+  "INMAA-USLAX": { "20FT": 270000, "40FT": 350000, "40HC": 380000, "45HC": 420000, transit_days: 30 },
+};
+
+const AIR_RATE_CARDS = {
+  "DEL-DXB": { rate_per_kg: 220, min_charge: 3500, transit_days: 2 },
+  "BOM-DXB": { rate_per_kg: 210, min_charge: 3500, transit_days: 2 },
+  "MAA-SIN": { rate_per_kg: 230, min_charge: 4000, transit_days: 2 },
+  "BLR-SIN": { rate_per_kg: 235, min_charge: 4000, transit_days: 2 },
+  "DEL-SIN": { rate_per_kg: 240, min_charge: 4000, transit_days: 2 },
+  "BOM-FRA": { rate_per_kg: 380, min_charge: 5000, transit_days: 3 },
+  "DEL-FRA": { rate_per_kg: 390, min_charge: 5000, transit_days: 3 },
+  "DEL-JFK": { rate_per_kg: 480, min_charge: 7500, transit_days: 4 },
+  "BOM-JFK": { rate_per_kg: 470, min_charge: 7500, transit_days: 4 },
+};
+
+// Master Authoritative 10-Step Cost Buildup & Margin Pricing Engine
 function calculateAuthoritativeFreightQuote({
   originPort,
   destPort,
-  mode,
-  loadType,
-  incoterm,
-  items,
-  chkHazardous,
-  chkTemp,
-  chkInsurance,
-  declaredVal,
+  mode = "ocean",
+  loadType = "fcl",
+  incoterm = "CIF",
+  items = [],
+  chkHazardous = false,
+  chkTemp = false,
+  chkInsurance = false,
+  declaredVal = 500000,
   currency = "INR",
 }) {
   let adminConfig = {
     currency: "INR",
     base_handling_fee: 1500,
     rate_per_km_per_tonne: 4.5,
-    fuel_surcharge_pct: 12.5,
+    fuel_surcharge_pct: 10.0,
+    margin_pct: 15.0,
     quote_validity_days: 14,
-    cargo_multipliers: { general: 1.0, express: 1.4, cold_chain: 1.75, hazardous: 2.2 },
-    mode_multipliers: { road: 1.0, rail: 0.85, air: 2.8, ocean: 0.65 },
   };
 
   try {
     const saved = localStorage.getItem("freightai_rate_config");
     if (saved) {
       const parsed = JSON.parse(saved);
-      adminConfig = {
-        ...adminConfig,
-        ...parsed,
-        cargo_multipliers: { ...adminConfig.cargo_multipliers, ...(parsed.cargo_multipliers || {}) },
-        mode_multipliers: { ...adminConfig.mode_multipliers, ...(parsed.mode_multipliers || {}) },
-      };
+      adminConfig = { ...adminConfig, ...parsed };
     }
   } catch (e) {
     console.warn("Could not read local freightai_rate_config:", e);
   }
 
+  const oCode = originPort?.code || originPort?.id || "INMAA";
+  const dCode = destPort?.code || destPort?.id || "SGSIN";
+  const laneKey = `${oCode}-${dCode}`;
+
   const rawDist = calculateGeoDistance(originPort?.lat, originPort?.lng, destPort?.lat, destPort?.lng);
-  // Sea transit accounts for nautical lane routing
   const distanceKm = mode === "ocean" ? Math.round(rawDist * 1.25) : rawDist;
 
   let totalGrossKg = 0;
   let totalContainers = 0;
   let totalVolumeM3 = 0;
+  let primaryContainerType = "40HC";
 
-  (items || []).forEach((item) => {
+  items.forEach((item) => {
     const count = Math.max(parseInt(item.count, 10) || 1, 1);
     const weight = parseFloat(item.weight) || 0;
     totalGrossKg += weight;
     totalContainers += count;
+    if (item.containerType) primaryContainerType = item.containerType;
 
     if (item.length && item.width && item.height) {
       const cbm = (parseFloat(item.length) * parseFloat(item.width) * parseFloat(item.height)) / 1000000;
@@ -165,63 +190,144 @@ function calculateAuthoritativeFreightQuote({
     }
   });
 
+  if (totalContainers === 0) totalContainers = 1;
   totalGrossKg = Math.max(totalGrossKg, totalContainers * (mode === "ocean" ? 8000 : 400), 50);
   const volumetricKg = totalVolumeM3 * 250;
   const chargeableKg = Math.max(totalGrossKg, volumetricKg);
-  const chargeableTonnes = Math.max(chargeableKg / 1000, 0.1);
 
-  const normMode = mode === "ground" ? "road" : mode === "express" ? "air" : mode || "ocean";
-  const modeMultiplier = Number(adminConfig.mode_multipliers?.[normMode] ?? (normMode === "air" ? 2.8 : normMode === "ocean" ? 0.65 : 1.0));
+  let baseRatePerUnit = 50000;
+  let transitDays = 7;
+  let baseFreight = 0;
+  let unitLabel = "Container";
 
-  const cargoCategory = chkHazardous ? "hazardous" : chkTemp ? "cold_chain" : mode === "express" ? "express" : "general";
-  const cargoMultiplier = Number(adminConfig.cargo_multipliers?.[cargoCategory] ?? 1.0);
+  if (mode === "ocean") {
+    const cTypeKey = primaryContainerType.includes("20")
+      ? "20FT"
+      : primaryContainerType.includes("45")
+      ? "45HC"
+      : primaryContainerType.includes("40FT")
+      ? "40FT"
+      : "40HC";
 
-  const ratePerKmPerTonne = Number(adminConfig.rate_per_km_per_tonne) || 4.5;
-  const baseHandlingFee = Number(adminConfig.base_handling_fee) || 1500;
-  const fuelSurchargePct = Number(adminConfig.fuel_surcharge_pct) || 12.5;
+    const laneCard = OCEAN_RATE_CARDS[laneKey] || OCEAN_RATE_CARDS[`${originPort?.id}-${destPort?.id}`];
+    if (laneCard && laneCard[cTypeKey]) {
+      baseRatePerUnit = laneCard[cTypeKey];
+      transitDays = laneCard.transit_days || 7;
+    } else {
+      // Dynamic calibrated ocean rate
+      const base20 = Math.round(30000 + distanceKm * 4.5);
+      baseRatePerUnit = cTypeKey === "20FT" ? base20 : cTypeKey === "40FT" ? Math.round(base20 * 1.38) : Math.round(base20 * 1.48);
+      transitDays = Math.max(Math.ceil(distanceKm / 450) + 3, 5);
+    }
+    baseFreight = baseRatePerUnit * totalContainers;
+    unitLabel = `${primaryContainerType} Container`;
+  } else if (mode === "air" || mode === "express") {
+    const airCard = AIR_RATE_CARDS[laneKey] || AIR_RATE_CARDS[`${originPort?.code}-${destPort?.code}`];
+    let ratePerKg = airCard ? airCard.rate_per_kg : Math.max(Math.round(180 + distanceKm * 0.04), 160);
+    if (mode === "express") ratePerKg = Math.round(ratePerKg * 1.35);
+    baseRatePerUnit = ratePerKg;
+    baseFreight = Math.max(Math.round(ratePerKg * chargeableKg), airCard?.min_charge || 4000);
+    transitDays = mode === "express" ? 2 : Math.max(Math.ceil(distanceKm / 3500) + 1, 2);
+    unitLabel = "kg";
+  } else {
+    // Ground & Rail
+    baseRatePerUnit = Math.round(15000 + distanceKm * 26);
+    baseFreight = baseRatePerUnit * totalContainers;
+    transitDays = Math.max(Math.ceil(distanceKm / 450) + 1, 2);
+    unitLabel = "Truckload / Flat Wagon";
+  }
 
-  const incotermAddon = incoterm === "DDP" ? 4500 : incoterm === "CIF" ? 2000 : 0;
-  const handlingFeeCalculated = Math.round(
-    baseHandlingFee * (mode === "ocean" ? totalContainers * 3.5 : 1) + 6500 + incotermAddon
-  );
+  // Surcharges & Cost Buildup
+  const bafPct = Number(adminConfig.fuel_surcharge_pct) || 10.0;
+  const bafAmount = Math.round(baseFreight * (bafPct / 100.0));
 
-  const distanceCost = Math.round(ratePerKmPerTonne * distanceKm * chargeableTonnes * modeMultiplier);
-  const cargoCharge = Math.round(distanceCost * (cargoMultiplier - 1));
+  // Origin Terminal Handling Charges (THC)
+  const thcRatePerContainer = mode === "ocean" ? 8000 : 4500;
+  const thcAmount = mode === "ocean" ? thcRatePerContainer * totalContainers : thcRatePerContainer;
+
+  // Documentation Fee (flat per shipment)
+  const docFee = 3000;
+
+  // Incoterm & Optional Addons
+  let destThcAmount = 0;
+  let destCustomsAmount = 0;
+  let finalDeliveryHaulage = 0;
+
+  if (incoterm === "DDP") {
+    destThcAmount = mode === "ocean" ? 16500 * totalContainers : 6000;
+    destCustomsAmount = 18000;
+    finalDeliveryHaulage = 15000;
+  }
+
   const declaredValNum = Number(declaredVal) || 500000;
   const insuranceCost = chkInsurance ? Math.round(Math.max(declaredValNum * 0.0035, 1800)) : 0;
+  const hazmatCost = chkHazardous ? Math.round(baseFreight * 0.25) : 0;
+  const reeferCost = chkTemp ? 22000 * totalContainers : 0;
 
-  const subtotal = handlingFeeCalculated + distanceCost + cargoCharge + insuranceCost;
-  const fuelSurcharge = Math.round(subtotal * (fuelSurchargePct / 100));
-  const total = subtotal + fuelSurcharge;
+  // Total Buy Cost (Subtotal before margin)
+  const totalBuyCost =
+    baseFreight +
+    bafAmount +
+    thcAmount +
+    docFee +
+    destThcAmount +
+    destCustomsAmount +
+    finalDeliveryHaulage +
+    insuranceCost +
+    hazmatCost +
+    reeferCost;
 
-  const transitDays =
-    mode === "air"
-      ? Math.max(Math.ceil(distanceKm / 3500) + 1, 2)
-      : mode === "express"
-      ? 2
-      : Math.max(Math.ceil(distanceKm / 450) + 4, 6);
+  // Commercial Margin
+  const marginPct = Number(adminConfig.margin_pct) || 15.0;
+  const marginAmount = Math.round(totalBuyCost * (marginPct / 100.0));
+
+  // Final Sell Price
+  const sellPrice = totalBuyCost + marginAmount;
 
   return {
     distance_km: distanceKm,
     actual_weight_kg: Math.round(totalGrossKg),
     volumetric_weight_kg: Math.round(volumetricKg),
     chargeable_weight_kg: Math.round(chargeableKg),
-    chargeable_tonnes: Number(chargeableTonnes.toFixed(2)),
+    chargeable_tonnes: Number((chargeableKg / 1000).toFixed(2)),
     transit_days: transitDays,
     currency: currency || adminConfig.currency || "INR",
+    units: mode === "ocean" ? totalContainers : chargeableKg,
+    unit_rate: baseRatePerUnit,
+    unit_label: unitLabel,
+    margin_pct: marginPct,
+    margin_amount: marginAmount,
+    total_buy_cost: totalBuyCost,
+    sell_price: sellPrice,
     breakdown: {
-      base_handling_fee: handlingFeeCalculated,
-      distance_cost: distanceCost,
-      cargo_charge: cargoCharge,
+      base_freight: baseFreight,
+      baf_pct: bafPct,
+      fuel_surcharge: bafAmount,
+      baf_amount: bafAmount,
+      origin_thc: thcAmount,
+      thc_rate: thcRatePerContainer,
+      documentation_fee: docFee,
+      dest_thc: destThcAmount,
+      dest_customs: destCustomsAmount,
+      delivery_haulage: finalDeliveryHaulage,
       insurance_cost: insuranceCost,
-      fuel_surcharge: fuelSurcharge,
-      total: total,
+      cargo_charge: hazmatCost + reeferCost,
+      hazmat_cost: hazmatCost,
+      reefer_cost: reeferCost,
+      subtotal_buy_cost: totalBuyCost,
+      margin_pct: marginPct,
+      margin_amount: marginAmount,
+      total: sellPrice,
+      // Backward compatibility keys
+      base_handling_fee: thcAmount + docFee,
+      distance_cost: baseFreight,
     },
     rates_used: {
-      rate_per_km_per_tonne: ratePerKmPerTonne,
-      mode_multiplier: modeMultiplier,
-      cargo_multiplier: cargoMultiplier,
-      fuel_surcharge_pct: fuelSurchargePct,
+      base_rate_per_unit: baseRatePerUnit,
+      baf_pct: bafPct,
+      thc_rate: thcRatePerContainer,
+      doc_fee: docFee,
+      margin_pct: marginPct,
       validity_days: adminConfig.quote_validity_days || 14,
     },
   };
@@ -1449,32 +1555,106 @@ export default function RetailGenerateQuote() {
               <tbody>
                 {generatedQuote?.breakdown ? (
                   <>
-                    <tr><td>Base Handling Fee</td><td className="text-right">{money(generatedQuote.breakdown.base_handling_fee)}</td></tr>
-                    <tr><td>Distance Freight Cost ({generatedQuote.distance_km ? `${generatedQuote.distance_km.toLocaleString("en-IN")} km` : ""})</td><td className="text-right">{money(generatedQuote.breakdown.distance_cost)}</td></tr>
-                    {generatedQuote.breakdown.cargo_charge > 0 && (
-                      <tr><td>Cargo Special Handling Fee</td><td className="text-right">{money(generatedQuote.breakdown.cargo_charge)}</td></tr>
+                    <tr>
+                      <td>
+                        <strong>Base Freight</strong>
+                        <span style={{ display: "block", fontSize: 11, color: "#64748b" }}>
+                          {summaryStats.containerSummaryStr} ({form.mode === "ocean" ? "Ocean Container Freight" : form.mode === "air" ? "Air Cargo Linehaul" : "Road / Rail Drayage"})
+                        </span>
+                      </td>
+                      <td className="text-right" style={{ fontWeight: 600 }}>{money(generatedQuote.breakdown.base_freight ?? generatedQuote.breakdown.distance_cost)}</td>
+                    </tr>
+                    <tr>
+                      <td>
+                        <strong>Bunker Adjustment Factor (BAF)</strong>
+                        <span style={{ display: "block", fontSize: 11, color: "#64748b" }}>
+                          {generatedQuote.breakdown.baf_pct || 10}% fuel indexation on base freight
+                        </span>
+                      </td>
+                      <td className="text-right" style={{ fontWeight: 600 }}>{money(generatedQuote.breakdown.baf_amount ?? generatedQuote.breakdown.fuel_surcharge)}</td>
+                    </tr>
+                    <tr>
+                      <td>
+                        <strong>Terminal Handling Charges (Origin THC)</strong>
+                        <span style={{ display: "block", fontSize: 11, color: "#64748b" }}>
+                          Origin terminal handling &amp; container loading
+                        </span>
+                      </td>
+                      <td className="text-right" style={{ fontWeight: 600 }}>{money(generatedQuote.breakdown.origin_thc ?? (generatedQuote.breakdown.base_handling_fee - 3000))}</td>
+                    </tr>
+                    <tr>
+                      <td>
+                        <strong>Documentation &amp; Bill of Lading</strong>
+                        <span style={{ display: "block", fontSize: 11, color: "#64748b" }}>
+                          Electronic customs filing &amp; carrier manifest
+                        </span>
+                      </td>
+                      <td className="text-right" style={{ fontWeight: 600 }}>{money(generatedQuote.breakdown.documentation_fee || 3000)}</td>
+                    </tr>
+                    {generatedQuote.breakdown.dest_thc > 0 && (
+                      <tr>
+                        <td>Destination THC ({form.incoterm})</td>
+                        <td className="text-right">{money(generatedQuote.breakdown.dest_thc)}</td>
+                      </tr>
                     )}
-                    <tr><td>Fuel Surcharge (BAF)</td><td className="text-right">{money(generatedQuote.breakdown.fuel_surcharge)}</td></tr>
+                    {generatedQuote.breakdown.dest_customs > 0 && (
+                      <tr>
+                        <td>Destination Customs Clearance (DDP)</td>
+                        <td className="text-right">{money(generatedQuote.breakdown.dest_customs)}</td>
+                      </tr>
+                    )}
+                    {generatedQuote.breakdown.delivery_haulage > 0 && (
+                      <tr>
+                        <td>Final-Mile Delivery Drayage</td>
+                        <td className="text-right">{money(generatedQuote.breakdown.delivery_haulage)}</td>
+                      </tr>
+                    )}
+                    {generatedQuote.breakdown.insurance_cost > 0 && (
+                      <tr>
+                        <td>All-Risk Cargo Insurance</td>
+                        <td className="text-right">{money(generatedQuote.breakdown.insurance_cost)}</td>
+                      </tr>
+                    )}
+                    {generatedQuote.breakdown.hazmat_cost > 0 && (
+                      <tr>
+                        <td>Hazardous Cargo Safety Protocol (HAZMAT)</td>
+                        <td className="text-right">{money(generatedQuote.breakdown.hazmat_cost)}</td>
+                      </tr>
+                    )}
+                    {generatedQuote.breakdown.reefer_cost > 0 && (
+                      <tr>
+                        <td>Cold Chain Reefer Monitoring</td>
+                        <td className="text-right">{money(generatedQuote.breakdown.reefer_cost)}</td>
+                      </tr>
+                    )}
+                    <tr style={{ background: "#f8fafc", borderTop: "1.5px solid #e2e8f0" }}>
+                      <td style={{ fontWeight: 700, color: "#334155" }}>TOTAL BUY COST (Subtotal)</td>
+                      <td className="text-right" style={{ fontWeight: 700, color: "#334155" }}>
+                        {money(generatedQuote.breakdown.subtotal_buy_cost || (generatedQuote.breakdown.total / 1.15))}
+                      </td>
+                    </tr>
+                    <tr style={{ background: "#fff7ed" }}>
+                      <td style={{ fontWeight: 700, color: "#c2410c" }}>
+                        Commercial Margin ({generatedQuote.breakdown.margin_pct || 15}%)
+                      </td>
+                      <td className="text-right" style={{ fontWeight: 700, color: "#c2410c" }}>
+                        + {money(generatedQuote.breakdown.margin_amount || (generatedQuote.breakdown.total - (generatedQuote.breakdown.total / 1.15)))}
+                      </td>
+                    </tr>
                   </>
                 ) : (
                   <>
                     <tr><td>Base Ocean Freight ({quote.containerSummaryStr})</td><td className="text-right">{money(quote.baseFreight)}</td></tr>
                     <tr><td>Terminal Handling Charges (THC)</td><td className="text-right">{money(quote.thcCost)}</td></tr>
                     <tr><td>Export &amp; Import Customs Filing</td><td className="text-right">{money(quote.customsCost)}</td></tr>
-                    <tr><td>Bunker Fuel Adjustment (BAF 12%)</td><td className="text-right">{money(quote.bafCost)}</td></tr>
-                    {form.chkHazardous && (
-                      <tr><td>Hazardous Material (HAZMAT) Fee</td><td className="text-right">{money(quote.hazmatCost)}</td></tr>
-                    )}
-                    {form.chkInsurance && (
-                      <tr><td>All-Risk Cargo Insurance</td><td className="text-right">{money(quote.insuranceCost)}</td></tr>
-                    )}
+                    <tr><td>Bunker Fuel Adjustment (BAF 10%)</td><td className="text-right">{money(quote.bafCost)}</td></tr>
                   </>
                 )}
               </tbody>
               <tfoot>
-                <tr style={{ fontWeight: "bold", background: "#f8fafc" }}>
-                  <td style={{ fontSize: 16, color: "#0f172a" }}>TOTAL ESTIMATED QUOTE</td>
-                  <td className="text-right" style={{ fontSize: 20, color: "#e65100" }}>
+                <tr style={{ fontWeight: "bold", background: "#0f172a", color: "#ffffff" }}>
+                  <td style={{ fontSize: 15, color: "#ffffff", padding: "12px 14px" }}>FINAL SELL PRICE (QUOTATION)</td>
+                  <td className="text-right" style={{ fontSize: 20, color: "#f97316", padding: "12px 14px" }}>
                     {generatedQuote?.breakdown?.total ? money(generatedQuote.breakdown.total) : quote.formattedPrice}
                   </td>
                 </tr>
@@ -1649,31 +1829,59 @@ export default function RetailGenerateQuote() {
           <table className="pdf-table pdf-rate-table">
             <thead>
               <tr>
-                <th style={{ width: "42%" }}>Rate Component</th>
+                <th style={{ width: "40%" }}>Rate Component</th>
                 <th style={{ width: "32%" }}>Calculation Basis</th>
-                <th className="text-right" style={{ width: "10%" }}>Currency</th>
+                <th className="text-right" style={{ width: "12%" }}>Currency</th>
                 <th className="text-right" style={{ width: "16%" }}>Amount</th>
               </tr>
             </thead>
             <tbody>
               <tr>
-                <td>Base Terminal Handling Charges (THC) &amp; Documentation</td>
-                <td>Origin terminal handling &amp; automated manifest filing</td>
+                <td><strong>Base Freight</strong></td>
+                <td>{summaryStats.containerSummaryStr} linehaul tariff</td>
                 <td className="text-right">{generatedQuote?.currency || "INR"}</td>
-                <td className="text-right">{money(generatedQuote?.breakdown?.base_handling_fee || 0)}</td>
+                <td className="text-right">{money(generatedQuote?.breakdown?.base_freight ?? generatedQuote?.breakdown?.distance_cost ?? 0)}</td>
               </tr>
               <tr>
-                <td>Linehaul Leg ({generatedQuote?.distance_km ? `${generatedQuote.distance_km.toLocaleString("en-IN")} km` : "Distance Haulage"})</td>
-                <td>{form.mode === "ocean" ? "Ocean container linehaul" : form.mode === "air" ? "Air cargo linehaul" : "Road freight haulage"}</td>
+                <td><strong>Bunker Adjustment Factor (BAF)</strong></td>
+                <td>{generatedQuote?.breakdown?.baf_pct || 10}% fuel indexation on base freight</td>
                 <td className="text-right">{generatedQuote?.currency || "INR"}</td>
-                <td className="text-right">{money(generatedQuote?.breakdown?.distance_cost || 0)}</td>
+                <td className="text-right">{money(generatedQuote?.breakdown?.baf_amount ?? generatedQuote?.breakdown?.fuel_surcharge ?? 0)}</td>
               </tr>
-              {generatedQuote?.breakdown?.cargo_charge > 0 && (
+              <tr>
+                <td><strong>Terminal Handling Charges (Origin THC)</strong></td>
+                <td>Origin terminal handling &amp; container loading</td>
+                <td className="text-right">{generatedQuote?.currency || "INR"}</td>
+                <td className="text-right">{money(generatedQuote?.breakdown?.origin_thc ?? ((generatedQuote?.breakdown?.base_handling_fee || 0) - 3000))}</td>
+              </tr>
+              <tr>
+                <td><strong>Documentation &amp; Bill of Lading</strong></td>
+                <td>Automated carrier manifest &amp; customs filing</td>
+                <td className="text-right">{generatedQuote?.currency || "INR"}</td>
+                <td className="text-right">{money(generatedQuote?.breakdown?.documentation_fee || 3000)}</td>
+              </tr>
+              {generatedQuote?.breakdown?.dest_thc > 0 && (
                 <tr>
-                  <td>Special Cargo Compliance Tariff ({form.chkHazardous ? "HAZMAT" : form.chkTemp ? "Cold Chain" : "Express"})</td>
-                  <td>Regulated cargo safety handling protocol</td>
+                  <td>Destination THC ({form.incoterm})</td>
+                  <td>Port offloading at destination terminal</td>
                   <td className="text-right">{generatedQuote?.currency || "INR"}</td>
-                  <td className="text-right">{money(generatedQuote.breakdown.cargo_charge)}</td>
+                  <td className="text-right">{money(generatedQuote.breakdown.dest_thc)}</td>
+                </tr>
+              )}
+              {generatedQuote?.breakdown?.dest_customs > 0 && (
+                <tr>
+                  <td>Destination Customs Clearance (DDP)</td>
+                  <td>Import customs clearance protocol</td>
+                  <td className="text-right">{generatedQuote?.currency || "INR"}</td>
+                  <td className="text-right">{money(generatedQuote.breakdown.dest_customs)}</td>
+                </tr>
+              )}
+              {generatedQuote?.breakdown?.delivery_haulage > 0 && (
+                <tr>
+                  <td>Final-Mile Delivery Drayage</td>
+                  <td>Port to consignee door transport</td>
+                  <td className="text-right">{generatedQuote?.currency || "INR"}</td>
+                  <td className="text-right">{money(generatedQuote.breakdown.delivery_haulage)}</td>
                 </tr>
               )}
               {generatedQuote?.breakdown?.insurance_cost > 0 && (
@@ -1684,17 +1892,37 @@ export default function RetailGenerateQuote() {
                   <td className="text-right">{money(generatedQuote.breakdown.insurance_cost)}</td>
                 </tr>
               )}
-              <tr>
-                <td>Bunker Adjustment Factor (BAF Fuel Surcharge)</td>
-                <td>Indexation on verified linehaul tariff</td>
-                <td className="text-right">{generatedQuote?.currency || "INR"}</td>
-                <td className="text-right">{money(generatedQuote?.breakdown?.fuel_surcharge || 0)}</td>
+              {generatedQuote?.breakdown?.hazmat_cost > 0 && (
+                <tr>
+                  <td>Hazardous Material Protocol (HAZMAT)</td>
+                  <td>Dangerous goods safety and escort</td>
+                  <td className="text-right">{generatedQuote?.currency || "INR"}</td>
+                  <td className="text-right">{money(generatedQuote.breakdown.hazmat_cost)}</td>
+                </tr>
+              )}
+              {generatedQuote?.breakdown?.reefer_cost > 0 && (
+                <tr>
+                  <td>Cold Chain Reefer Monitoring</td>
+                  <td>Active temperature logging &amp; power plug-in</td>
+                  <td className="text-right">{generatedQuote?.currency || "INR"}</td>
+                  <td className="text-right">{money(generatedQuote.breakdown.reefer_cost)}</td>
+                </tr>
+              )}
+              <tr style={{ background: "#f1f5f9", borderTop: "2px solid #cbd5e1" }}>
+                <td colSpan={2}><strong>TOTAL BUY COST (Subtotal)</strong></td>
+                <td className="text-right"><strong>{generatedQuote?.currency || "INR"}</strong></td>
+                <td className="text-right"><strong>{money(generatedQuote?.breakdown?.subtotal_buy_cost || (generatedQuote?.breakdown?.total / 1.15))}</strong></td>
+              </tr>
+              <tr style={{ background: "#fff7ed" }}>
+                <td colSpan={2} style={{ color: "#c2410c" }}><strong>Commercial Margin ({generatedQuote?.breakdown?.margin_pct || 15}%)</strong></td>
+                <td className="text-right" style={{ color: "#c2410c" }}><strong>{generatedQuote?.currency || "INR"}</strong></td>
+                <td className="text-right" style={{ color: "#c2410c" }}><strong>+ {money(generatedQuote?.breakdown?.margin_amount || (generatedQuote?.breakdown?.total - (generatedQuote?.breakdown?.total / 1.15)))}</strong></td>
               </tr>
             </tbody>
             <tfoot>
               <tr className="pdf-grand-total-row">
                 <td colSpan={2}>
-                  <strong>TOTAL GUARANTEED FREIGHT ESTIMATION (NET)</strong>
+                  <strong>FINAL SELL PRICE (QUOTATION)</strong>
                 </td>
                 <td className="text-right"><strong>{generatedQuote?.currency || "INR"}</strong></td>
                 <td className="text-right pdf-total-amount">
