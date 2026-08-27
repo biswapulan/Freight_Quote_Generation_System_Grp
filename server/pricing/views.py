@@ -324,3 +324,59 @@ class RouteAgentView(APIView):
         )
 
         return Response(result, status=status.HTTP_200_OK)
+
+
+class MLPricingPredictView(APIView):
+    """Milestone 3 Phase 5 API: Predict market freight rates using Gradient Boosting ML model."""
+
+    authentication_classes = []
+    permission_classes = []
+
+    def post(self, request):
+        from .ml_service import MLPricingService
+
+        data = request.data or {}
+        origin = data.get("origin_port") or data.get("Origin") or data.get("origin") or "Chennai"
+        dest = data.get("destination_port") or data.get("Destination") or data.get("destination") or "Rotterdam"
+        transport_mode = data.get("transport_mode") or data.get("Transport_Mode") or "Sea"
+        cargo = data.get("cargo_type") or data.get("Cargo_Type") or "Electronics"
+        container = data.get("container_type") or data.get("Container_Type") or "40FT"
+        weight = float(data.get("weight_kg") or data.get("Weight_KG") or 3500.0)
+        volume = float(data.get("volume_cbm") or data.get("Volume_CBM") or 8.5)
+        distance = float(data.get("distance_km") or data.get("Distance_KM") or 8500.0)
+        fuel_price = float(data.get("fuel_price") or data.get("Fuel_Price") or data.get("brent_fuel_index") or 95.0)
+        season = data.get("season") or data.get("Season") or ("Peak" if float(data.get("seasonality_index", 1.0)) > 1.1 else "Normal")
+        carrier = data.get("carrier") or data.get("Carrier") or data.get("carrier_tier") or "Carrier_A"
+        transit = int(data.get("transit_time_days") or data.get("Transit_Days") or 15)
+
+        result = MLPricingService.predict_freight_rate(
+            origin_port=origin,
+            destination_port=dest,
+            transport_mode=transport_mode,
+            cargo_type=cargo,
+            container_type=container,
+            weight_kg=weight,
+            volume_cbm=volume,
+            distance_km=distance,
+            fuel_price=fuel_price,
+            season=season,
+            carrier=carrier,
+            transit_days=transit,
+        )
+
+        return Response(result, status=status.HTTP_200_OK)
+
+
+
+class MLPricingBenchmarkReportView(APIView):
+    """Milestone 3 Phase 5 API: Retrieve model training benchmarks and performance metrics."""
+
+    authentication_classes = []
+    permission_classes = []
+
+    def get(self, request):
+        from .ml_service import MLPricingService
+
+        benchmarks = MLPricingService.get_benchmarks()
+        return Response(benchmarks, status=status.HTTP_200_OK)
+

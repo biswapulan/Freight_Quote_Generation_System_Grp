@@ -48,6 +48,11 @@ INSTALLED_APPS = [
     'corsheaders',
     'accounts',
     'pricing',
+    'quotes',
+    'weather',
+    'customs',
+    'risk',
+    'integrations',
 ]
 
 MIDDLEWARE = [

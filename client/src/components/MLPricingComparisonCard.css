@@ -1,0 +1,230 @@
+/* MLPricingComparisonCard.css - Aligned with Platform Design System */
+.ml-pricing-card {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  padding: 24px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.03);
+}
+
+.ml-pricing-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+  border-bottom: 1px solid #f1f5f9;
+  padding-bottom: 16px;
+}
+
+.ml-header-info h3 {
+  font-size: 18px;
+  font-weight: 800;
+  color: #0f172a;
+  margin: 0 0 4px 0;
+}
+
+.ml-header-info p {
+  color: #64748b;
+  font-size: 13.5px;
+  margin: 0;
+}
+
+.ml-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+/* Comparison Dual Price Hero Grid */
+.ml-hero-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.ml-price-box {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.02);
+  position: relative;
+}
+
+.ml-price-box.ml-active {
+  background: #f8fafc;
+  border: 1.5px solid #0284c7;
+}
+
+.ml-price-lbl {
+  font-size: 12px;
+  color: #64748b;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.ml-price-val {
+  font-size: 32px;
+  font-weight: 850;
+  color: #0f172a;
+  line-height: 1.1;
+}
+
+.ml-price-sub {
+  font-size: 12.5px;
+  color: #64748b;
+}
+
+.ml-delta-box {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+  gap: 4px;
+}
+
+.ml-delta-val {
+  font-size: 28px;
+  font-weight: 850;
+  line-height: 1.1;
+}
+
+/* Market Drivers Grid */
+.ml-drivers-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+.ml-driver-item {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 12px 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.ml-driver-name {
+  font-size: 13px;
+  color: #475569;
+  font-weight: 600;
+}
+
+.ml-driver-val {
+  font-size: 14px;
+  color: #0f172a;
+  font-weight: 800;
+}
+
+/* Confidence Interval & Benchmarks Box */
+.ml-ci-banner {
+  background: #f0f9ff;
+  border: 1px solid #bae6fd;
+  border-radius: 12px;
+  padding: 16px 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.ml-ci-info h4 {
+  margin: 0 0 4px 0;
+  font-size: 14px;
+  font-weight: 800;
+  color: #0369a1;
+}
+
+.ml-ci-info p {
+  margin: 0;
+  font-size: 13px;
+  color: #0c4a6e;
+}
+
+.ml-badge-meta {
+  background: #e0f2fe;
+  color: #0369a1;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+/* Strategy Banner */
+.ml-strategy-card {
+  border-radius: 12px;
+  padding: 18px 22px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.ml-strategy-card.increase {
+  background: #f0fdf4;
+  border: 1px solid #86efac;
+}
+
+.ml-strategy-card.discount {
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+}
+
+.ml-strategy-card.parity {
+  background: #f8fafc;
+  border: 1px solid #cbd5e1;
+}
+
+.ml-strategy-text h4 {
+  margin: 0 0 2px 0;
+  font-size: 15px;
+  font-weight: 800;
+  color: #0f172a;
+}
+
+.ml-strategy-text p {
+  margin: 0;
+  font-size: 13px;
+  color: #475569;
+}
+
+.ml-strategy-badge {
+  padding: 6px 14px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.ml-strategy-badge.increase { background: #dcfce7; color: #15803d; }
+.ml-strategy-badge.discount { background: #fef3c7; color: #b45309; }
+.ml-strategy-badge.parity { background: #e2e8f0; color: #334155; }
+
+@media (max-width: 840px) {
+  .ml-hero-grid {
+    grid-template-columns: 1fr;
+  }
+  .ml-strategy-card {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+  .ml-ci-banner {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
+}

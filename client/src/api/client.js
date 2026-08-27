@@ -11,7 +11,7 @@ const API_BASE_URL =
 
 const BASE = API_BASE_URL.replace(/\/$/, "");
 
-export async function apiRequest(endpoint, { method = "GET", token, body, timeoutMs = 1200 } = {}) {
+export async function apiRequest(endpoint, { method = "GET", token, body, timeoutMs = 10000 } = {}) {
   const headers = { "Content-Type": "application/json" };
   if (token) headers.Authorization = `Bearer ${token}`;
 

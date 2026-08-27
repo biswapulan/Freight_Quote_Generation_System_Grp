@@ -1,0 +1,75 @@
+{
+  "dataset_source": "freight_pricing_training_dataset_5000.xlsx",
+  "dataset_records": 5000,
+  "train_records": 4000,
+  "test_records": 1000,
+  "champion_model": "Gradient_Boosting_Regressor",
+  "champion_metrics": {
+    "MAE_INR": 5306.97,
+    "RMSE_INR": 11133.29,
+    "MAE_USD": 63.56,
+    "RMSE_USD": 133.33,
+    "R2_Score": 0.9792,
+    "MAPE_Percent": 5.54
+  },
+  "features": {
+    "categorical": [
+      "Origin",
+      "Destination",
+      "Transport_Mode",
+      "Cargo_Type",
+      "Container_Type",
+      "Season",
+      "Carrier"
+    ],
+    "numeric": [
+      "Weight_KG",
+      "Volume_CBM",
+      "Distance_KM",
+      "Fuel_Price",
+      "Transit_Days"
+    ]
+  },
+  "all_benchmarks": {
+    "OLS_Linear_Regression": {
+      "MAE_INR": 18897.95,
+      "RMSE_INR": 30008.08,
+      "MAE_USD": 226.32,
+      "RMSE_USD": 359.38,
+      "R2_Score": 0.8488,
+      "MAPE_Percent": 22.9
+    },
+    "Ridge_Regression": {
+      "MAE_INR": 18887.7,
+      "RMSE_INR": 30005.91,
+      "MAE_USD": 226.2,
+      "RMSE_USD": 359.35,
+      "R2_Score": 0.8488,
+      "MAPE_Percent": 22.87
+    },
+    "Extra_Trees_Regressor": {
+      "MAE_INR": 7072.96,
+      "RMSE_INR": 13520.83,
+      "MAE_USD": 84.71,
+      "RMSE_USD": 161.93,
+      "R2_Score": 0.9693,
+      "MAPE_Percent": 7.31
+    },
+    "Random_Forest_Regressor": {
+      "MAE_INR": 7662.6,
+      "RMSE_INR": 14451.47,
+      "MAE_USD": 91.77,
+      "RMSE_USD": 173.07,
+      "R2_Score": 0.9649,
+      "MAPE_Percent": 7.71
+    },
+    "Gradient_Boosting_Regressor": {
+      "MAE_INR": 5306.97,
+      "RMSE_INR": 11133.29,
+      "MAE_USD": 63.56,
+      "RMSE_USD": 133.33,
+      "R2_Score": 0.9792,
+      "MAPE_Percent": 5.54
+    }
+  }
+}
