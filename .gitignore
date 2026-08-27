@@ -29,3 +29,6 @@ Thumbs.db
 .vscode/*
 !.vscode/extensions.json
 .idea/
+
+# Milestone 3 Local Documentation (Not pushed to Git)
+milestone_3_docs/
