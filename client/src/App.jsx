@@ -14,6 +14,7 @@ import ShipmentPage from "./components/ShipmentPage";
 import ContactPage from "./components/ContactPage";
 import PageLoader from "./components/PageLoader";
 import CookieConsent from "./components/CookieConsent";
+import M3IntelligenceDashboard from "./components/M3IntelligenceDashboard";
 import { LocationProvider } from "./context/LocationContext";
 
 const INITIAL_LOAD_MS = 600;
@@ -57,6 +58,7 @@ function App() {
         <Route path="/tracking" element={<TrackingPage />} />
         <Route path="/shipment" element={<ShipmentPage />} />
         <Route path="/contact" element={<ContactPage />} />
+        <Route path="/m3-intelligence" element={<M3IntelligenceDashboard />} />
 
         <Route
           path="/dashboard"

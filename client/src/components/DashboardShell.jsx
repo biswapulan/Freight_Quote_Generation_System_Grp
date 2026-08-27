@@ -22,6 +22,7 @@ import AdminRateConfig from "./AdminRateConfig";
 import AdminUsers from "./AdminUsers";
 import AdminMasterData from "./AdminMasterData";
 import M1RouteDashboard from "./M1RouteDashboard";
+import M3IntelligenceDashboard from "./M3IntelligenceDashboard";
 import "./Logo.css";
 import "./DashboardShell.css";
 
@@ -30,6 +31,7 @@ import "./DashboardShell.css";
 const RETAIL_SECTIONS = [
   "Overview",
   "Generate Quote",
+  "M3 Intelligence",
   "Shipments History",
   "Saved Addresses",
   "Routes",
@@ -42,6 +44,7 @@ const RETAIL_SECTIONS = [
 const BUSINESS_SECTIONS = [
   "Overview",
   "New Quote",
+  "M3 Intelligence",
   "Company Shipments",
   "Bulk Quote",
   "Team Management",
@@ -56,6 +59,7 @@ const BUSINESS_SECTIONS = [
 const AGENT_SECTIONS = [
   "Overview",
   "M1 Route Intelligence",
+  "M3 Intelligence",
   "Quote Desk",
   "Shipment Dispatch",
   "Spot Rates",
@@ -69,6 +73,7 @@ const AGENT_SECTIONS = [
 
 const ADMIN_SECTIONS = [
   "Rate Config",
+  "M3 Intelligence",
   "User Management",
   "Master Data",
   "Routes",
@@ -199,7 +204,9 @@ export default function DashboardShell() {
         }`}
       >
         <RetailQuotesProvider>
-          {user.role === "admin" ? (
+          {activeItem.slug === "m3-intelligence" ? (
+            <M3IntelligenceDashboard />
+          ) : user.role === "admin" ? (
             activeItem.slug === "rate-config" || activeItem.slug === "overview" ? (
               <AdminRateConfig />
             ) : activeItem.slug === "user-management" ? (

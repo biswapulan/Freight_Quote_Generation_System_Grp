@@ -1,0 +1,175 @@
+/* M3IntelligenceDashboard.css - Matches platform enterprise design tokens */
+.m3-dashboard {
+  padding: 32px;
+  max-width: 1400px;
+  margin: 0 auto;
+  color: #0f172a;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.m3-header-banner {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: linear-gradient(135deg, #0b132b 0%, #1c2541 100%);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 18px;
+  padding: 28px 32px;
+  box-shadow: 0 10px 30px rgba(11, 19, 43, 0.25);
+}
+
+.m3-title-block h1 {
+  font-size: 26px;
+  font-weight: 800;
+  color: #ffffff;
+  margin: 0 0 6px 0;
+  letter-spacing: -0.4px;
+}
+
+.m3-title-block p {
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 14px;
+  margin: 0;
+}
+
+.m3-badge-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(0, 196, 159, 0.18);
+  color: #00e6b8;
+  border: 1px solid rgba(0, 196, 159, 0.35);
+  padding: 8px 16px;
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.m3-badge-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #00e6b8;
+  box-shadow: 0 0 8px #00e6b8;
+}
+
+/* Lane Selector / Filter Panel */
+.m3-filter-panel {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  padding: 24px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.03);
+}
+
+.m3-panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 18px;
+}
+
+.m3-panel-title {
+  font-size: 18px;
+  font-weight: 800;
+  color: #0f172a;
+  margin: 0;
+}
+
+.lane-pills-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
+.lane-pill-btn {
+  background: #f8fafc;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  padding: 10px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #334155;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: all 0.2s ease;
+}
+
+.lane-pill-btn:hover {
+  background: #f1f5f9;
+  border-color: #0284c7;
+  color: #0284c7;
+}
+
+.lane-pill-btn.active {
+  background: #e0f2fe;
+  border-color: #0284c7;
+  color: #0369a1;
+  font-weight: 700;
+}
+
+.m3-inputs-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 16px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 18px;
+}
+
+.m3-input-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.m3-input-field label {
+  font-size: 12.5px;
+  color: #475569;
+  font-weight: 700;
+}
+
+.m3-input-field input,
+.m3-input-field select {
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  color: #0f172a;
+  padding: 9px 12px;
+  border-radius: 8px;
+  font-size: 13.5px;
+  outline: none;
+  font-weight: 600;
+}
+
+.m3-input-field input:focus,
+.m3-input-field select:focus {
+  border-color: #0284c7;
+  box-shadow: 0 0 0 3px rgba(2, 132, 199, 0.15);
+}
+
+.m3-modules-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+@media (max-width: 768px) {
+  .m3-dashboard {
+    padding: 16px 12px;
+  }
+  .m3-header-banner {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 14px;
+    padding: 20px 18px;
+  }
+  .m3-title-block h1 {
+    font-size: 20px;
+  }
+}

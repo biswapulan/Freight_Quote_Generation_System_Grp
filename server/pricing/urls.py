@@ -1,4 +1,4 @@
-"""URL routes for quote generation/history and admin rate config."""
+"""URL routes for quote generation/history, admin rate config, and ML pricing engine."""
 
 from django.urls import path
 
@@ -12,6 +12,8 @@ from .views import (
     ValidateRateCardView,
     CommitRateCardView,
     RouteAgentView,
+    MLPricingPredictView,
+    MLPricingBenchmarkReportView,
 )
 
 urlpatterns = [
@@ -24,4 +26,7 @@ urlpatterns = [
     path("pricing/rate-cards/validate", ValidateRateCardView.as_view(), name="rate-cards-validate"),
     path("pricing/rate-cards/commit", CommitRateCardView.as_view(), name="rate-cards-commit"),
     path("pricing/route-recommendation/", RouteAgentView.as_view(), name="route-recommendation"),
+    path("pricing/ml-predict/", MLPricingPredictView.as_view(), name="pricing-ml-predict"),
+    path("pricing/ml-predict", MLPricingPredictView.as_view(), name="pricing-ml-predict-noslash"),
+    path("pricing/benchmarks/", MLPricingBenchmarkReportView.as_view(), name="pricing-benchmarks"),
 ]
