@@ -105,9 +105,6 @@ flowchart TD
 * Trained a **Gradient Boosted Regression Model** on 5,000 historical freight rate records (`freight_pricing_training_dataset_5000.xlsx`).
 * Achieves **$R^2 > 0.85$**, low MAE/RMSE, and provides real-time spot rate prediction APIs alongside a **Rule-vs-ML Pricing Comparison Card**.
 
-#### 5. 📑 13 Architecture Deliverables & 3 ADRs (`milestone_3_docs/`)
-* Formally packaged master architectural blueprints, requirements matrix, API catalogs, database entity schemas, test plans, and Architectural Decision Records (`ADRs/`).
-
 ---
 
 ## 👥 Role-Based Feature Matrix
@@ -220,50 +217,18 @@ Freight_Quote_Generation_System_Grp/
 │       ├── test_m3_phase5_ml_pricing.py
 │       ├── test_m3_phase6_e2e_resiliency.py
 │       └── test_mentor_freight_system.py
-│
-├── ml/                                         # Machine Learning Pipelines & Datasets
-│   ├── data/
-│   │   └── mentor_freight_pricing_dataset.csv  # Processed CSV Dataset
-│   ├── models/
-│   │   └── freight_pricing_model.joblib        # Persisted Trained ML Model Artifact
-│   ├── reports/
-│   │   └── model_benchmarks.json               # Evaluation Metrics (R², MAE, RMSE)
-│   └── src/
-│       ├── dataset_generator.py                # Dataset Synthesis & Preprocessing
-│       └── train.py                            # Model Training & Evaluation Pipeline
-│
-└── milestone_3_docs/                           # Milestone 3 Production Specifications & ADRs
-    ├── 00_master_milestone_3_implementation_plan.md
-    ├── 01_phase_1_database_and_contracts_plan.md
-    ├── 02_phase_2_weather_intelligence_plan.md
-    ├── 03_phase_3_customs_rag_intelligence_plan.md
-    ├── 04_phase_4_shipment_risk_engine_plan.md
-    ├── 05_phase_5_ml_pricing_deliverable_plan.md
-    ├── 06_phase_6_testing_delivery_and_documentation_plan.md
-    ├── 07_phase_1_completion_and_architecture_review.md
-    ├── 08_phase_2_completion_and_architecture_review.md
-    ├── 09_phase_3_completion_and_architecture_review.md
-    ├── 10_phase_4_completion_and_architecture_review.md
-    ├── 11_phase_5_completion_and_architecture_review.md
-    ├── 12_phase_6_completion_and_architecture_review.md
-    ├── M3_Requirements.md
-    ├── M3_Architecture.md
-    ├── M3_Database_Design.md
-    ├── M3_API_Documentation.md
-    ├── Weather_Agent_Design.md
-    ├── Customs_Agent_Design.md
-    ├── Shipment_Risk_Scoring.md
-    ├── RAG_Design.md
-    ├── ML_Model_Evaluation.md
-    ├── Dataset_Documentation.md
-    ├── M3_Test_Plan.md
-    ├── M3_Test_Results.md
-    ├── M3_Definition_of_Done.md
-    └── ADRs/
-        ├── ADR_001_Hybrid_RAG_vs_Pure_FineTuning.md
-        ├── ADR_002_Gradient_Boosting_vs_Deep_Learning.md
-        └── ADR_003_MCDA_Risk_Policy_Gating.md
+└── ml/                                         # Machine Learning Pipelines & Datasets
+    ├── data/
+    │   └── mentor_freight_pricing_dataset.csv  # Processed CSV Dataset
+    ├── models/
+    │   └── freight_pricing_model.joblib        # Persisted Trained ML Model Artifact
+    ├── reports/
+    │   └── model_benchmarks.json               # Evaluation Metrics (R², MAE, RMSE)
+    └── src/
+        ├── dataset_generator.py                # Dataset Synthesis & Preprocessing
+        └── train.py                            # Model Training & Evaluation Pipeline
 ```
+
 
 ---
 
