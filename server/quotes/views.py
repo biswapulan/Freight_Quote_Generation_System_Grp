@@ -156,12 +156,14 @@ class AdminQuoteListView(APIView):
 
 
 class AdminQuoteStatusUpdateView(APIView):
-    """PATCH /admin/quotes/:id/status -> Approve or reject quote (Admin only)."""
+    """PATCH /admin/quotes/:id/status -> Approve, send, or reject quote (Admin / Agent)."""
     authentication_classes = []
     permission_classes = []
 
     def patch(self, request, quote_id):
-        user_id, role, email = require_admin(request)
+        user_id, role, email = get_current_user_and_role(request)
+        if role.lower() not in ["admin", "agent", "customs"]:
+            require_admin(request)
 
         try:
             quote = Quote.objects.select_related("shipment").get(id=quote_id)
@@ -171,26 +173,76 @@ class AdminQuoteStatusUpdateView(APIView):
         new_status = request.data.get("status")
         notes = request.data.get("admin_notes", request.data.get("notes", ""))
 
-        if new_status not in ["APPROVED", "REJECTED", "PENDING"]:
+        valid_statuses = [
+            "DRAFT", "GENERATED", "PENDING_REVIEW", "APPROVED",
+            "SENT", "ACCEPTED", "REJECTED", "EXPIRED",
+            # Legacy mappings
+            "PENDING", "APPROVED", "REJECTED",
+        ]
+
+        if not new_status or new_status.upper() not in valid_statuses:
             return Response(
-                {"error": "Invalid status. Must be APPROVED, REJECTED, or PENDING."},
+                {"error": f"Invalid status. Must be one of: {', '.join(valid_statuses)}"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        quote.status = new_status
+        new_status_norm = new_status.upper()
+        quote.status = new_status_norm
         if notes:
             quote.admin_notes = notes
         quote.save()
 
-        # Sync shipment status
-        if new_status == "APPROVED":
-            quote.shipment.status = "APPROVED"
-        elif new_status == "REJECTED":
-            quote.shipment.status = "REJECTED"
+        # Sync shipment status lifecycle
+        if new_status_norm in ["APPROVED", "SENT"]:
+            quote.shipment.status = "QUOTED"
+        elif new_status_norm == "ACCEPTED":
+            quote.shipment.status = "CLOSED"
+        elif new_status_norm == "REJECTED":
+            quote.shipment.status = "CANCELLED"
         quote.shipment.save(update_fields=["status"])
 
         serializer = QuoteSerializer(quote)
         return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+class CustomerQuoteDecisionView(APIView):
+    """POST /quotes/:id/decision -> Customer accepts or rejects quote (PDF Step 12)."""
+    authentication_classes = []
+    permission_classes = []
+
+    def post(self, request, quote_id):
+        user_id, role, email = get_current_user_and_role(request)
+
+        try:
+            quote = Quote.objects.select_related("shipment").get(id=quote_id)
+        except Quote.DoesNotExist:
+            raise NotFound("Quote not found.")
+
+        if role.lower() != "admin" and quote.customer_id != user_id:
+            raise PermissionDenied("Access denied: You cannot decide on another customer's quote.")
+
+        decision = (request.data.get("decision") or request.data.get("status") or "").upper()
+        if decision not in ["ACCEPTED", "REJECTED"]:
+            return Response(
+                {"error": "Invalid decision. Must be ACCEPTED or REJECTED."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        quote.status = decision
+        quote.save(update_fields=["status"])
+
+        if decision == "ACCEPTED":
+            quote.shipment.status = "CLOSED"
+        else:
+            quote.shipment.status = "CANCELLED"
+        quote.shipment.save(update_fields=["status"])
+
+        serializer = QuoteSerializer(quote)
+        return Response({
+            "message": f"Quote successfully {decision.lower()}.",
+            "quote": serializer.data,
+            "shipment_status": quote.shipment.status,
+        }, status=status.HTTP_200_OK)
 
 
 # ==============================================================================

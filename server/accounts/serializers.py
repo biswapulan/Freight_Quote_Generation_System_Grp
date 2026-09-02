@@ -4,8 +4,8 @@ from rest_framework import serializers
 
 # Roles a user may hold. Admin is deliberately excluded from the public
 # signup choices below — admins are promoted via the create_admin management
-# command, never self-registered.
-ACCOUNT_ROLES = ("retail", "business", "agent", "admin")
+# command or admin panel, never self-registered.
+ACCOUNT_ROLES = ("retail", "business", "agent", "admin", "customs")
 SELF_SIGNUP_ROLES = ("retail",)
 
 
