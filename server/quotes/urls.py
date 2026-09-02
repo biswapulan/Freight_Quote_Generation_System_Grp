@@ -23,6 +23,8 @@ urlpatterns = [
     path("quotes/my/", CustomerQuoteListView.as_view(), name="quotes-my-list-slash"),
     path("quotes/<str:quote_id>", CustomerQuoteListView.as_view(), name="quote-detail-by-id"),
     path("quotes/<str:quote_id>/", CustomerQuoteListView.as_view(), name="quote-detail-by-id-slash"),
+    path("quotes/<str:quote_id>/decision", CustomerQuoteDecisionView.as_view(), name="quote-customer-decision"),
+    path("quotes/<str:quote_id>/decision/", CustomerQuoteDecisionView.as_view(), name="quote-customer-decision-slash"),
     
     path("admin/quotes", AdminQuoteListView.as_view(), name="admin-quotes-list"),
     path("admin/quotes/", AdminQuoteListView.as_view(), name="admin-quotes-list-slash"),

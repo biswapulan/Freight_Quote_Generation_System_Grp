@@ -23,16 +23,18 @@ import AdminUsers from "./AdminUsers";
 import AdminMasterData from "./AdminMasterData";
 import M1RouteDashboard from "./M1RouteDashboard";
 import M3IntelligenceDashboard from "./M3IntelligenceDashboard";
+import CustomsOfficerPortal from "./CustomsOfficerPortal";
+import AIAgentMonitor from "./AIAgentMonitor";
 import "./Logo.css";
 import "./DashboardShell.css";
 
-// Sidebar section labels per account type — see the slug switch in <main>
-// further down for what each renders.
+// PDF Page 7 Specification Sidebar Sections per Role
 const RETAIL_SECTIONS = [
-  "Overview",
-  "Generate Quote",
+  "Dashboard",
+  "My Shipments",
+  "Request Quote",
+  "My Quotes",
   "M3 Intelligence",
-  "Shipments History",
   "Saved Addresses",
   "Routes",
   "Port Congestion",
@@ -42,26 +44,32 @@ const RETAIL_SECTIONS = [
 ];
 
 const BUSINESS_SECTIONS = [
-  "Overview",
-  "New Quote",
-  "M3 Intelligence",
-  "Company Shipments",
+  "Dashboard",
+  "My Shipments",
+  "Request Quote",
+  "My Quotes",
   "Bulk Quote",
+  "M3 Intelligence",
   "Team Management",
   "Invoices & Billing",
+  "Saved Addresses",
   "Routes",
   "Port Congestion",
   "Carriers",
-  "Company Profile",
+  "Profile",
   "Support",
 ];
 
 const AGENT_SECTIONS = [
-  "Overview",
-  "M1 Route Intelligence",
-  "M3 Intelligence",
-  "Quote Desk",
-  "Shipment Dispatch",
+  "Dashboard",
+  "Shipment Requests",
+  "All Shipments",
+  "Quote Requests",
+  "Quote Review",
+  "Generated Quotes",
+  "AI Pricing Analysis",
+  "Risk Analysis",
+  "Customers",
   "Spot Rates",
   "Client & Performance",
   "Routes",
@@ -71,11 +79,28 @@ const AGENT_SECTIONS = [
   "Support",
 ];
 
-const ADMIN_SECTIONS = [
-  "Rate Config",
+const CUSTOMS_SECTIONS = [
+  "Dashboard",
+  "Pending Reviews",
+  "Assigned Shipments",
+  "Document Verification",
+  "Customs Risk Flags",
+  "Completed Reviews",
   "M3 Intelligence",
-  "User Management",
+  "Profile",
+  "Support",
+];
+
+const ADMIN_SECTIONS = [
+  "Dashboard",
+  "Rate Config",
+  "AI Agent Monitor",
+  "AI Pricing Monitor",
+  "Risk Intelligence",
+  "Users",
   "Master Data",
+  "All Shipments",
+  "All Quotes",
   "Routes",
   "Port Congestion",
   "Carriers",
@@ -84,10 +109,11 @@ const ADMIN_SECTIONS = [
 ];
 
 const ROLE_LABELS = {
-  retail: "Retail Account",
-  business: "Business Account",
-  agent: "Logistics Agent",
-  admin: "Admin",
+  retail: "Customer (Retail)",
+  business: "Customer (Business)",
+  agent: "Freight Agent / Operations",
+  customs: "Customs Officer",
+  admin: "Administrator",
 };
 
 function slugify(label) {
@@ -118,14 +144,19 @@ export default function DashboardShell() {
 
   if (!user) return null;
 
+  const role = (user.role || "retail").toLowerCase();
+
   const sections =
-    user.role === "admin"
+    role === "admin"
       ? ADMIN_SECTIONS
-      : user.role === "agent"
+      : role === "customs" || role === "customs_officer"
+      ? CUSTOMS_SECTIONS
+      : role === "agent"
       ? AGENT_SECTIONS
-      : user.role === "business"
+      : role === "business"
       ? BUSINESS_SECTIONS
       : RETAIL_SECTIONS;
+
   const items = sections.map((label) => ({ label, slug: slugify(label) }));
 
   if (!section || !items.some((i) => i.slug === section)) {
@@ -145,7 +176,7 @@ export default function DashboardShell() {
     month: "short",
     year: "numeric",
   });
-  const timeLabel = now.toLocaleTimeString("en-GB"); // HH:MM:SS
+  const timeLabel = now.toLocaleTimeString("en-GB");
 
   return (
     <div className="dash-shell">
@@ -184,7 +215,7 @@ export default function DashboardShell() {
         <div className="dash-sidebar-footer">
           <div className="dash-user-info">
             <span className="dash-username">{user.full_name}</span>
-            <span className="dash-role">{ROLE_LABELS[user.role] || "Account"}</span>
+            <span className="dash-role">{ROLE_LABELS[role] || "Account"}</span>
           </div>
           <div className="dash-clock">
             <span className="dash-clock-date">{dateLabel}</span>
@@ -198,21 +229,42 @@ export default function DashboardShell() {
 
       <main
         className={`dash-content${
-          activeItem.slug === "generate-quote" || activeItem.slug === "new-quote" || activeItem.slug === "shipments-history"
+          activeItem.slug === "request-quote" ||
+          activeItem.slug === "generate-quote" ||
+          activeItem.slug === "my-shipments" ||
+          activeItem.slug === "my-quotes" ||
+          activeItem.slug === "shipments-history"
             ? " dash-content-flush"
             : ""
         }`}
       >
         <RetailQuotesProvider>
-          {activeItem.slug === "m3-intelligence" ? (
+          {/* Universal M3 / Telemetry Views */}
+          {activeItem.slug === "m3-intelligence" || activeItem.slug === "risk-intelligence" ? (
             <M3IntelligenceDashboard />
-          ) : user.role === "admin" ? (
-            activeItem.slug === "rate-config" || activeItem.slug === "overview" ? (
+          ) : activeItem.slug === "ai-agent-monitor" ? (
+            <AIAgentMonitor />
+          ) : activeItem.slug === "ai-pricing-monitor" ? (
+            <M3IntelligenceDashboard />
+          ) : /* Customs Officer Portal Views */
+          role === "customs" || role === "customs_officer" ? (
+            activeItem.slug === "profile" ? (
+              <RetailProfile />
+            ) : activeItem.slug === "support" ? (
+              <Support />
+            ) : (
+              <CustomsOfficerPortal />
+            )
+          ) : /* Admin Portal Views */
+          role === "admin" ? (
+            activeItem.slug === "dashboard" || activeItem.slug === "rate-config" ? (
               <AdminRateConfig />
-            ) : activeItem.slug === "user-management" ? (
+            ) : activeItem.slug === "users" || activeItem.slug === "user-management" ? (
               <AdminUsers />
             ) : activeItem.slug === "master-data" ? (
               <AdminMasterData />
+            ) : activeItem.slug === "all-shipments" || activeItem.slug === "all-quotes" ? (
+              <AgentQuoteDesk />
             ) : activeItem.slug === "routes" ? (
               <RetailRoutes />
             ) : activeItem.slug === "port-congestion" ? (
@@ -224,19 +276,21 @@ export default function DashboardShell() {
             ) : activeItem.slug === "support" ? (
               <Support />
             ) : (
-              <div className="dash-placeholder">
-                <h1>{activeItem.label}</h1>
-                <p>This section hasn&apos;t been built yet.</p>
-              </div>
+              <AdminRateConfig />
             )
-          ) : user.role === "agent" ? (
-            activeItem.slug === "overview" ? (
+          ) : /* Freight Agent Views */
+          role === "agent" ? (
+            activeItem.slug === "dashboard" ? (
               <AgentOverview />
-            ) : activeItem.slug === "m1-route-intelligence" ? (
-              <M1RouteDashboard />
-            ) : activeItem.slug === "quote-desk" ? (
+            ) : activeItem.slug === "shipment-requests" || activeItem.slug === "all-shipments" ? (
+              <AgentShipmentDispatch />
+            ) : activeItem.slug === "quote-requests" ||
+              activeItem.slug === "quote-review" ||
+              activeItem.slug === "generated-quotes" ? (
               <AgentQuoteDesk />
-            ) : activeItem.slug === "shipment-dispatch" ? (
+            ) : activeItem.slug === "ai-pricing-analysis" || activeItem.slug === "risk-analysis" ? (
+              <M3IntelligenceDashboard />
+            ) : activeItem.slug === "customers" ? (
               <AgentShipmentDispatch />
             ) : activeItem.slug === "spot-rates" ? (
               <AgentSpotRates />
@@ -253,36 +307,34 @@ export default function DashboardShell() {
             ) : activeItem.slug === "support" ? (
               <Support />
             ) : (
-              <div className="dash-placeholder">
-                <h1>{activeItem.label}</h1>
-                <p>This section hasn&apos;t been built yet.</p>
-              </div>
+              <AgentOverview />
             )
-          ) : activeItem.slug === "overview" && user.role !== "business" ? (
+          ) : /* Customer Portal Views (Retail & Business) */
+          activeItem.slug === "dashboard" ? (
             <RetailOverview />
-          ) : activeItem.slug === "routes" && user.role !== "business" ? (
-            <RetailRoutes />
-          ) : activeItem.slug === "port-congestion" && user.role !== "business" ? (
-            <RetailPortCongestion />
-          ) : activeItem.slug === "generate-quote" && user.role !== "business" ? (
+          ) : activeItem.slug === "request-quote" || activeItem.slug === "generate-quote" ? (
             <RetailGenerateQuote />
-          ) : activeItem.slug === "new-quote" ? (
-            <QuoteCalculator />
-          ) : activeItem.slug === "shipments-history" ? (
+          ) : activeItem.slug === "my-shipments" ||
+            activeItem.slug === "my-quotes" ||
+            activeItem.slug === "shipments-history" ||
+            activeItem.slug === "company-shipments" ? (
             <RetailShipmentsHistory />
+          ) : activeItem.slug === "bulk-quote" ? (
+            <QuoteCalculator />
           ) : activeItem.slug === "saved-addresses" ? (
             <SavedAddresses />
+          ) : activeItem.slug === "routes" ? (
+            <RetailRoutes />
+          ) : activeItem.slug === "port-congestion" ? (
+            <RetailPortCongestion />
           ) : activeItem.slug === "carriers" ? (
             <Carriers />
+          ) : activeItem.slug === "profile" ? (
+            <RetailProfile />
           ) : activeItem.slug === "support" ? (
             <Support />
-          ) : activeItem.slug === "profile" && user.role === "retail" ? (
-            <RetailProfile />
           ) : (
-            <div className="dash-placeholder">
-              <h1>{activeItem.label}</h1>
-              <p>This section hasn&apos;t been built yet.</p>
-            </div>
+            <RetailOverview />
           )}
         </RetailQuotesProvider>
       </main>

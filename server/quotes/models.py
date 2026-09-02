@@ -19,12 +19,19 @@ class Shipment(models.Model):
     Fields: id, customerId, origin, destination, cargoType, weight, volume, transportMode, status
     """
     STATUS_CHOICES = (
-        ("CREATED", "Created"),
+        ("DRAFT", "Draft"),
+        ("SUBMITTED", "Submitted"),
+        ("PROCESSING", "Processing"),
+        ("ANALYZED", "Analyzed"),
         ("QUOTED", "Quoted"),
-        ("APPROVED", "Approved"),
-        ("REJECTED", "Rejected"),
-        ("IN_TRANSIT", "In Transit"),
-        ("DELIVERED", "Delivered"),
+        ("CLOSED", "Closed"),
+        ("CANCELLED", "Cancelled"),
+        # Legacy mappings
+        ("CREATED", "Created (Legacy)"),
+        ("APPROVED", "Approved (Legacy)"),
+        ("REJECTED", "Rejected (Legacy)"),
+        ("IN_TRANSIT", "In Transit (Legacy)"),
+        ("DELIVERED", "Delivered (Legacy)"),
     )
 
     id = models.CharField(max_length=64, primary_key=True, default=generate_shipment_id)
@@ -36,7 +43,7 @@ class Shipment(models.Model):
     weight = models.FloatField(help_text="Weight in kilograms (kg)")
     volume = models.FloatField(help_text="Volume in cubic meters (cbm)")
     transport_mode = models.CharField(max_length=32, default="ocean", help_text="ocean, air, road, rail")
-    status = models.CharField(max_length=32, choices=STATUS_CHOICES, default="CREATED")
+    status = models.CharField(max_length=32, choices=STATUS_CHOICES, default="SUBMITTED")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -65,9 +72,16 @@ class Quote(models.Model):
     Fields: id, shipmentId, distance, basePrice, distanceCharge, weightCharge, fuelCharge, totalPrice, status
     """
     STATUS_CHOICES = (
-        ("PENDING", "Pending"),
+        ("DRAFT", "Draft"),
+        ("GENERATED", "Generated"),
+        ("PENDING_REVIEW", "Pending Review"),
         ("APPROVED", "Approved"),
+        ("SENT", "Sent to Customer"),
+        ("ACCEPTED", "Accepted by Customer"),
         ("REJECTED", "Rejected"),
+        ("EXPIRED", "Expired"),
+        # Legacy mappings
+        ("PENDING", "Pending (Legacy)"),
     )
 
     id = models.CharField(max_length=64, primary_key=True, default=generate_quote_id)
@@ -79,7 +93,7 @@ class Quote(models.Model):
     weight_charge = models.FloatField(help_text="Weight charge based on mass ($)")
     fuel_charge = models.FloatField(help_text="Fuel bunker / surcharge ($)")
     total_price = models.FloatField(help_text="Total calculated price ($)")
-    status = models.CharField(max_length=32, choices=STATUS_CHOICES, default="PENDING")
+    status = models.CharField(max_length=32, choices=STATUS_CHOICES, default="PENDING_REVIEW")
     admin_notes = models.TextField(blank=True, default="")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

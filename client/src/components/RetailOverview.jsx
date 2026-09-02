@@ -197,11 +197,12 @@ export default function RetailOverview() {
   );
 
   const stats = useMemo(() => {
-    const totalQuotes = quotations.length;
-    const booked = quotations.filter((q) => q.status === "Booked").length;
-    const awaitingRouting = quotations.filter((q) => q.status === "Draft").length;
+    const totalShipments = quotations.length;
+    const activeRequests = quotations.filter((q) => q.status === "Draft" || q.status === "Pending" || q.status === "SUBMITTED" || q.status === "PROCESSING").length;
+    const pendingQuotes = quotations.filter((q) => q.status === "Issued" || q.status === "PENDING_REVIEW" || q.status === "GENERATED" || q.status === "SENT").length;
+    const acceptedQuotes = quotations.filter((q) => q.status === "Booked" || q.status === "ACCEPTED" || q.status === "APPROVED").length;
     const totalSpend = quotations.reduce((sum, q) => sum + (q.totalNum || 0), 0);
-    return { totalQuotes, booked, awaitingRouting, totalSpend };
+    return { totalShipments, activeRequests, pendingQuotes, acceptedQuotes, totalSpend };
   }, [quotations]);
 
   const statusBreakdown = useMemo(() => {
@@ -238,47 +239,54 @@ export default function RetailOverview() {
       {/* 1. Welcome strip */}
       <section className="ov-hero">
         <div className="ov-hero-text">
-          <div className="ov-hero-kicker">Retail account</div>
+          <div className="ov-hero-eyebrow">{todayLabel}</div>
           <h1 className="ov-hero-title">Welcome back, {firstName}</h1>
-          <div className="ov-hero-date">{todayLabel}</div>
+          <p className="ov-hero-sub">
+            Track your freight requests, inspect AI price intelligence, and monitor global shipment compliance in real time.
+          </p>
         </div>
-        <Link to="/dashboard/generate-quote" className="ov-hero-cta">
-          <PlusCircle size={17} /> Generate quote
-        </Link>
+        <div className="ov-hero-actions">
+          <Link to="/dashboard/request-quote" className="ov-btn-primary">
+            <PlusCircle size={17} /> Request Quote
+          </Link>
+          <Link to="/dashboard/my-shipments" className="ov-btn-ghost">
+            View My Shipments <ArrowRight size={15} />
+          </Link>
+        </div>
       </section>
 
-      {/* 2. KPI row */}
+      {/* 2. KPI row (PDF Page 7 Specification) */}
       <section className="ov-kpis">
         <div className="ov-kpi-card">
           <div className="ov-kpi-icon tone-navy"><FileText size={20} /></div>
           <div className="ov-kpi-body">
-            <div className="ov-kpi-title">Total quotes</div>
-            <div className="ov-kpi-value">{stats.totalQuotes}</div>
+            <div className="ov-kpi-title">Total Shipments</div>
+            <div className="ov-kpi-value">{stats.totalShipments}</div>
             <div className="ov-kpi-sub slate">all time, this account</div>
-          </div>
-        </div>
-        <div className="ov-kpi-card">
-          <div className="ov-kpi-icon tone-green"><PackageCheck size={20} /></div>
-          <div className="ov-kpi-body">
-            <div className="ov-kpi-title">Booked shipments</div>
-            <div className="ov-kpi-value">{stats.booked}</div>
-            <div className="ov-kpi-sub green">confirmed & moving</div>
           </div>
         </div>
         <div className="ov-kpi-card">
           <div className="ov-kpi-icon tone-amber"><Clock3 size={20} /></div>
           <div className="ov-kpi-body">
-            <div className="ov-kpi-title">Awaiting routing</div>
-            <div className="ov-kpi-value">{stats.awaitingRouting}</div>
-            <div className="ov-kpi-sub slate">drafts needing a route</div>
+            <div className="ov-kpi-title">Active Requests</div>
+            <div className="ov-kpi-value">{stats.activeRequests}</div>
+            <div className="ov-kpi-sub slate">in routing & processing</div>
           </div>
         </div>
         <div className="ov-kpi-card">
           <div className="ov-kpi-icon tone-orange"><Wallet size={20} /></div>
           <div className="ov-kpi-body">
-            <div className="ov-kpi-title">Total spend</div>
-            <div className="ov-kpi-value">{INR.format(stats.totalSpend)}</div>
-            <div className="ov-kpi-sub slate">value of raised quotes</div>
+            <div className="ov-kpi-title">Pending Quotes</div>
+            <div className="ov-kpi-value">{stats.pendingQuotes}</div>
+            <div className="ov-kpi-sub slate">awaiting decision</div>
+          </div>
+        </div>
+        <div className="ov-kpi-card">
+          <div className="ov-kpi-icon tone-green"><PackageCheck size={20} /></div>
+          <div className="ov-kpi-body">
+            <div className="ov-kpi-title">Accepted Quotes</div>
+            <div className="ov-kpi-value">{stats.acceptedQuotes}</div>
+            <div className="ov-kpi-sub green">confirmed & moving</div>
           </div>
         </div>
       </section>
