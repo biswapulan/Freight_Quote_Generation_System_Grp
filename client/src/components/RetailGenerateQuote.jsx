@@ -3,12 +3,18 @@ import { useNavigate } from "react-router-dom";
 import Chart from "chart.js/auto";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
-import html2pdf from "html2pdf.js";
-import { Ship, Plane, Truck, Zap, Plus, Trash2, X, CheckCircle, FileText, Check, Bot, Cpu, Sparkles, Eye, ArrowRight, Clock, Anchor } from "lucide-react";
+import { Ship, Plane, Truck, Zap, Plus, Trash2, X, CheckCircle, FileText, Check, Bot, Cpu, Sparkles, Eye, ArrowRight, Clock, Anchor, MapPin, AlertTriangle, CheckCircle2, ShieldAlert, Navigation, RefreshCw } from "lucide-react";
 import { PORTS_MASTER, useRetailQuotes } from "../context/RetailQuotesContext";
 import { createSavedAddress, getSavedAddresses } from "../api/auth";
 import { confirmQuote, estimateQuote } from "../api/quotes";
 import { useAuth } from "../context/AuthContext";
+import {
+  validateAddressProximity,
+  findNearestPort,
+  resolveAddressCoordinates,
+  calculateGeoDistanceKm,
+  CATCHMENT_RADIUS_KM,
+} from "../utils/geoProximity";
 import "./RetailGenerateQuote.css";
 
 // Fix default Leaflet marker icons (Vite asset URL issue)
@@ -398,12 +404,18 @@ export default function RetailGenerateQuote() {
   const [addressModalType, setAddressModalType] = useState("");
   const [addressForm, setAddressForm] = useState(EMPTY_ADDRESS);
   const [savingAddress, setSavingAddress] = useState(false);
+  const [proximityModal, setProximityModal] = useState(null); // { type, address, port, check, nearestPort }
+  const [acknowledgedOverrides, setAcknowledgedOverrides] = useState({ pickup: false, delivery: false });
 
   const mapElRef = useRef(null);
   const mapInstanceRef = useRef(null);
   const originMarkerRef = useRef(null);
   const destMarkerRef = useRef(null);
   const polylineRef = useRef(null);
+  const pickupMarkerRef = useRef(null);
+  const deliveryMarkerRef = useRef(null);
+  const pickupLineRef = useRef(null);
+  const deliveryLineRef = useRef(null);
   const chartCanvasRef = useRef(null);
   const chartInstanceRef = useRef(null);
   const modalContentRef = useRef(null);
@@ -455,6 +467,22 @@ export default function RetailGenerateQuote() {
     setField(addressModalType === "pickup" ? "pickupAddr" : "deliveryAddr", newAddr.id);
     setAddressModalType("");
     setSavingAddress(false);
+
+    // Validate new address proximity immediately
+    const targetPort = addressModalType === "pickup" ? oPort : dPort;
+    if (targetPort) {
+      const check = validateAddressProximity(newAddr, targetPort, form.mode || "ocean");
+      if (!check.isValid) {
+        const nearest = findNearestPort(newAddr, availablePorts);
+        setProximityModal({
+          type: addressModalType,
+          address: newAddr,
+          port: targetPort,
+          check,
+          nearestPort: nearest,
+        });
+      }
+    }
   }
 
   useEffect(() => {
@@ -625,6 +653,145 @@ export default function RetailGenerateQuote() {
   const oPort = PORTS_MASTER.find((p) => p.id === form.originId);
   const dPort = PORTS_MASTER.find((p) => p.id === form.destId);
 
+  const selectedPickupObj = useMemo(() => {
+    return savedAddresses.find((a) => a.id === form.pickupAddr) || null;
+  }, [savedAddresses, form.pickupAddr]);
+
+  const selectedDeliveryObj = useMemo(() => {
+    return savedAddresses.find((a) => a.id === form.deliveryAddr) || null;
+  }, [savedAddresses, form.deliveryAddr]);
+
+  const pickupProximity = useMemo(() => {
+    if (!selectedPickupObj || !oPort) return null;
+    return validateAddressProximity(selectedPickupObj, oPort, form.mode || "ocean");
+  }, [selectedPickupObj, oPort, form.mode]);
+
+  const deliveryProximity = useMemo(() => {
+    if (!selectedDeliveryObj || !dPort) return null;
+    return validateAddressProximity(selectedDeliveryObj, dPort, form.mode || "ocean");
+  }, [selectedDeliveryObj, dPort, form.mode]);
+
+  function handleSelectPickup(addrId) {
+    if (addrId === "ADD_NEW") {
+      openAddressModal("pickup");
+      return;
+    }
+    setField("pickupAddr", addrId);
+    setAcknowledgedOverrides((prev) => ({ ...prev, pickup: false }));
+
+    if (addrId && oPort) {
+      const addr = savedAddresses.find((a) => a.id === addrId);
+      if (addr) {
+        const check = validateAddressProximity(addr, oPort, form.mode || "ocean");
+        if (!check.isValid) {
+          const nearest = findNearestPort(addr, availablePorts);
+          setProximityModal({
+            type: "pickup",
+            address: addr,
+            port: oPort,
+            check,
+            nearestPort: nearest,
+          });
+        }
+      }
+    }
+  }
+
+  function handleSelectDelivery(addrId) {
+    if (addrId === "ADD_NEW") {
+      openAddressModal("delivery");
+      return;
+    }
+    setField("deliveryAddr", addrId);
+    setAcknowledgedOverrides((prev) => ({ ...prev, delivery: false }));
+
+    if (addrId && dPort) {
+      const addr = savedAddresses.find((a) => a.id === addrId);
+      if (addr) {
+        const check = validateAddressProximity(addr, dPort, form.mode || "ocean");
+        if (!check.isValid) {
+          const nearest = findNearestPort(addr, availablePorts);
+          setProximityModal({
+            type: "delivery",
+            address: addr,
+            port: dPort,
+            check,
+            nearestPort: nearest,
+          });
+        }
+      }
+    }
+  }
+
+  function handleOriginChange(newOriginId) {
+    setField("originId", newOriginId);
+    setAcknowledgedOverrides((prev) => ({ ...prev, pickup: false }));
+    const newPort = PORTS_MASTER.find((p) => p.id === newOriginId);
+    if (newPort && selectedPickupObj) {
+      const check = validateAddressProximity(selectedPickupObj, newPort, form.mode || "ocean");
+      if (!check.isValid) {
+        const nearest = findNearestPort(selectedPickupObj, availablePorts);
+        setProximityModal({
+          type: "pickup",
+          address: selectedPickupObj,
+          port: newPort,
+          check,
+          nearestPort: nearest,
+        });
+      }
+    }
+  }
+
+  function handleDestChange(newDestId) {
+    setField("destId", newDestId);
+    setAcknowledgedOverrides((prev) => ({ ...prev, delivery: false }));
+    const newPort = PORTS_MASTER.find((p) => p.id === newDestId);
+    if (newPort && selectedDeliveryObj) {
+      const check = validateAddressProximity(selectedDeliveryObj, newPort, form.mode || "ocean");
+      if (!check.isValid) {
+        const nearest = findNearestPort(selectedDeliveryObj, availablePorts);
+        setProximityModal({
+          type: "delivery",
+          address: selectedDeliveryObj,
+          port: newPort,
+          check,
+          nearestPort: nearest,
+        });
+      }
+    }
+  }
+
+  function switchPortToNearest(type, portId) {
+    if (type === "pickup") {
+      setField("originId", portId);
+    } else {
+      setField("destId", portId);
+    }
+    setProximityModal(null);
+  }
+
+  function acknowledgeProximityOverride(type) {
+    setAcknowledgedOverrides((prev) => ({ ...prev, [type]: true }));
+    setProximityModal(null);
+  }
+
+  function triggerProximityModal(type) {
+    const isPickup = type === "pickup";
+    const addr = isPickup ? selectedPickupObj : selectedDeliveryObj;
+    const port = isPickup ? oPort : dPort;
+    const check = isPickup ? pickupProximity : deliveryProximity;
+    if (addr && port && check) {
+      const nearest = findNearestPort(addr, availablePorts);
+      setProximityModal({
+        type,
+        address: addr,
+        port,
+        check,
+        nearestPort: nearest,
+      });
+    }
+  }
+
   // ---- Summary stats calculated for shipment enquiry payload ----
   const summaryStats = useMemo(() => {
     let totalContainers = 0;
@@ -670,29 +837,88 @@ export default function RetailGenerateQuote() {
     };
   }, []);
 
-  // ---- Leaflet map: update markers/route on port change ----
+  // ---- Leaflet map: update markers, linehaul corridor, and drayage connectors ----
   useEffect(() => {
     const map = mapInstanceRef.current;
-    if (!map || !oPort || !dPort) return;
+    if (!map) return;
 
     if (originMarkerRef.current) map.removeLayer(originMarkerRef.current);
     if (destMarkerRef.current) map.removeLayer(destMarkerRef.current);
     if (polylineRef.current) map.removeLayer(polylineRef.current);
+    if (pickupMarkerRef.current) map.removeLayer(pickupMarkerRef.current);
+    if (deliveryMarkerRef.current) map.removeLayer(deliveryMarkerRef.current);
+    if (pickupLineRef.current) map.removeLayer(pickupLineRef.current);
+    if (deliveryLineRef.current) map.removeLayer(deliveryLineRef.current);
 
-    originMarkerRef.current = L.marker([oPort.lat, oPort.lng]).addTo(map).bindPopup(oPort.name);
-    destMarkerRef.current = L.marker([dPort.lat, dPort.lng]).addTo(map).bindPopup(dPort.name);
+    const bounds = [];
 
-    polylineRef.current = L.polyline(
-      [
-        [oPort.lat, oPort.lng],
-        [(oPort.lat + dPort.lat) / 2 + 4, (oPort.lng + dPort.lng) / 2],
-        [dPort.lat, dPort.lng],
-      ],
-      { color: "#ff9800", weight: 3, dashArray: "6, 6" }
-    ).addTo(map);
+    if (oPort) {
+      originMarkerRef.current = L.marker([oPort.lat, oPort.lng]).addTo(map).bindPopup(`<b>Origin Hub:</b> ${oPort.name} (${oPort.code})`);
+      bounds.push([oPort.lat, oPort.lng]);
+    }
 
-    map.fitBounds(L.latLngBounds([[oPort.lat, oPort.lng], [dPort.lat, dPort.lng]]), { padding: [30, 30] });
-  }, [oPort, dPort]);
+    if (dPort) {
+      destMarkerRef.current = L.marker([dPort.lat, dPort.lng]).addTo(map).bindPopup(`<b>Destination Hub:</b> ${dPort.name} (${dPort.code})`);
+      bounds.push([dPort.lat, dPort.lng]);
+    }
+
+    if (oPort && dPort) {
+      polylineRef.current = L.polyline(
+        [
+          [oPort.lat, oPort.lng],
+          [(oPort.lat + dPort.lat) / 2 + 4, (oPort.lng + dPort.lng) / 2],
+          [dPort.lat, dPort.lng],
+        ],
+        { color: "#ff9800", weight: 3, dashArray: "6, 6" }
+      ).addTo(map);
+    }
+
+    // Pickup address marker and first-mile connector line
+    if (selectedPickupObj && oPort) {
+      const pCoords = resolveAddressCoordinates(selectedPickupObj);
+      if (pCoords) {
+        const isNearby = pickupProximity?.isValid;
+        pickupMarkerRef.current = L.circleMarker([pCoords.lat, pCoords.lng], {
+          radius: 7,
+          fillColor: isNearby ? "#16a34a" : "#dc2626",
+          color: "#ffffff",
+          weight: 2,
+          fillOpacity: 0.9,
+        }).addTo(map).bindPopup(`<b>Pickup Door:</b> ${selectedPickupObj.label || selectedPickupObj.city} (${pickupProximity?.distanceKm || 0} km from port)`);
+
+        pickupLineRef.current = L.polyline(
+          [[pCoords.lat, pCoords.lng], [oPort.lat, oPort.lng]],
+          { color: isNearby ? "#16a34a" : "#dc2626", weight: 2.5, dashArray: "4, 4" }
+        ).addTo(map);
+        bounds.push([pCoords.lat, pCoords.lng]);
+      }
+    }
+
+    // Delivery address marker and last-mile connector line
+    if (selectedDeliveryObj && dPort) {
+      const dCoords = resolveAddressCoordinates(selectedDeliveryObj);
+      if (dCoords) {
+        const isNearby = deliveryProximity?.isValid;
+        deliveryMarkerRef.current = L.circleMarker([dCoords.lat, dCoords.lng], {
+          radius: 7,
+          fillColor: isNearby ? "#0284c7" : "#dc2626",
+          color: "#ffffff",
+          weight: 2,
+          fillOpacity: 0.9,
+        }).addTo(map).bindPopup(`<b>Delivery Door:</b> ${selectedDeliveryObj.label || selectedDeliveryObj.city} (${deliveryProximity?.distanceKm || 0} km from port)`);
+
+        deliveryLineRef.current = L.polyline(
+          [[dPort.lat, dPort.lng], [dCoords.lat, dCoords.lng]],
+          { color: isNearby ? "#0284c7" : "#dc2626", weight: 2.5, dashArray: "4, 4" }
+        ).addTo(map);
+        bounds.push([dCoords.lat, dCoords.lng]);
+      }
+    }
+
+    if (bounds.length >= 2) {
+      map.fitBounds(L.latLngBounds(bounds), { padding: [35, 35] });
+    }
+  }, [oPort, dPort, selectedPickupObj, selectedDeliveryObj, pickupProximity, deliveryProximity]);
 
   // ---- Chart.js doughnut: init once ----
   useEffect(() => {
@@ -752,6 +978,21 @@ export default function RetailGenerateQuote() {
     const todayStr = getTodayStr();
     if (form.readyDate < todayStr) {
       setQuoteError("Ready date cannot be in the past. Please select today or a future date.");
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      return;
+    }
+
+    // Geospatial Proximity Guard
+    if (pickupProximity && !pickupProximity.isValid && !acknowledgedOverrides.pickup) {
+      triggerProximityModal("pickup");
+      setQuoteError(`Pickup address (${selectedPickupObj?.city || selectedPickupObj?.label || "Location"}) is ${pickupProximity.distanceKm} km away from ${oPort?.name}. Please review port proximity or acknowledge inter-state haulage.`);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      return;
+    }
+
+    if (deliveryProximity && !deliveryProximity.isValid && !acknowledgedOverrides.delivery) {
+      triggerProximityModal("delivery");
+      setQuoteError(`Delivery address (${selectedDeliveryObj?.city || selectedDeliveryObj?.label || "Location"}) is ${deliveryProximity.distanceKm} km away from ${dPort?.name}. Please review port proximity or acknowledge inter-state haulage.`);
       window.scrollTo({ top: 0, behavior: "smooth" });
       return;
     }
@@ -1026,7 +1267,7 @@ export default function RetailGenerateQuote() {
             <div className="form-row">
               <div className="form-group">
                 <label>Origin {form.mode === "ocean" ? "Seaport" : form.mode === "ground" ? "Inland Hub" : "Airport"} <span className="req">*</span></label>
-                <select className="form-select" value={form.originId} onChange={(e) => setField("originId", e.target.value)}>
+                <select className="form-select" value={form.originId} onChange={(e) => handleOriginChange(e.target.value)}>
                   <option value="" disabled>Select an origin terminal</option>
                   {availablePorts.map((p) => (
                     <option key={p.id} value={p.id}>{p.code} — {p.name}, {p.country} ({p.type})</option>
@@ -1036,7 +1277,7 @@ export default function RetailGenerateQuote() {
               </div>
               <div className="form-group">
                 <label>Destination {form.mode === "ocean" ? "Seaport" : form.mode === "ground" ? "Inland Hub" : "Airport"} <span className="req">*</span></label>
-                <select className="form-select" value={form.destId} onChange={(e) => setField("destId", e.target.value)}>
+                <select className="form-select" value={form.destId} onChange={(e) => handleDestChange(e.target.value)}>
                   <option value="" disabled>Select a destination terminal</option>
                   {availablePorts.map((p) => (
                     <option key={p.id} value={p.id}>{p.code} — {p.name}, {p.country} ({p.type})</option>
@@ -1052,28 +1293,46 @@ export default function RetailGenerateQuote() {
                   <label>Pickup address <span className="hint">(door pickup only)</span></label>
                   <button type="button" onClick={() => openAddressModal("pickup")} style={{ fontSize: "11.5px", color: "#ea580c", background: "none", border: "none", cursor: "pointer", fontWeight: "700" }}>+ Add Address</button>
                 </div>
-                <select className="form-select" value={form.pickupAddr} onChange={(e) => {
-                  if (e.target.value === "ADD_NEW") openAddressModal("pickup");
-                  else setField("pickupAddr", e.target.value);
-                }}>
+                <select className="form-select" value={form.pickupAddr} onChange={(e) => handleSelectPickup(e.target.value)}>
                   <option value="">Select a saved pickup address</option>
                   <option value="ADD_NEW">+ Enter &amp; Save New Address...</option>
                   {pickupAddresses.map((address) => <option key={address.id} value={address.id}>{address.label} — {address.city}, {address.country}</option>)}
                 </select>
+                {selectedPickupObj && oPort && pickupProximity && (
+                  <div
+                    className={`addr-proximity-badge ${pickupProximity.isValid ? "valid" : "warning"}`}
+                    onClick={() => !pickupProximity.isValid && triggerProximityModal("pickup")}
+                  >
+                    {pickupProximity.isValid ? (
+                      <><CheckCircle2 size={12} /> Within {pickupProximity.distanceKm} km of {oPort.code} ({form.mode === "ocean" ? "Standard Port Drayage" : "Terminal Feeder"})</>
+                    ) : (
+                      <><AlertTriangle size={12} /> {pickupProximity.distanceKm} km from {oPort.code} (Exceeds {pickupProximity.thresholdKm} km limit) — <span style={{ textDecoration: "underline", fontWeight: 700 }}>Review Proximity</span></>
+                    )}
+                  </div>
+                )}
               </div>
               <div className="form-group">
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                   <label>Delivery address <span className="hint">(door delivery only)</span> <span className="badge-new">NEW</span></label>
                   <button type="button" onClick={() => openAddressModal("delivery")} style={{ fontSize: "11.5px", color: "#ea580c", background: "none", border: "none", cursor: "pointer", fontWeight: "700" }}>+ Add Address</button>
                 </div>
-                <select className="form-select" value={form.deliveryAddr} onChange={(e) => {
-                  if (e.target.value === "ADD_NEW") openAddressModal("delivery");
-                  else setField("deliveryAddr", e.target.value);
-                }}>
+                <select className="form-select" value={form.deliveryAddr} onChange={(e) => handleSelectDelivery(e.target.value)}>
                   <option value="">Select a saved delivery address</option>
                   <option value="ADD_NEW">+ Enter &amp; Save New Address...</option>
                   {deliveryAddresses.map((address) => <option key={address.id} value={address.id}>{address.label} — {address.city}, {address.country}</option>)}
                 </select>
+                {selectedDeliveryObj && dPort && deliveryProximity && (
+                  <div
+                    className={`addr-proximity-badge ${deliveryProximity.isValid ? "valid" : "warning"}`}
+                    onClick={() => !deliveryProximity.isValid && triggerProximityModal("delivery")}
+                  >
+                    {deliveryProximity.isValid ? (
+                      <><CheckCircle2 size={12} /> Within {deliveryProximity.distanceKm} km of {dPort.code} ({form.mode === "ocean" ? "Standard Port Drayage" : "Terminal Feeder"})</>
+                    ) : (
+                      <><AlertTriangle size={12} /> {deliveryProximity.distanceKm} km from {dPort.code} (Exceeds {deliveryProximity.thresholdKm} km limit) — <span style={{ textDecoration: "underline", fontWeight: 700 }}>Review Proximity</span></>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
             {addressesError && <p className="quote-api-error" role="alert">{addressesError}</p>}
@@ -1464,6 +1723,111 @@ export default function RetailGenerateQuote() {
                 <button type="submit" className="btn-orange-primary" disabled={savingAddress}>{savingAddress ? "Saving address..." : "Save address"}</button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* PROXIMITY & CATCHMENT DISCLAIMER MODAL */}
+      {proximityModal && (
+        <div className="modal-overlay" onClick={() => setProximityModal(null)}>
+          <div className="modal-content proximity-modal-content" onClick={(e) => e.stopPropagation()}>
+            <button type="button" className="modal-close" onClick={() => setProximityModal(null)} aria-label="Close">
+              <X size={18} />
+            </button>
+
+            <div className="proximity-modal-header">
+              <div className="proximity-modal-icon">
+                <AlertTriangle size={24} />
+              </div>
+              <div>
+                <h3 className="proximity-modal-title">
+                  {proximityModal.type === "pickup" ? "Pickup Location Proximity Alert" : "Delivery Destination Proximity Alert"}
+                </h3>
+                <p className="proximity-modal-sub">
+                  {proximityModal.type === "pickup" ? "First-Mile Port Drayage Catchment Notice" : "Last-Mile Delivery Feeder Notice"}
+                </p>
+              </div>
+            </div>
+
+            <div className="proximity-route-card">
+              <div className="proximity-node-row">
+                <span className="proximity-node-lbl">Selected {proximityModal.type === "pickup" ? "Origin Terminal" : "Destination Terminal"}:</span>
+                <strong>{proximityModal.port.code} — {proximityModal.port.name}</strong>
+              </div>
+              <div className="proximity-node-row">
+                <span className="proximity-node-lbl">Selected {proximityModal.type === "pickup" ? "Pickup Address" : "Delivery Address"}:</span>
+                <strong>{proximityModal.address.label || proximityModal.address.city}, {proximityModal.address.state || proximityModal.address.country}</strong>
+              </div>
+            </div>
+
+            <div className="proximity-distance-banner">
+              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                <Navigation size={16} />
+                <span>
+                  Real Drayage Distance: <strong>{proximityModal.check.distanceKm} km</strong>
+                </span>
+              </div>
+              <span style={{ fontSize: "11px", fontWeight: 700, textTransform: "uppercase" }}>
+                Exceeds {proximityModal.check.thresholdKm} km limit
+              </span>
+            </div>
+
+            <p style={{ fontSize: "13px", color: "#475569", lineHeight: "1.5", margin: "12px 0 16px" }}>
+              {proximityModal.type === "pickup"
+                ? `Standard container drayage operates within regional freight corridors (max ${proximityModal.check.thresholdKm} km). Trucking cargo ${proximityModal.check.distanceKm} km directly to ${proximityModal.port.name.split(",")[0]} incurs high inter-state linehaul transit times and costs.`
+                : `Last-mile container delivery from ${proximityModal.port.name.split(",")[0]} to ${proximityModal.address.city || proximityModal.address.label} (${proximityModal.check.distanceKm} km) is outside the standard port delivery zone.`}
+            </p>
+
+            <div className="proximity-recommendations">
+              {proximityModal.nearestPort && proximityModal.nearestPort.id !== proximityModal.port.id && (
+                <div className="proximity-rec-card featured">
+                  <div>
+                    <div className="proximity-rec-title" style={{ display: "flex", alignItems: "center", gap: "6px", color: "#0369a1" }}>
+                      <Sparkles size={14} /> Recommended: Switch {proximityModal.type === "pickup" ? "Origin Port" : "Destination Port"}
+                    </div>
+                    <div className="proximity-rec-desc">
+                      Switch to <strong>{proximityModal.nearestPort.code} — {proximityModal.nearestPort.name}</strong> ({proximityModal.nearestPort.distanceKm} km away from address)
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    className="proximity-btn-switch"
+                    onClick={() => switchPortToNearest(proximityModal.type, proximityModal.nearestPort.id)}
+                  >
+                    <RefreshCw size={12} /> Switch to {proximityModal.nearestPort.code}
+                  </button>
+                </div>
+              )}
+
+              <div className="proximity-rec-card">
+                <div>
+                  <div className="proximity-rec-title">Change {proximityModal.type === "pickup" ? "Pickup" : "Delivery"} Address</div>
+                  <div className="proximity-rec-desc">
+                    Choose an address located in the {proximityModal.port.name.split(",")[0]} area.
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  className="btn-secondary-light"
+                  style={{ fontSize: "12px", padding: "6px 12px", display: "inline-flex", alignItems: "center", gap: "4px" }}
+                  onClick={() => {
+                    const t = proximityModal.type;
+                    setProximityModal(null);
+                    openAddressModal(t);
+                  }}
+                >
+                  <MapPin size={12} /> Pick Nearby Address
+                </button>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              className="proximity-override-link"
+              onClick={() => acknowledgeProximityOverride(proximityModal.type)}
+            >
+              I understand. Proceed with Long-Distance Inter-State Haulage (+₹35,000 feeder surcharge)
+            </button>
           </div>
         </div>
       )}
