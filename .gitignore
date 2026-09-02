@@ -25,10 +25,12 @@ npm-debug.log*
 
 # OS and editors
 .DS_Store
+._*
 Thumbs.db
 .vscode/*
 !.vscode/extensions.json
 .idea/
+.pytest_cache/
 
 # Milestone 3 Local Documentation (Not pushed to Git)
 milestone_3_docs/
