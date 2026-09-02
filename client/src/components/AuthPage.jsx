@@ -2,7 +2,7 @@ import "./Logo.css";
 import "./AuthPage.css";
 import React, { useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { FaEye, FaEyeSlash, FaCheck, FaEnvelope, FaLock, FaUser, FaArrowLeft, FaSpinner, FaShieldAlt, FaBoxes, FaGlobeAmericas } from "react-icons/fa";
+import { FaEye, FaEyeSlash, FaCheck, FaEnvelope, FaLock, FaUser, FaArrowLeft, FaSpinner, FaShieldAlt, FaBoxes, FaGlobeAmericas, FaCog, FaCrosshairs, FaBuilding, FaShoppingCart } from "react-icons/fa";
 import { login as loginRequest, signup, forgotPassword } from "../api/auth";
 import { useAuth } from "../context/AuthContext";
 import Logo from "./Logo";
@@ -263,11 +263,11 @@ Forgot password?
   </p>
   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
     {[
-      { label: "⚙️ Admin", email: "admin@freightai.com", color: "#dc2626" },
-      { label: "🎯 Agent", email: "agent@freightai.com", color: "#0284c7" },
-      { label: "🏢 Business", email: "business@freightai.com", color: "#7c3aed" },
-      { label: "🛒 Retail", email: "retail@freightai.com", color: "#059669" },
-    ].map(({ label, email, color }) => (
+      { label: "Admin", icon: <FaCog size={12} />, email: "admin@freightai.com", color: "#dc2626" },
+      { label: "Agent", icon: <FaCrosshairs size={12} />, email: "agent@freightai.com", color: "#0284c7" },
+      { label: "Business", icon: <FaBuilding size={12} />, email: "business@freightai.com", color: "#7c3aed" },
+      { label: "Retail", icon: <FaShoppingCart size={12} />, email: "retail@freightai.com", color: "#059669" },
+    ].map(({ label, icon, email, color }) => (
       <button
         key={email}
         type="button"
@@ -278,10 +278,14 @@ Forgot password?
           color: color,
           borderRadius: "8px",
           padding: "8px 12px",
+          cursor: "pointer",
           fontSize: "12px",
           fontWeight: "700",
-          cursor: "pointer",
-          transition: "all 0.2s",
+          display: "inline-flex",
+          alignItems: "center",
+          justifyContent: "center",
+          gap: "6px",
+          transition: "all 0.2s ease",
         }}
         onMouseOver={(e) => { e.currentTarget.style.background = color; e.currentTarget.style.color = "#fff"; }}
         onMouseOut={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = color; }}

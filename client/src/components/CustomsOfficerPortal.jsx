@@ -1,4 +1,13 @@
 import { useState, useEffect } from "react";
+import {
+  ShieldCheck,
+  CheckCircle2,
+  ClipboardList,
+  FileWarning,
+  AlertOctagon,
+  CheckCircle,
+  ArrowRight,
+} from "lucide-react";
 import { signOffCustoms } from "../api/customs";
 import "./CustomsOfficerPortal.css";
 
@@ -142,8 +151,10 @@ export default function CustomsOfficerPortal() {
     <div className="cop-container">
       <div className="cop-header">
         <div>
-          <span className="cop-title-badge">🛡️ Customs Officer Station</span>
-          <h1>Customs Compliance & Regulatory Gate</h1>
+          <span className="cop-title-badge">
+            <ShieldCheck size={13} /> Customs Officer Station
+          </span>
+          <h1>Customs Compliance &amp; Regulatory Gate</h1>
           <p className="cop-subtitle">
             Verify international trade compliance, HS code classifications, legal document checklists, and digital officer sign-off.
           </p>
@@ -151,15 +162,17 @@ export default function CustomsOfficerPortal() {
       </div>
 
       {actionStatus && (
-        <div style={{ padding: "12px 16px", background: "rgba(34, 197, 94, 0.15)", border: "1px solid rgba(34, 197, 94, 0.3)", borderRadius: "8px", color: "#4ade80", fontSize: "13px" }}>
-          ✅ {actionStatus}
+        <div style={{ padding: "12px 16px", background: "rgba(34, 197, 94, 0.15)", border: "1px solid rgba(34, 197, 94, 0.3)", borderRadius: "8px", color: "#4ade80", fontSize: "13px", display: "flex", alignItems: "center", gap: "8px" }}>
+          <CheckCircle2 size={16} /> {actionStatus}
         </div>
       )}
 
       {/* Metric Cards (PDF Page 7) */}
       <div className="cop-metrics-grid">
         <div className="cop-metric-card">
-          <div className="cop-metric-icon pending">📋</div>
+          <div className="cop-metric-icon pending">
+            <ClipboardList size={22} />
+          </div>
           <div className="cop-metric-info">
             <span className="cop-metric-val">{pendingCount}</span>
             <span className="cop-metric-label">Pending Reviews</span>
@@ -167,7 +180,9 @@ export default function CustomsOfficerPortal() {
         </div>
 
         <div className="cop-metric-card">
-          <div className="cop-metric-icon missing">⚠️</div>
+          <div className="cop-metric-icon missing">
+            <FileWarning size={22} />
+          </div>
           <div className="cop-metric-info">
             <span className="cop-metric-val">{missingDocCount}</span>
             <span className="cop-metric-label">Missing Documents</span>
@@ -175,7 +190,9 @@ export default function CustomsOfficerPortal() {
         </div>
 
         <div className="cop-metric-card">
-          <div className="cop-metric-icon highrisk">🚨</div>
+          <div className="cop-metric-icon highrisk">
+            <AlertOctagon size={22} />
+          </div>
           <div className="cop-metric-info">
             <span className="cop-metric-val">{highRiskCount}</span>
             <span className="cop-metric-label">High Risk Cargo</span>
@@ -183,7 +200,9 @@ export default function CustomsOfficerPortal() {
         </div>
 
         <div className="cop-metric-card">
-          <div className="cop-metric-icon completed">✅</div>
+          <div className="cop-metric-icon completed">
+            <CheckCircle size={22} />
+          </div>
           <div className="cop-metric-info">
             <span className="cop-metric-val">{completedCount}</span>
             <span className="cop-metric-label">Completed Today</span>
@@ -238,8 +257,8 @@ export default function CustomsOfficerPortal() {
               <tr>
                 <th>Shipment ID</th>
                 <th>Shipper</th>
-                <th>Route (Origin ➔ Dest)</th>
-                <th>Cargo & HS Code</th>
+                <th>Route (Origin to Dest)</th>
+                <th>Cargo &amp; HS Code</th>
                 <th>Documents Status</th>
                 <th>Customs Risk</th>
                 <th>Status</th>
@@ -251,7 +270,11 @@ export default function CustomsOfficerPortal() {
                 <tr key={s.id}>
                   <td><strong>{s.id}</strong></td>
                   <td>{s.customer}</td>
-                  <td>{s.origin} ➔ {s.destination}</td>
+                  <td>
+                    <span style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
+                      {s.origin} <ArrowRight size={12} /> {s.destination}
+                    </span>
+                  </td>
                   <td>
                     {s.cargoType}
                     <div style={{ fontSize: "11px", color: "#38bdf8", marginTop: "2px" }}>
@@ -295,7 +318,7 @@ export default function CustomsOfficerPortal() {
           <div className="cop-modal" onClick={(e) => e.stopPropagation()}>
             <h3>Customs Inspection & Verification: {selectedShipment.id}</h3>
             <p style={{ margin: 0, fontSize: "13px", color: "#94a3b8" }}>
-              Shipper: <strong>{selectedShipment.customer}</strong> | Route: {selectedShipment.origin} ➔ {selectedShipment.destination}
+              Shipper: <strong>{selectedShipment.customer}</strong> | Route: {selectedShipment.origin} to {selectedShipment.destination}
             </p>
 
             <div style={{ fontSize: "12px", color: "#38bdf8" }}>

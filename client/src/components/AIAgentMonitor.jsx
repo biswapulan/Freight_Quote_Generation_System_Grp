@@ -1,4 +1,17 @@
 import { useState, useEffect } from "react";
+import {
+  Cpu,
+  Compass,
+  CircleDollarSign,
+  CloudRain,
+  FileCheck2,
+  ShieldCheck,
+  Activity,
+  ArrowRight,
+  Package,
+  Target,
+  RefreshCw,
+} from "lucide-react";
 import "./AIAgentMonitor.css";
 
 const AGENT_SPECIFICATIONS = [
@@ -6,7 +19,7 @@ const AGENT_SPECIFICATIONS = [
     id: "orchestrator",
     name: "AI Orchestrator",
     role: "Workflow Controller",
-    icon: "🧠",
+    icon: <Cpu size={22} color="#a855f7" />,
     desc: "Controls end-to-end quotation workflow, coordinating micro-agents in parallel and synthesizing unified output states.",
     output: "Combined Analysis State",
     status: "ONLINE",
@@ -18,7 +31,7 @@ const AGENT_SPECIFICATIONS = [
     id: "route",
     name: "Route Agent",
     role: "Geospatial & Transit Engine",
-    icon: "🗺️",
+    icon: <Compass size={22} color="#38bdf8" />,
     desc: "Computes multimodal route options, spatial distance, port node waypoints, and estimated transit days (ETA).",
     output: "Recommended Route & ETA",
     status: "ONLINE",
@@ -30,7 +43,7 @@ const AGENT_SPECIFICATIONS = [
     id: "pricing",
     name: "Pricing Agent",
     role: "ML Freight Prediction",
-    icon: "💵",
+    icon: <CircleDollarSign size={22} color="#4ade80" />,
     desc: "Evaluates 10-step itemized rule cost buildup against Gradient Boosted regression model trained on 5k freight records.",
     output: "Recommended Commercial Price",
     status: "ONLINE",
@@ -42,7 +55,7 @@ const AGENT_SPECIFICATIONS = [
     id: "weather",
     name: "Weather Agent",
     role: "Marine Telemetry & Swell",
-    icon: "🌊",
+    icon: <CloudRain size={22} color="#06b6d4" />,
     desc: "Samples oceanic coordinates via Open-Meteo API for wave heights, wind knots, severe storms, and transit delay risk.",
     output: "Weather Risk & Delay %",
     status: "ONLINE",
@@ -54,7 +67,7 @@ const AGENT_SPECIFICATIONS = [
     id: "customs",
     name: "Customs Agent",
     role: "Regulatory Hybrid RAG",
-    icon: "📜",
+    icon: <FileCheck2 size={22} color="#fbbf24" />,
     desc: "Performs BM25 + Vector embedding search across global trade regulations, validates HS codes, and checks embargoes.",
     output: "Customs Risk & Checklist",
     status: "ONLINE",
@@ -66,7 +79,7 @@ const AGENT_SPECIFICATIONS = [
     id: "risk",
     name: "Risk Agent",
     role: "Composite MCDA Engine",
-    icon: "🛡️",
+    icon: <ShieldCheck size={22} color="#f43f5e" />,
     desc: "Synthesizes multi-factor signals (Weather, Customs, Route, Port, Cargo) into a single explainable 0-100 score.",
     output: "Overall Risk + Recommendation",
     status: "ONLINE",
@@ -91,7 +104,9 @@ export default function AIAgentMonitor() {
     <div className="aam-container">
       <div className="aam-header">
         <div>
-          <span className="aam-title-badge">⚡ Live AI Telemetry</span>
+          <span className="aam-title-badge">
+            <Activity size={13} /> Live AI Telemetry
+          </span>
           <h1>AI Agent Performance & Health Monitor</h1>
           <p className="aam-subtitle">
             Real-time status, execution latencies, model versions, and architectural pipeline flow for the 6 AI sub-agents.
@@ -104,43 +119,71 @@ export default function AIAgentMonitor() {
 
       {/* Agent Workflow Pipeline Flow (PDF Page 6) */}
       <div className="aam-flow-card">
-        <h3 style={{ margin: 0, fontSize: "15px", fontWeight: 700 }}>
-          🔄 Real-Time Agent Execution Pipeline (PDF Architecture)
+        <h3 style={{ margin: 0, fontSize: "15px", fontWeight: 700, display: "flex", alignItems: "center", gap: "8px" }}>
+          <RefreshCw size={16} /> Real-Time Agent Execution Pipeline (PDF Architecture)
         </h3>
         <div className="aam-flow-steps">
           <div className="aam-step-node">
-            <div className="aam-step-circle">🧠</div>
+            <div className="aam-step-circle">
+              <Cpu size={20} color="#a855f7" />
+            </div>
             <span className="aam-step-name">Orchestrator</span>
           </div>
-          <div className="aam-arrow">➔</div>
+          <div className="aam-arrow">
+            <ArrowRight size={16} />
+          </div>
 
           <div className="aam-step-node">
-            <div className="aam-step-circle">🗺️</div>
+            <div className="aam-step-circle">
+              <Compass size={20} color="#38bdf8" />
+            </div>
             <span className="aam-step-name">Route Agent</span>
           </div>
-          <div className="aam-arrow">➔</div>
+          <div className="aam-arrow">
+            <ArrowRight size={16} />
+          </div>
 
           <div className="aam-step-node">
-            <div className="aam-step-circle">💵</div>
+            <div className="aam-step-circle">
+              <CircleDollarSign size={20} color="#4ade80" />
+            </div>
             <span className="aam-step-name">Pricing Agent</span>
           </div>
-          <div className="aam-arrow">➔</div>
+          <div className="aam-arrow">
+            <ArrowRight size={16} />
+          </div>
 
           <div className="aam-step-node">
-            <div className="aam-step-circle">🌊 📜</div>
+            <div className="aam-step-circle" style={{ display: "flex", gap: "4px" }}>
+              <CloudRain size={16} color="#06b6d4" />
+              <FileCheck2 size={16} color="#fbbf24" />
+            </div>
             <span className="aam-step-name">Weather + Customs</span>
           </div>
-          <div className="aam-arrow">➔</div>
+          <div className="aam-arrow">
+            <ArrowRight size={16} />
+          </div>
 
           <div className="aam-step-node">
-            <div className="aam-step-circle">🛡️</div>
+            <div className="aam-step-circle">
+              <ShieldCheck size={20} color="#f43f5e" />
+            </div>
             <span className="aam-step-name">Risk Agent</span>
           </div>
-          <div className="aam-arrow">➔</div>
+          <div className="aam-arrow">
+            <ArrowRight size={16} />
+          </div>
 
           <div className="aam-step-node">
-            <div className="aam-step-circle" style={{ background: "rgba(34, 197, 94, 0.2)", borderColor: "rgba(34, 197, 94, 0.4)" }}>📦</div>
-            <span className="aam-step-name" style={{ color: "#4ade80" }}>Quote Engine</span>
+            <div
+              className="aam-step-circle"
+              style={{ background: "rgba(34, 197, 94, 0.2)", borderColor: "rgba(34, 197, 94, 0.4)" }}
+            >
+              <Package size={20} color="#4ade80" />
+            </div>
+            <span className="aam-step-name" style={{ color: "#4ade80" }}>
+              Quote Engine
+            </span>
           </div>
         </div>
       </div>
@@ -183,7 +226,10 @@ export default function AIAgentMonitor() {
             </div>
 
             <div className="aam-agent-output">
-              <span>🎯 <strong>Output:</strong> {agent.output}</span>
+              <Target size={14} />
+              <span>
+                <strong>Output:</strong> {agent.output}
+              </span>
             </div>
           </div>
         ))}

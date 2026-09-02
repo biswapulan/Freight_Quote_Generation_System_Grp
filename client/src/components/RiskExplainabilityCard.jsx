@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Shield, RefreshCw } from "lucide-react";
+import { Shield, RefreshCw, CheckCircle2, AlertTriangle, Ban } from "lucide-react";
 import { assessShipmentRisk } from "../api/risk";
 import "./RiskExplainabilityCard.css";
 
@@ -145,8 +145,14 @@ export default function RiskExplainabilityCard({
 
         <div className="risk-kpi-box">
           <span className="risk-kpi-lbl">Quote Policy Action</span>
-          <span className="risk-kpi-val" style={{ fontSize: "15px", paddingTop: "6px" }}>
-            {isApproved ? "✅ Auto-Approved" : isReview ? "⚠️ Broker Review" : "⛔ Hard Blocked"}
+          <span className="risk-kpi-val" style={{ fontSize: "15px", paddingTop: "6px", display: "inline-flex", alignItems: "center", gap: "6px" }}>
+            {isApproved ? (
+              <><CheckCircle2 size={14} color="#16a34a" /> Auto-Approved</>
+            ) : isReview ? (
+              <><AlertTriangle size={14} color="#d97706" /> Broker Review</>
+            ) : (
+              <><Ban size={14} color="#dc2626" /> Hard Blocked</>
+            )}
           </span>
           <span style={{ fontSize: "12px", color: "#64748b" }}>
             {isApproved ? "Instant Binding Quote" : isReview ? "Contingency Required" : "Embargo / Breach"}

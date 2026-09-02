@@ -479,7 +479,11 @@ export default function AdminUsers() {
                     <td>
                       <div style={{ fontWeight: "700", color: "#0f172a" }}>{u.full_name}</div>
                       <div style={{ fontSize: "12px", color: "#64748b" }}>{u.email}</div>
-                      {u.company_name && <small style={{ color: "#0284c7" }}>🏢 {u.company_name}</small>}
+                      {u.company_name && (
+                        <small style={{ color: "#0284c7", display: "inline-flex", alignItems: "center", gap: "4px", marginTop: "2px" }}>
+                          <FaBuilding size={11} /> {u.company_name}
+                        </small>
+                      )}
                     </td>
                     <td>
                       {isEditingThis ? (

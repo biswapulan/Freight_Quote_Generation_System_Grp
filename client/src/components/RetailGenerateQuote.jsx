@@ -4,7 +4,7 @@ import Chart from "chart.js/auto";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import html2pdf from "html2pdf.js";
-import { Ship, Plane, Truck, Zap, Plus, Trash2, X, CheckCircle, FileText, Check, Bot, Cpu, Sparkles } from "lucide-react";
+import { Ship, Plane, Truck, Zap, Plus, Trash2, X, CheckCircle, FileText, Check, Bot, Cpu, Sparkles, Eye, ArrowRight, Clock, Anchor } from "lucide-react";
 import { PORTS_MASTER, useRetailQuotes } from "../context/RetailQuotesContext";
 import { createSavedAddress, getSavedAddresses } from "../api/auth";
 import { confirmQuote, estimateQuote } from "../api/quotes";
@@ -782,8 +782,8 @@ export default function RetailGenerateQuote() {
     const cargoType = form.chkHazardous ? "hazardous" : form.chkTemp ? "cold_chain" : form.mode === "express" ? "express" : "general";
 
     setAgentLogs([
-      `[00:00.1] 🚀 Retailer submitted shipment enquiry for lane: ${originName} → ${destName}`,
-      `[00:00.3] 📡 Ingesting specifications & dispatching to AI Quote Generation Agent...`,
+      `[00:00.1] [DISPATCH] Retailer submitted shipment enquiry for lane: ${originName} → ${destName}`,
+      `[00:00.3] [INGEST] Ingesting specifications & dispatching to AI Quote Generation Agent...`,
     ]);
 
     try {
@@ -792,9 +792,9 @@ export default function RetailGenerateQuote() {
       setAgentStage(2);
       setAgentLogs((prev) => [
         ...prev,
-        `[00:01.4] 🔍 Agent evaluating carrier tariffs, port handling fees & congestion indices...`,
-        `[00:01.9] 📦 Cargo specs: ${summaryStats.totalWeight.toLocaleString()} kg gross, ${summaryStats.containerSummaryStr}, ${cargoType.toUpperCase()} classification...`,
-        `[00:02.5] 📍 Resolving waypoint coordinates for route: ${oPort?.code || originKey} → ${dPort?.code || destKey}...`,
+        `[00:01.4] [AGENT] Agent evaluating carrier tariffs, port handling fees & congestion indices...`,
+        `[00:01.9] [SPECS] Cargo specs: ${summaryStats.totalWeight.toLocaleString()} kg gross, ${summaryStats.containerSummaryStr}, ${cargoType.toUpperCase()} classification...`,
+        `[00:02.5] [ROUTE] Resolving waypoint coordinates for route: ${oPort?.code || originKey} → ${dPort?.code || destKey}...`,
       ]);
 
       // Step 2: Agent evaluates request & route (1.8s)
@@ -802,8 +802,8 @@ export default function RetailGenerateQuote() {
       setAgentStage(3);
       setAgentLogs((prev) => [
         ...prev,
-        `[00:03.3] ⚙️ Applying Admin Rate Configuration matrix & BAF fuel indexation...`,
-        `[00:03.9] 🧮 Calculating linehaul distance tariff, handling, and guaranteed pricing...`,
+        `[00:03.3] [TARIFF] Applying Admin Rate Configuration matrix & BAF fuel indexation...`,
+        `[00:03.9] [COMPUTE] Calculating linehaul distance tariff, handling, and guaranteed pricing...`,
       ]);
 
       // Calculate dynamic authoritative rate based on Admin config & route parameters
@@ -866,8 +866,8 @@ export default function RetailGenerateQuote() {
       setAgentStage(3);
       setAgentLogs((prev) => [
         ...prev,
-        `[00:04.9] 📊 Authoritative dynamic rate computed: ₹${Math.round(result.breakdown?.total || 0).toLocaleString("en-IN")}`,
-        `[00:05.4] 🔒 Applying security checksum and locking guaranteed tariff...`,
+        `[00:04.9] [RATE] Authoritative dynamic rate computed: ₹${Math.round(result.breakdown?.total || 0).toLocaleString("en-IN")}`,
+        `[00:05.4] [SECURITY] Applying security checksum and locking guaranteed tariff...`,
       ]);
 
       if (addQuotation) {
@@ -898,8 +898,8 @@ export default function RetailGenerateQuote() {
       setAgentStage(4);
       setAgentLogs((prev) => [
         ...prev,
-        `[00:06.1] ✅ Quotation verified & certified by Agent: ${quoteCode}`,
-        `[00:06.6] 📋 Presenting official quotation to retailer...`,
+        `[00:06.1] [VERIFIED] Quotation verified & certified by Agent: ${quoteCode}`,
+        `[00:06.6] [READY] Presenting official quotation to retailer...`,
       ]);
 
       // Reveal quote to retailer (~0.8s)
@@ -973,7 +973,9 @@ export default function RetailGenerateQuote() {
           <h1 className="page-title">New shipment enquiry</h1>
         </div>
         <div className="action-btns">
-          <button type="button" className="btn-secondary-light" onClick={quickFillDemo} style={{ background: "#ea580c", color: "#ffffff", borderColor: "#ea580c", fontWeight: "700" }}>⚡ Quick Fill Demo Quote</button>
+          <button type="button" className="btn-secondary-light" onClick={quickFillDemo} style={{ background: "#ea580c", color: "#ffffff", borderColor: "#ea580c", fontWeight: "700", display: "inline-flex", alignItems: "center", gap: "6px" }}>
+            <Zap size={14} /> Quick Fill Demo Quote
+          </button>
           <button type="button" className="btn-secondary-light" onClick={saveDraft}>Save draft</button>
           <button type="button" className="btn-secondary-light" onClick={clearForm}>Clear</button>
         </div>
@@ -997,9 +999,18 @@ export default function RetailGenerateQuote() {
                     padding: "2px 9px",
                     borderRadius: "12px",
                     background: form.mode === "air" || form.mode === "express" ? "#e0f2fe" : form.mode === "ground" ? "#fef3c7" : "#e0e7ff",
-                    color: form.mode === "air" || form.mode === "express" ? "#0369a1" : form.mode === "ground" ? "#92400e" : "#3730a3"
+                    color: form.mode === "air" || form.mode === "express" ? "#0369a1" : form.mode === "ground" ? "#92400e" : "#3730a3",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "4px"
                   }}>
-                    {form.mode === "air" || form.mode === "express" ? "✈️ Airport Network" : form.mode === "ground" ? "🚛 Inland Depot Network" : "⚓ Seaport Network"}
+                    {form.mode === "air" || form.mode === "express" ? (
+                      <><Plane size={11} /> Airport Network</>
+                    ) : form.mode === "ground" ? (
+                      <><Truck size={11} /> Inland Depot Network</>
+                    ) : (
+                      <><Anchor size={11} /> Seaport Network</>
+                    )}
                   </span>
                 </div>
                 <p>
@@ -1344,8 +1355,8 @@ export default function RetailGenerateQuote() {
             <button type="button" className="btn-secondary-light" onClick={clearForm}>
               Reset Form
             </button>
-            <button type="button" className="btn-orange-primary" style={{ padding: "12px 28px", fontSize: "14px" }} onClick={handleGenerateQuote} disabled={generating}>
-              <Bot size={18} /> {generating ? "Quote Generation Agent Active..." : "Submit Enquiry to Quote Agent ➔"}
+            <button type="button" className="btn-orange-primary" style={{ padding: "12px 28px", fontSize: "14px", display: "inline-flex", alignItems: "center", gap: "8px" }} onClick={handleGenerateQuote} disabled={generating}>
+              <Bot size={18} /> {generating ? "Quote Generation Agent Active..." : "Submit Enquiry to Quote Agent"} {!generating && <ArrowRight size={16} />}
             </button>
           </div>
         </div>
@@ -1358,8 +1369,12 @@ export default function RetailGenerateQuote() {
 
             <div className="charge-basis-box">
               <span className="cb-label">Agent Status</span>
-              <strong className="cb-val" style={{ color: generatedQuote ? "#16a34a" : "#e65100" }}>
-                {generatedQuote ? "✓ Quote Evaluated & Ready" : "⏳ Pending Agent Evaluation"}
+              <strong className="cb-val" style={{ color: generatedQuote ? "#16a34a" : "#e65100", display: "inline-flex", alignItems: "center", gap: "6px" }}>
+                {generatedQuote ? (
+                  <><CheckCircle size={14} /> Quote Evaluated & Ready</>
+                ) : (
+                  <><Clock size={14} /> Pending Agent Evaluation</>
+                )}
               </strong>
             </div>
 
@@ -1377,8 +1392,8 @@ export default function RetailGenerateQuote() {
                 <div className="est-total-label">AGENT-DETERMINED ESTIMATE</div>
                 <div className="est-total-price">{money(generatedQuote.breakdown?.total || 0)}</div>
                 <div className="rate-badge">◆ CERTIFIED BY QUOTE AGENT ({`QT-${generatedQuote.id.slice(-8).toUpperCase()}`})</div>
-                <button type="button" className="btn-generate" onClick={() => setShowQuoteModal(true)}>
-                  👁️ View Full Quotation Offer
+                <button type="button" className="btn-generate" onClick={() => setShowQuoteModal(true)} style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", gap: "8px" }}>
+                  <Eye size={16} /> View Full Quotation Offer
                 </button>
               </>
             ) : (
@@ -1392,8 +1407,8 @@ export default function RetailGenerateQuote() {
                   </div>
                 </div>
 
-                <button type="button" className="btn-generate" onClick={handleGenerateQuote} disabled={generating}>
-                  {generating ? "Agent Evaluating Request..." : "➔ Submit to Quote Agent"}
+                <button type="button" className="btn-generate" onClick={handleGenerateQuote} disabled={generating} style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", gap: "8px" }}>
+                  {generating ? "Agent Evaluating Request..." : "Submit to Quote Agent"} {!generating && <ArrowRight size={16} />}
                 </button>
               </>
             )}
@@ -1662,7 +1677,9 @@ export default function RetailGenerateQuote() {
             </table>
 
             <div className="modal-prompt-box">
-              <div className="modal-prompt-title">🚢 Would you like to proceed with this shipment booking?</div>
+              <div className="modal-prompt-title" style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "8px" }}>
+                <Ship size={20} /> Would you like to proceed with this shipment booking?
+              </div>
               <p style={{ fontSize: 13, color: "#475569" }}>
                 Lock in this rate now. Clicking proceed will save this quotation to your Quotations Dashboard.
               </p>

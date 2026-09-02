@@ -16,6 +16,8 @@ import {
   PackageCheck,
   X,
   UserPlus,
+  Globe,
+  CheckCircle2,
 } from "lucide-react";
 import Chart from "chart.js/auto";
 import L from "leaflet";
@@ -158,7 +160,7 @@ export default function QuoteCalculator() {
       const saved = localStorage.getItem("freightai_agent_quotes");
       const list = saved ? JSON.parse(saved) : [];
       localStorage.setItem("freightai_agent_quotes", JSON.stringify([newReq, ...list]));
-      setSubmitMsg(`✅ Quote ${quote.id} submitted to Broker Desk for review & margin approval!`);
+      setSubmitMsg(`Quote ${quote.id} submitted to Broker Desk for review & margin approval!`);
       setTimeout(() => setSubmitMsg(""), 5000);
     } catch {}
   };
@@ -545,7 +547,9 @@ export default function QuoteCalculator() {
 
               <div className="qg-form-row qg-mt-3">
                 <div className="qg-form-group" style={{ flex: 1 }}>
-                  <label>🌐 Incoterm 2020 — Trade Cost Responsibility</label>
+                  <label style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
+                    <Globe size={14} /> Incoterm 2020 — Trade Cost Responsibility
+                  </label>
                   <select
                     className="qg-form-select"
                     value={incoterm}
@@ -757,7 +761,9 @@ export default function QuoteCalculator() {
                 borderRadius: "16px",
               }}
             >
-              <div style={{ fontSize: "40px", marginBottom: "12px" }}>📦</div>
+              <div style={{ marginBottom: "12px", display: "flex", justifyContent: "center" }}>
+                <Box size={44} color="#94a3b8" />
+              </div>
               <h3 style={{ fontSize: "17px", fontWeight: "700", color: "#0f172a", marginBottom: "6px" }}>
                 Form Not Filled
               </h3>
@@ -829,7 +835,7 @@ export default function QuoteCalculator() {
                     alignItems: "flex-start",
                   }}
                 >
-                  <span>📦</span>
+                  <Box size={16} style={{ flexShrink: 0, marginTop: "2px" }} />
                   <span>{quote.exwNotice}</span>
                 </div>
               )}
@@ -850,7 +856,7 @@ export default function QuoteCalculator() {
                     alignItems: "flex-start",
                   }}
                 >
-                  <span>✈️</span>
+                  <Plane size={16} style={{ flexShrink: 0, marginTop: "2px" }} />
                   <span>{quote.airLowerBreakNotice}</span>
                 </div>
               )}

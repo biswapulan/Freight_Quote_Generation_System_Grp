@@ -12,6 +12,7 @@ import {
   FaCode,
   FaCheckCircle,
   FaTrash,
+  FaFileImport,
 } from "react-icons/fa";
 import "./AdminMasterData.css";
 
@@ -392,9 +393,9 @@ export default function AdminMasterData() {
                 type="button"
                 className="agent-action-btn md-add-btn"
                 onClick={() => alert("Rate Card Two-Phase Importer:\n\nPhase 1 (Validate): Parsed 1,284 rows, 0 hard errors, 2 warnings.\nValidation Token: vt_m2_8f3a2c910b\n\nPhase 2 (Commit): Ready to commit rate card lines to MongoDB in single atomic transaction.")}
-                style={{ background: "#0284c7" }}
+                style={{ background: "#0284c7", display: "inline-flex", alignItems: "center", gap: "6px" }}
               >
-                📥 Import Rate Card (2-Phase)
+                <FaFileImport /> Import Rate Card (2-Phase)
               </button>
             )}
 
