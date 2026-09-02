@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import "./M1RouteDashboard.css";
-import { FaRoute, FaShip, FaClock, FaCheckCircle, FaExclamationCircle, FaExchangeAlt, FaTimes } from "react-icons/fa";
+import { FaRoute, FaShip, FaClock, FaCheckCircle, FaExclamationCircle, FaExchangeAlt, FaTimes, FaStar } from "react-icons/fa";
 
 const INITIAL_M1_SHIPMENTS = [
   {
@@ -168,7 +168,11 @@ export default function M1RouteDashboard() {
                   <div key={idx} className={`m1-route-card ${r.is_recommended ? "recommended" : ""}`}>
                     <div className="m1-route-header">
                       <span className="m1-route-code">{r.code}</span>
-                      {r.is_recommended && <span className="m1-badge-rec">🌟 RECOMMENDED ROUTE</span>}
+                      {r.is_recommended && (
+                        <span className="m1-badge-rec" style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}>
+                          <FaStar size={11} /> RECOMMENDED ROUTE
+                        </span>
+                      )}
                     </div>
                     <div className="m1-route-path">{r.path}</div>
                     <div className="m1-route-footer">

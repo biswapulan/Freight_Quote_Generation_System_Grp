@@ -119,7 +119,9 @@ export default function WeatherRiskPanel({
       {/* Severe Weather Warnings if Any */}
       {alerts && alerts.length > 0 && (
         <div className="weather-alert-stripe">
-          <strong>⚠️ {alerts[0].title || "Severe Weather Warning on Corridor"}:</strong> {alerts[0].message}
+          <strong style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
+            <AlertTriangle size={15} /> {alerts[0].title || "Severe Weather Warning on Corridor"}:
+          </strong> {alerts[0].message}
         </div>
       )}
 

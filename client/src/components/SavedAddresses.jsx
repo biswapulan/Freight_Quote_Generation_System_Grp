@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Phone, Mail, Clock, FileText } from "lucide-react";
 import { createSavedAddress, deleteSavedAddress, getSavedAddresses, updateSavedAddress } from "../api/auth";
 import { useAuth } from "../context/AuthContext";
 import "./SavedAddresses.css";
@@ -136,14 +137,22 @@ export default function SavedAddresses() {
                     {a.isDefault && <span className="addr-default-tag">Default</span>}
                   </div>
                   <p className="addr-contact">{a.contact}</p>
-                  <p className="addr-detail-text">📞 {a.phone} | ✉️ {a.email}</p>
+                  <p className="addr-detail-text" style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
+                    <span style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}><Phone size={12} /> {a.phone}</span>
+                    <span>|</span>
+                    <span style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}><Mail size={12} /> {a.email}</span>
+                  </p>
                   <p className="addr-detail-text addr-mt">{a.street}</p>
                   <p className="addr-detail-text">{a.city}, {a.state} - {a.postal}</p>
                   <p className="addr-detail-text addr-country">{a.country}</p>
 
                   <div className="addr-meta-box">
-                    <p className="addr-meta-hours">🕒 Hours: {a.hours || "—"}</p>
-                    <p className="addr-meta-notes">🏗️ Notes: {a.notes || "—"}</p>
+                    <p className="addr-meta-hours" style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+                      <Clock size={12} /> Hours: {a.hours || "—"}
+                    </p>
+                    <p className="addr-meta-notes" style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+                      <FileText size={12} /> Notes: {a.notes || "—"}
+                    </p>
                   </div>
                 </div>
                 <div className="addr-card-footer">

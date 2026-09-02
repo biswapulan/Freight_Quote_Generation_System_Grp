@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { AlertTriangle } from "lucide-react";
 import "./AgentQuoteDesk.css";
 
 const INITIAL_QUOTES = [
@@ -302,7 +303,9 @@ export default function AgentQuoteDesk() {
                   fontSize: "13px",
                 }}
               >
-                <strong>⚠️ HTTP 409 CONFLICT — QUOTE_BELOW_MARGIN_FLOOR</strong>
+                <strong style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
+                  <AlertTriangle size={15} /> HTTP 409 CONFLICT — QUOTE_BELOW_MARGIN_FLOOR
+                </strong>
                 <p style={{ margin: "4px 0 0 0" }}>
                   Requested margin ({marginPct}%) is below the resolved lane floor (12.0%). Below-floor quotes cannot be issued directly and require PRICING_MANAGER approval.
                 </p>
