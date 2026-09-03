@@ -102,26 +102,30 @@ export default function AIAgentMonitor() {
 
   return (
     <div className="aam-container">
-      <div className="aam-header">
-        <div>
-          <span className="aam-title-badge">
-            <Activity size={13} /> Live AI Telemetry
-          </span>
-          <h1>AI Agent Performance & Health Monitor</h1>
-          <p className="aam-subtitle">
-            Real-time status, execution latencies, model versions, and architectural pipeline flow for the 6 AI sub-agents.
+      {/* Top Banner */}
+      <div className="aam-header-banner">
+        <div className="aam-title-block">
+          <h1>AI Agent Performance &amp; Health Monitor</h1>
+          <p>
+            Real-time status, execution latencies, model versions, and architectural pipeline flow for the 6 autonomous AI sub-agents.
           </p>
         </div>
-        <div style={{ fontSize: "12px", color: "#94a3b8" }}>
-          Last heartbeat: <strong>{lastRefreshed.toLocaleTimeString()}</strong>
+        <div className="aam-badge-tag">
+          <span className="aam-badge-dot" />
+          <Activity size={14} /> Live AI Telemetry Active
         </div>
       </div>
 
-      {/* Agent Workflow Pipeline Flow (PDF Page 6) */}
+      {/* Agent Workflow Pipeline Flow */}
       <div className="aam-flow-card">
-        <h3 style={{ margin: 0, fontSize: "15px", fontWeight: 700, display: "flex", alignItems: "center", gap: "8px" }}>
-          <RefreshCw size={16} /> Real-Time Agent Execution Pipeline (PDF Architecture)
-        </h3>
+        <div className="aam-flow-header">
+          <h3 className="aam-flow-title">
+            <RefreshCw size={16} /> Real-Time Agent Execution Pipeline (System Architecture)
+          </h3>
+          <span className="aam-heartbeat-text">
+            Last heartbeat: <strong>{lastRefreshed.toLocaleTimeString()}</strong>
+          </span>
+        </div>
         <div className="aam-flow-steps">
           <div className="aam-step-node">
             <div className="aam-step-circle">
