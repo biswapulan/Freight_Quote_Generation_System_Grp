@@ -11,6 +11,11 @@ import {
   Package,
   Target,
   RefreshCw,
+  Layers,
+  TrendingUp,
+  Scale,
+  Sparkles,
+  CheckCircle2,
 } from "lucide-react";
 import "./AIAgentMonitor.css";
 
@@ -188,6 +193,132 @@ export default function AIAgentMonitor() {
             <span className="aam-step-name" style={{ color: "#4ade80" }}>
               Quote Engine
             </span>
+          </div>
+        </div>
+      </div>
+
+      {/* 2. How M1, M2 and M3 Connect Panel */}
+      <div className="aam-m-connections-card">
+        <div className="aam-m-header">
+          <div className="aam-m-title-block">
+            <h3 className="aam-m-title">
+              <Layers size={18} className="text-orange-500" /> How M1, M2 and M3 Connect in FreightAI
+            </h3>
+            <p className="aam-m-subtitle">
+              M1 creates operational data. M2 adds pricing intelligence. M3 adds risk intelligence. The Quote Engine combines all outputs.
+            </p>
+          </div>
+          <span className="aam-m-tag">
+            <Sparkles size={13} /> Multi-Module Pipeline
+          </span>
+        </div>
+
+        <div className="aam-m-grid">
+          {/* M1 Card */}
+          <div className="aam-m-card m1">
+            <div className="aam-m-card-top">
+              <div className="aam-m-pill m1">Milestone 1</div>
+              <Compass size={20} className="text-blue-500" />
+            </div>
+            <h4 className="aam-m-card-name">M1 — Core Quote Foundation</h4>
+            <p className="aam-m-card-desc">
+              Creates the shipment, validates information, determines route details and calculates an initial rule-based price.
+            </p>
+            <div className="aam-m-flow-box">
+              <span className="aam-m-flow-lbl">Sub-Workflow</span>
+              <div className="aam-m-flow-chain">
+                <span>Customer</span>
+                <ArrowRight size={12} />
+                <span>Create Shipment</span>
+                <ArrowRight size={12} />
+                <span>Validation</span>
+                <ArrowRight size={12} />
+                <span>Route / Distance / ETA</span>
+                <ArrowRight size={12} />
+                <span>Rule-Based Pricing</span>
+                <ArrowRight size={12} />
+                <strong className="text-blue-600">Draft Quote</strong>
+              </div>
+            </div>
+            <div className="aam-m-footer">
+              <CheckCircle2 size={13} className="text-blue-500" />
+              <span>Creates Operational Data</span>
+            </div>
+          </div>
+
+          {/* M2 Card */}
+          <div className="aam-m-card m2">
+            <div className="aam-m-card-top">
+              <div className="aam-m-pill m2">Milestone 2</div>
+              <CircleDollarSign size={20} className="text-emerald-500" />
+            </div>
+            <h4 className="aam-m-card-name">M2 — AI Pricing Intelligence</h4>
+            <p className="aam-m-card-desc">
+              Receives shipment and route data created by M1. A trained ML model predicts freight price from historical patterns.
+            </p>
+            <div className="aam-m-flow-box">
+              <span className="aam-m-flow-lbl">Sub-Workflow</span>
+              <div className="aam-m-flow-chain">
+                <span>M1 Data</span>
+                <ArrowRight size={12} />
+                <span>Feature Prep</span>
+                <ArrowRight size={12} />
+                <span>ML Model</span>
+                <ArrowRight size={12} />
+                <span>AI Predicted Price</span>
+                <ArrowRight size={12} />
+                <span>Compare Rule</span>
+                <ArrowRight size={12} />
+                <strong className="text-emerald-600">Recommended Price</strong>
+              </div>
+            </div>
+            <div className="aam-m-footer">
+              <CheckCircle2 size={13} className="text-emerald-500" />
+              <span>Adds Pricing Intelligence</span>
+            </div>
+          </div>
+
+          {/* M3 Card */}
+          <div className="aam-m-card m3">
+            <div className="aam-m-card-top">
+              <div className="aam-m-pill m3">Milestone 3</div>
+              <ShieldCheck size={20} className="text-purple-500" />
+            </div>
+            <h4 className="aam-m-card-name">M3 — Risk Intelligence</h4>
+            <p className="aam-m-card-desc">
+              Uses the same shipment context to analyze weather, customs and route risks and produces a composite risk score.
+            </p>
+            <div className="aam-m-flow-box">
+              <span className="aam-m-flow-lbl">Sub-Workflow</span>
+              <div className="aam-m-flow-chain">
+                <span>Shipment + Route</span>
+                <ArrowRight size={12} />
+                <span>Weather Analysis</span>
+                <ArrowRight size={12} />
+                <span>Customs Analysis</span>
+                <ArrowRight size={12} />
+                <span>Route Risk</span>
+                <ArrowRight size={12} />
+                <strong className="text-purple-600">Overall Risk Score</strong>
+              </div>
+            </div>
+            <div className="aam-m-footer">
+              <CheckCircle2 size={13} className="text-purple-500" />
+              <span>Adds Risk Intelligence</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Synthesis Callout */}
+        <div className="aam-m-synthesis">
+          <div className="aam-synthesis-icon">
+            <Package size={22} color="#ea580c" />
+          </div>
+          <div className="aam-synthesis-content">
+            <strong>Key Connection: Unified Quote Engine</strong>
+            <p>
+              <strong>M1</strong> creates operational data ➔ <strong>M2</strong> adds ML pricing intelligence ➔ <strong>M3</strong> adds multi-criteria risk intelligence. The <strong>Quote Engine</strong> combines all outputs into a single, audit-ready quotation.
+            </p>
           </div>
         </div>
       </div>
