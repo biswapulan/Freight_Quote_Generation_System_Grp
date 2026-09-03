@@ -8,62 +8,77 @@
  */
 
 export const WORKFLOW_STAGES = [
-  { id: "REQUESTED", label: "1. Requested", actor: "Customer", desc: "Shipment details & documents submitted" },
-  { id: "AI_ANALYZED", label: "2. AI Analyzed", actor: "AI Services", desc: "Pricing, route & risk engine computed" },
-  { id: "CUSTOMS_REVIEWED", label: "3. Customs Review", actor: "Customs Officer", desc: "Participates when customs review is required" },
-  { id: "FINAL_QUOTE_SENT", label: "4. Final Quote Sent", actor: "Freight Agent", desc: "Human review, commercial validation & margins" },
-  { id: "ACCEPTED", label: "5. Customer Decision", actor: "Customer", desc: "Customer views final quote and accepts / rejects" },
+  { id: "DRAFT", label: "1. Draft", actor: "Customer", desc: "Shipment details & documents submitted" },
+  { id: "GENERATED", label: "2. Generated", actor: "AI Services", desc: "M1, M2 & M3 pricing and risk computed" },
+  { id: "PENDING_REVIEW", label: "3. Pending Review", actor: "Customs / Agent", desc: "Customs document validation & operational check" },
+  { id: "APPROVED", label: "4. Approved", actor: "Freight Agent", desc: "Commercial margin validated and approved" },
+  { id: "SENT", label: "5. Sent", actor: "Freight Agent", desc: "Official final quote sent to customer" },
+  { id: "ACCEPTED", label: "6. Decision", actor: "Customer", desc: "Customer accepts or rejects quote" },
 ];
 
 export const STATUS_CONFIG = {
-  REQUESTED: {
-    label: "Requested",
-    badgeClass: "badge-requested",
+  DRAFT: {
+    label: "DRAFT",
+    badgeClass: "badge-draft",
     stepIndex: 1,
     color: "#0284c7",
     bg: "#e0f2fe",
   },
-  AI_ANALYZED: {
-    label: "AI Analyzed",
-    badgeClass: "badge-ai-analyzed",
+  GENERATED: {
+    label: "GENERATED",
+    badgeClass: "badge-generated",
     stepIndex: 2,
     color: "#6366f1",
     bg: "#e0e7ff",
   },
-  CUSTOMS_REVIEWED: {
-    label: "Customs Reviewed",
-    badgeClass: "badge-customs-reviewed",
+  PENDING_REVIEW: {
+    label: "PENDING_REVIEW",
+    badgeClass: "badge-pending-review",
     stepIndex: 3,
-    color: "#7c3aed",
-    bg: "#ede9fe",
+    color: "#d97706",
+    bg: "#fef3c7",
   },
   CUSTOMS_FLAGGED: {
-    label: "Customs Flagged (Hold)",
+    label: "CUSTOMS_FLAGGED",
     badgeClass: "badge-customs-flagged",
     stepIndex: 3,
     color: "#dc2626",
     bg: "#fee2e2",
   },
-  FINAL_QUOTE_SENT: {
-    label: "Final Quote Sent",
-    badgeClass: "badge-final-sent",
+  APPROVED: {
+    label: "APPROVED",
+    badgeClass: "badge-approved",
     stepIndex: 4,
-    color: "#d97706",
-    bg: "#fef3c7",
+    color: "#7c3aed",
+    bg: "#ede9fe",
+  },
+  SENT: {
+    label: "SENT",
+    badgeClass: "badge-sent",
+    stepIndex: 5,
+    color: "#0284c7",
+    bg: "#dbeafe",
   },
   ACCEPTED: {
-    label: "Accepted & Confirmed",
+    label: "ACCEPTED",
     badgeClass: "badge-accepted",
-    stepIndex: 5,
+    stepIndex: 6,
     color: "#059669",
     bg: "#ecfdf5",
   },
   REJECTED: {
-    label: "Rejected / Archived",
+    label: "REJECTED",
     badgeClass: "badge-rejected",
-    stepIndex: 5,
+    stepIndex: 6,
     color: "#991b1b",
     bg: "#fef2f2",
+  },
+  EXPIRED: {
+    label: "EXPIRED",
+    badgeClass: "badge-expired",
+    stepIndex: 6,
+    color: "#64748b",
+    bg: "#f1f5f9",
   },
 };
 
@@ -71,18 +86,20 @@ export const STATUS_CONFIG = {
  * Standardize any legacy status string to current workflow status
  */
 export function normalizeWorkflowStatus(rawStatus) {
-  if (!rawStatus) return "REQUESTED";
+  if (!rawStatus) return "DRAFT";
   const upper = String(rawStatus).toUpperCase().trim();
   
-  if (upper === "REQUESTED" || upper === "DRAFT" || upper === "PENDING") return "REQUESTED";
-  if (upper === "AI_ANALYZED" || upper === "GENERATED" || upper === "ANALYZED") return "AI_ANALYZED";
-  if (upper === "CUSTOMS_REVIEWED" || upper === "PENDING_REVIEW") return "CUSTOMS_REVIEWED";
+  if (upper === "DRAFT" || upper === "REQUESTED" || upper === "CREATED" || upper === "SUBMITTED") return "DRAFT";
+  if (upper === "GENERATED" || upper === "AI_ANALYZED" || upper === "ANALYZED") return "GENERATED";
+  if (upper === "PENDING_REVIEW" || upper === "CUSTOMS_REVIEWED" || upper === "PENDING" || upper === "REVIEW") return "PENDING_REVIEW";
   if (upper === "CUSTOMS_FLAGGED" || upper === "FLAGGED") return "CUSTOMS_FLAGGED";
-  if (upper === "FINAL_QUOTE_SENT" || upper === "ISSUED" || upper === "APPROVED" || upper === "SENT") return "FINAL_QUOTE_SENT";
+  if (upper === "APPROVED") return "APPROVED";
+  if (upper === "SENT" || upper === "FINAL_QUOTE_SENT" || upper === "ISSUED") return "SENT";
   if (upper === "ACCEPTED" || upper === "BOOKED" || upper === "CONFIRMED") return "ACCEPTED";
   if (upper === "REJECTED" || upper === "CANCELLED") return "REJECTED";
+  if (upper === "EXPIRED") return "EXPIRED";
   
-  return "REQUESTED";
+  return "DRAFT";
 }
 
 /**

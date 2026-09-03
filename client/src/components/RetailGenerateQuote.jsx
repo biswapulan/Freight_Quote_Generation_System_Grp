@@ -1105,7 +1105,7 @@ export default function RetailGenerateQuote() {
       setShowQuoteModal(false);
       setBookingRef(refCode);
       if (updateQuotationStatus) {
-        updateQuotationStatus(generatedQuote.id, "Booked");
+        updateQuotationStatus(generatedQuote.id, "DRAFT");
       }
       setShowSuccessModal(true);
       if (reloadQuotes) {
@@ -1115,7 +1115,7 @@ export default function RetailGenerateQuote() {
       setShowQuoteModal(false);
       setBookingRef(refCode);
       if (updateQuotationStatus) {
-        updateQuotationStatus(generatedQuote.id, "Booked");
+        updateQuotationStatus(generatedQuote.id, "DRAFT");
       }
       setShowSuccessModal(true);
       if (reloadQuotes) {
