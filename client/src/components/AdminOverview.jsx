@@ -12,6 +12,11 @@ import {
   ArrowRight,
   Activity,
   CheckCircle,
+  Package,
+  AlertTriangle,
+  BarChart3,
+  Sparkles,
+  Clock,
 } from "lucide-react";
 import {
   getPlatformQuotes,
@@ -43,50 +48,83 @@ export default function AdminOverview() {
         </div>
       </div>
 
-      {/* KPI Cards Grid */}
+      {/* KPI Cards Grid (6. Dashboard Architecture: Total Users, Shipments, Quotes, Pending Reviews, High Risk Alerts, AI Predictions, Analytics) */}
       <div className="admin-kpi-grid">
         <div className="admin-kpi-card">
           <div className="admin-kpi-top">
-            <span className="admin-kpi-label">Active Quotations</span>
-            <div className="admin-kpi-icon icon-orange">
-              <FileText size={20} />
+            <span className="admin-kpi-label">Total Users</span>
+            <div className="admin-kpi-icon icon-blue">
+              <Users size={18} />
             </div>
           </div>
-          <div className="admin-kpi-value">{quotes.length + 80} Live</div>
+          <div className="admin-kpi-value">1,420</div>
+          <div className="admin-kpi-sub">Customers, Agents &amp; Customs</div>
+        </div>
+
+        <div className="admin-kpi-card">
+          <div className="admin-kpi-top">
+            <span className="admin-kpi-label">Shipments</span>
+            <div className="admin-kpi-icon icon-orange">
+              <Package size={18} />
+            </div>
+          </div>
+          <div className="admin-kpi-value">348</div>
+          <div className="admin-kpi-sub">Active in global transit</div>
+        </div>
+
+        <div className="admin-kpi-card">
+          <div className="admin-kpi-top">
+            <span className="admin-kpi-label">Quotes</span>
+            <div className="admin-kpi-icon icon-emerald">
+              <FileText size={18} />
+            </div>
+          </div>
+          <div className="admin-kpi-value">{quotes.length + 80}</div>
           <div className="admin-kpi-sub">+18% this month</div>
         </div>
 
         <div className="admin-kpi-card">
           <div className="admin-kpi-top">
-            <span className="admin-kpi-label">Active Platform Users</span>
+            <span className="admin-kpi-label">Pending Reviews</span>
+            <div className="admin-kpi-icon icon-amber">
+              <Clock size={18} />
+            </div>
+          </div>
+          <div className="admin-kpi-value">14</div>
+          <div className="admin-kpi-sub">Awaiting agent/customs action</div>
+        </div>
+
+        <div className="admin-kpi-card">
+          <div className="admin-kpi-top">
+            <span className="admin-kpi-label">High Risk Alerts</span>
+            <div className="admin-kpi-icon" style={{ background: "#fee2e2", color: "#dc2626" }}>
+              <AlertTriangle size={18} />
+            </div>
+          </div>
+          <div className="admin-kpi-value">3</div>
+          <div className="admin-kpi-sub">Customs hold / Severe swell</div>
+        </div>
+
+        <div className="admin-kpi-card">
+          <div className="admin-kpi-top">
+            <span className="admin-kpi-label">AI Predictions</span>
+            <div className="admin-kpi-icon icon-purple">
+              <Sparkles size={18} />
+            </div>
+          </div>
+          <div className="admin-kpi-value">1,280</div>
+          <div className="admin-kpi-sub">ML Spot Rate Inferences</div>
+        </div>
+
+        <div className="admin-kpi-card">
+          <div className="admin-kpi-top">
+            <span className="admin-kpi-label">Analytics</span>
             <div className="admin-kpi-icon icon-blue">
-              <Users size={20} />
+              <BarChart3 size={18} />
             </div>
           </div>
-          <div className="admin-kpi-value">1,420</div>
-          <div className="admin-kpi-sub">Retail, Business, Agents &amp; Customs</div>
-        </div>
-
-        <div className="admin-kpi-card">
-          <div className="admin-kpi-top">
-            <span className="admin-kpi-label">Active AI Sub-Agents</span>
-            <div className="admin-kpi-icon icon-emerald">
-              <Cpu size={20} />
-            </div>
-          </div>
-          <div className="admin-kpi-value">6 Online</div>
-          <div className="admin-kpi-sub">100% Health &amp; Telemetry</div>
-        </div>
-
-        <div className="admin-kpi-card">
-          <div className="admin-kpi-top">
-            <span className="admin-kpi-label">Base Rate Currency</span>
-            <div className="admin-kpi-icon icon-orange">
-              <Sliders size={20} />
-            </div>
-          </div>
-          <div className="admin-kpi-value">INR (₹)</div>
-          <div className="admin-kpi-sub">Fuel BAF: 12.5%</div>
+          <div className="admin-kpi-value">98.4%</div>
+          <div className="admin-kpi-sub">Platform SLA Compliance</div>
         </div>
       </div>
 
