@@ -29,19 +29,15 @@ import AIAgentMonitor from "./AIAgentMonitor";
 import "./Logo.css";
 import "./DashboardShell.css";
 
-// PDF Page 7 Specification Sidebar Sections per Role
+// 6. Dashboard Architecture Navigation Specifications per Role
 const RETAIL_SECTIONS = [
   "Dashboard",
   "My Shipments",
   "Request Quote",
   "My Quotes",
-  "M3 Intelligence",
-  "Saved Addresses",
-  "Routes",
-  "Port Congestion",
-  "Carriers",
+  "Documents",
+  "Notifications",
   "Profile",
-  "Support",
 ];
 
 const BUSINESS_SECTIONS = [
@@ -49,16 +45,9 @@ const BUSINESS_SECTIONS = [
   "My Shipments",
   "Request Quote",
   "My Quotes",
-  "Bulk Quote",
-  "M3 Intelligence",
-  "Team Management",
-  "Invoices & Billing",
-  "Saved Addresses",
-  "Routes",
-  "Port Congestion",
-  "Carriers",
+  "Documents",
+  "Notifications",
   "Profile",
-  "Support",
 ];
 
 const AGENT_SECTIONS = [
@@ -68,17 +57,12 @@ const AGENT_SECTIONS = [
   "Quote Requests",
   "Quote Review",
   "Generated Quotes",
-  "Customs Clearance",
   "AI Pricing Analysis",
   "Risk Analysis",
   "Customers",
-  "Spot Rates",
-  "Client & Performance",
-  "Routes",
-  "Port Congestion",
-  "Carriers",
+  "Documents",
+  "Notifications",
   "Profile",
-  "Support",
 ];
 
 const CUSTOMS_SECTIONS = [
@@ -88,27 +72,32 @@ const CUSTOMS_SECTIONS = [
   "Document Verification",
   "Customs Risk Flags",
   "Completed Reviews",
-  "M3 Intelligence",
+  "Notifications",
   "Profile",
-  "Support",
 ];
 
 const ADMIN_SECTIONS = [
   "Dashboard",
-  "Rate Config",
-  "AI Agent Monitor",
-  "AI Pricing Monitor",
-  "Risk Intelligence",
-  "Customs Portal",
   "Users",
-  "Master Data",
+  "Customers",
+  "Freight Agents",
+  "Customs Officers",
+  "Roles & Permissions",
   "All Shipments",
   "All Quotes",
+  "AI Pricing Monitor",
+  "AI Agent Monitor",
+  "Risk Intelligence",
+  "Locations",
   "Routes",
-  "Port Congestion",
   "Carriers",
-  "Profile",
-  "Support",
+  "Container Types",
+  "Cargo Categories",
+  "Pricing Rules",
+  "Reports",
+  "Notifications",
+  "Settings",
+  "Audit Logs",
 ];
 
 const ROLE_LABELS = {
@@ -273,15 +262,15 @@ export default function DashboardShell() {
             )
           ) : /* Admin Portal Views */
           role === "admin" ? (
-            activeItem.slug === "dashboard" ? (
+            activeItem.slug === "dashboard" || activeItem.slug === "analytics" || activeItem.slug === "reports" || activeItem.slug === "audit-logs" || activeItem.slug === "settings" || activeItem.slug === "notifications" ? (
               <AdminOverview />
-            ) : activeItem.slug === "rate-config" ? (
+            ) : activeItem.slug === "rate-config" || activeItem.slug === "pricing-rules" ? (
               <AdminRateConfig />
             ) : activeItem.slug === "customs-portal" ? (
               <CustomsOfficerPortal />
-            ) : activeItem.slug === "users" || activeItem.slug === "user-management" ? (
+            ) : activeItem.slug === "users" || activeItem.slug === "customers" || activeItem.slug === "freight-agents" || activeItem.slug === "customs-officers" || activeItem.slug === "roles-and-permissions" ? (
               <AdminUsers />
-            ) : activeItem.slug === "master-data" ? (
+            ) : activeItem.slug === "master-data" || activeItem.slug === "locations" || activeItem.slug === "container-types" || activeItem.slug === "cargo-categories" ? (
               <AdminMasterData />
             ) : activeItem.slug === "all-shipments" || activeItem.slug === "all-quotes" ? (
               <AgentQuoteDesk />
@@ -300,9 +289,9 @@ export default function DashboardShell() {
             )
           ) : /* Freight Agent Views */
           role === "agent" ? (
-            activeItem.slug === "dashboard" ? (
+            activeItem.slug === "dashboard" || activeItem.slug === "notifications" ? (
               <AgentOverview />
-            ) : activeItem.slug === "shipment-requests" || activeItem.slug === "all-shipments" ? (
+            ) : activeItem.slug === "shipment-requests" || activeItem.slug === "all-shipments" || activeItem.slug === "documents" ? (
               <AgentShipmentDispatch />
             ) : activeItem.slug === "quote-requests" ||
               activeItem.slug === "quote-review" ||
@@ -332,11 +321,11 @@ export default function DashboardShell() {
               <AgentOverview />
             )
           ) : /* Customer Portal Views (Retail & Business) */
-          activeItem.slug === "dashboard" ? (
+          activeItem.slug === "dashboard" || activeItem.slug === "notifications" ? (
             <RetailOverview />
           ) : activeItem.slug === "request-quote" || activeItem.slug === "generate-quote" ? (
             <RetailGenerateQuote />
-          ) : activeItem.slug === "my-shipments" || activeItem.slug === "company-shipments" ? (
+          ) : activeItem.slug === "my-shipments" || activeItem.slug === "company-shipments" || activeItem.slug === "documents" ? (
             <RetailShipmentsHistory viewMode="shipments" />
           ) : activeItem.slug === "my-quotes" ||
             activeItem.slug === "shipments-history" ? (

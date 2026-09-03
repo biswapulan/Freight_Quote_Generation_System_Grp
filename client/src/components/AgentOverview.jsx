@@ -77,46 +77,46 @@ export default function AgentOverview() {
         </div>
       </div>
 
-      {/* KPI Cards Grid */}
+      {/* KPI Cards Grid (6. Dashboard Architecture) */}
       <div className="agent-kpi-grid">
         <div className="agent-kpi-card">
           <div className="agent-kpi-top">
-            <span className="agent-kpi-label">Pending Quote Reviews</span>
+            <span className="agent-kpi-label">New Requests</span>
+            <div className="agent-kpi-icon icon-cyan"><FaClipboardList /></div>
+          </div>
+          <div className="agent-kpi-value">8</div>
+          <div className="agent-kpi-sub">
+            <span className="trend-up">↑ 3 new</span> from customers today
+          </div>
+        </div>
+
+        <div className="agent-kpi-card">
+          <div className="agent-kpi-top">
+            <span className="agent-kpi-label">Pending Reviews</span>
             <div className="agent-kpi-icon icon-amber"><FaClipboardList /></div>
           </div>
           <div className="agent-kpi-value">14</div>
-          <div className="agent-kpi-sub">
-            <span className="trend-up">↑ 3 new</span> since last hour
-          </div>
+          <div className="agent-kpi-sub">Awaiting commercial sign-off</div>
         </div>
 
         <div className="agent-kpi-card">
           <div className="agent-kpi-top">
-            <span className="agent-kpi-label">Active Dispatches</span>
-            <div className="agent-kpi-icon icon-cyan"><FaShip /></div>
+            <span className="agent-kpi-label">High Risk Shipments</span>
+            <div className="agent-kpi-icon icon-purple" style={{ color: "#dc2626", background: "#fee2e2" }}><FaShip /></div>
           </div>
-          <div className="agent-kpi-value">38</div>
-          <div className="agent-kpi-sub">In-transit across 12 ports</div>
+          <div className="agent-kpi-value">2</div>
+          <div className="agent-kpi-sub">Customs / Weather caution</div>
         </div>
 
         <div className="agent-kpi-card">
           <div className="agent-kpi-top">
-            <span className="agent-kpi-label">Monthly Gross Margin</span>
+            <span className="agent-kpi-label">Quotes Sent Today</span>
             <div className="agent-kpi-icon icon-teal"><FaDollarSign /></div>
           </div>
-          <div className="agent-kpi-value">₹8,45,000</div>
+          <div className="agent-kpi-value">26</div>
           <div className="agent-kpi-sub">
-            <span className="trend-up">↑ 18%</span> vs target
+            <span className="trend-up">100% SLA</span> on-time delivery
           </div>
-        </div>
-
-        <div className="agent-kpi-card">
-          <div className="agent-kpi-top">
-            <span className="agent-kpi-label">Agent Commission (Est)</span>
-            <div className="agent-kpi-icon icon-purple"><FaWallet /></div>
-          </div>
-          <div className="agent-kpi-value">₹1,26,750</div>
-          <div className="agent-kpi-sub">15% commission rate</div>
         </div>
       </div>
 
