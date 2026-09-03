@@ -136,7 +136,7 @@ export default function AIAgentMonitor() {
             <div className="aam-step-circle">
               <Cpu size={20} color="#a855f7" />
             </div>
-            <span className="aam-step-name">Orchestrator</span>
+            <span className="aam-step-name">AI Orchestrator</span>
           </div>
           <div className="aam-arrow">
             <ArrowRight size={16} />
@@ -167,7 +167,7 @@ export default function AIAgentMonitor() {
               <CloudRain size={16} color="#06b6d4" />
               <FileCheck2 size={16} color="#fbbf24" />
             </div>
-            <span className="aam-step-name">Weather + Customs</span>
+            <span className="aam-step-name">Weather Agent + Customs Agent</span>
           </div>
           <div className="aam-arrow">
             <ArrowRight size={16} />
