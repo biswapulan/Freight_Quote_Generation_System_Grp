@@ -560,72 +560,6 @@ export default function RetailGenerateQuote() {
     );
   }
 
-  function quickFillDemo() {
-    const addresses = savedAddresses.length > 0 ? savedAddresses : getLocalSavedAddresses();
-    const pAddr = addresses.find((a) => a.type.includes("Pickup")) || addresses[0];
-    const dAddr = addresses.find((a) => a.type.includes("Delivery")) || addresses[1] || addresses[0];
-
-    const currentMode = form.mode || "ocean";
-    let o = "INMAA";
-    let d = "SGSIN";
-    let load = "fcl";
-    let packageType = "Container";
-    let cType = "40HC";
-    let desc = "40ft High Cube Container of Laptops & Accessories";
-
-    if (currentMode === "air" || currentMode === "express") {
-      o = "DEL";
-      d = "SIN-AIR";
-      load = "standard";
-      packageType = "Pallet";
-      cType = "ULD-AKE";
-      desc = "Commercial Avionics & High-Value Microchips";
-    } else if (currentMode === "ground") {
-      o = "IN-TKD";
-      d = "IN-BHI";
-      load = "ftl";
-      packageType = "Container";
-      cType = "32FT-MX";
-      desc = "Industrial FMCG & Automotive Assemblies";
-    }
-
-    setForm({
-      originId: o,
-      destId: d,
-      pickupAddr: pAddr?.id || "addr_1",
-      deliveryAddr: dAddr?.id || "addr_3",
-      readyDate: getTodayStr(),
-      deliveryDate: getPlus7DaysStr(),
-      mode: currentMode,
-      loadType: load,
-      incoterm: "CIF",
-      declaredVal: "500000",
-      currency: "INR",
-      specialInst: "Fragile cargo, keep dry and handle with care.",
-      chkFragile: true,
-      chkHazardous: false,
-      chkTemp: false,
-      chkInsurance: true,
-      unNumber: "",
-      imoClass: "",
-      custName: user?.full_name || "Anand Verma",
-      custCompany: "Verma Exports India",
-      custEmail: user?.email || "anand.verma@example.com",
-      custCountry: "India",
-    });
-    setItems([
-      {
-        id: Date.now(),
-        type: packageType,
-        containerType: cType,
-        count: "1",
-        weight: currentMode === "air" || currentMode === "express" ? "3200" : "12500",
-        desc: desc,
-        hs: "847130",
-      },
-    ]);
-  }
-
   function addItem() {
     setItems((list) => [
       ...list,
@@ -1214,9 +1148,6 @@ export default function RetailGenerateQuote() {
           <h1 className="page-title">New shipment enquiry</h1>
         </div>
         <div className="action-btns">
-          <button type="button" className="btn-secondary-light" onClick={quickFillDemo} style={{ background: "#ea580c", color: "#ffffff", borderColor: "#ea580c", fontWeight: "700", display: "inline-flex", alignItems: "center", gap: "6px" }}>
-            <Zap size={14} /> Quick Fill Demo Quote
-          </button>
           <button type="button" className="btn-secondary-light" onClick={saveDraft}>Save draft</button>
           <button type="button" className="btn-secondary-light" onClick={clearForm}>Clear</button>
         </div>
