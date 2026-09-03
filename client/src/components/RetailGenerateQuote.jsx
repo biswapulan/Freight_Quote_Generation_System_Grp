@@ -1973,14 +1973,14 @@ export default function RetailGenerateQuote() {
 
             <div className="modal-prompt-box">
               <div className="modal-prompt-title" style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "8px" }}>
-                <Ship size={20} /> Would you like to proceed with this shipment booking?
+                <Ship size={20} /> Would you like to proceed with this quote request?
               </div>
               <p style={{ fontSize: 13, color: "#475569" }}>
                 Lock in this rate now. Clicking proceed will save this quotation to your Quotations Dashboard.
               </p>
               <div className="modal-prompt-actions">
                 <button type="button" className="btn-confirm-booking" onClick={handleConfirmShipment} disabled={confirming}>
-                  <CheckCircle size={16} /> {confirming ? "Booking shipment..." : "Yes, Proceed to Book Shipment"}
+                  <CheckCircle size={16} /> {confirming ? "Submitting request..." : "Yes, Proceed to Request the Quote"}
                 </button>
                 <button type="button" className="btn-secondary-light" onClick={exportPDF}>
                   <FileText size={14} /> Download PDF Only
@@ -1998,13 +1998,13 @@ export default function RetailGenerateQuote() {
             <div style={{ width: 64, height: 64, background: "#dcfce7", color: "#16a34a", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 16px" }}>
               <Check size={36} />
             </div>
-            <h2 style={{ fontSize: 24, fontWeight: 800, color: "#0f172a" }}>Shipment Proceeded &amp; Saved!</h2>
+            <h2 style={{ fontSize: 24, fontWeight: 800, color: "#0f172a" }}>Quote Request Submitted &amp; Saved!</h2>
             <p style={{ color: "#64748b", fontSize: 14, margin: "8px 0 20px" }}>
-              Your quotation has been saved with status <strong>Booked / Proceeded</strong>.
+              Your quotation request has been saved with status <strong>Requested / In Review</strong>.
             </p>
 
             <div style={{ background: "#f8fafc", border: "1px dashed #cbd5e1", borderRadius: 12, padding: 16, marginBottom: 20 }}>
-              <span style={{ fontSize: 11, color: "#64748b", textTransform: "uppercase", fontWeight: 800 }}>BOOKING REFERENCE NO.</span>
+              <span style={{ fontSize: 11, color: "#64748b", textTransform: "uppercase", fontWeight: 800 }}>QUOTE REFERENCE NO.</span>
               <h3 style={{ fontSize: 26, color: "#ff9800", fontWeight: 800, marginTop: 2 }}>{bookingRef}</h3>
             </div>
 
@@ -2014,7 +2014,7 @@ export default function RetailGenerateQuote() {
               style={{ width: "100%", justifyContent: "center" }}
               onClick={() => {
                 setShowSuccessModal(false);
-                navigate("/dashboard/shipments-history");
+                navigate("/dashboard/my-quotes");
               }}
             >
               Go to Quotations Dashboard &rarr;
