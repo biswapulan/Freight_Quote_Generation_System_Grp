@@ -37,6 +37,13 @@ const STANDARD_PROFILES = {
     email: "retail@freightai.com",
     company_name: "",
   },
+  "customs@freightai.com": {
+    token: "freight_jwt_customs_session",
+    role: "customs",
+    full_name: "Chief Customs Officer",
+    email: "customs@freightai.com",
+    company_name: "Port Customs & Border Authority",
+  },
 };
 
 async function request(endpoint, data, { method = "POST", token, timeoutMs = 1200 } = {}) {

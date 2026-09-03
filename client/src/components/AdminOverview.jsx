@@ -158,6 +158,14 @@ export default function AdminOverview() {
             <ArrowRight size={16} />
           </Link>
 
+          <Link to="/dashboard/customs-portal" className="admin-shortcut-btn">
+            <div className="admin-shortcut-left">
+              <ShieldCheck size={18} className="text-cyan-500" />
+              <span>Customs &amp; Regulatory Portal</span>
+            </div>
+            <ArrowRight size={16} />
+          </Link>
+
           <Link to="/dashboard/master-data" className="admin-shortcut-btn">
             <div className="admin-shortcut-left">
               <Database size={18} className="text-emerald-500" />
