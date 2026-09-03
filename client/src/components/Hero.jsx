@@ -19,27 +19,23 @@ function Hero() {
 
       <div className="fa-hero-container">
         <div className="fa-hero-left">
-          <p className="fa-hero-tag">AI-Powered Enterprise Logistics Platform</p>
+          <p className="fa-hero-tag">Autonomous Multi-Agent Logistics Intelligence</p>
 
           <h1>
-            Intelligent Freight
-            <br />
-            Quotes, Instantly
+            Agentic AI for Maritime Freight Pricing and Route Optimization
           </h1>
 
           <p className="fa-hero-description">
-            Transform your logistics operations with AI-powered freight
-            quotation, real-time shipment tracking, and smart supply chain
-            management built for global businesses.
+            Autonomous multi-agent intelligence for global maritime supply chains—combining M1 geodesic route intelligence, M2 machine-learning spot pricing, and M3 multi-factor weather and customs risk governance.
           </p>
 
           <div className="fa-hero-buttons">
             <Link to="/services" className="fa-btn fa-btn-primary">
-              Get Quote
+              Get Instant Quote
               <FaArrowRight />
             </Link>
             <Link to="/login" className="fa-btn fa-btn-ghost">
-              Get Started
+              Open Portal
             </Link>
           </div>
         </div>
