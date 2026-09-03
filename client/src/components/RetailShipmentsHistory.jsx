@@ -390,7 +390,28 @@ export default function RetailShipmentsHistory({ viewMode = "quotes" }) {
                       <span className="bl-ref-sub">ETA: On schedule</span>
                     </td>
                     <td>
-                      <span className={`status-badge ${STATUS_CLASS[q.status] || "draft"}`}>{q.status}</span>
+                      {(() => {
+                        const norm = normalizeWorkflowStatus(q.status);
+                        const cfg = STATUS_CONFIG[norm] || { label: q.status, badgeClass: "status-tag-draft", color: "#64748b", bg: "#f1f5f9" };
+                        return (
+                          <span
+                            className="status-badge"
+                            style={{
+                              backgroundColor: cfg.bg || "#f1f5f9",
+                              color: cfg.color || "#0f172a",
+                              fontWeight: 700,
+                              fontSize: "0.75rem",
+                              letterSpacing: "0.03em",
+                              textTransform: "uppercase",
+                              border: `1px solid ${cfg.color}33`,
+                              padding: "4px 8px",
+                              borderRadius: "6px",
+                            }}
+                          >
+                            {cfg.label || norm}
+                          </span>
+                        );
+                      })()}
                     </td>
                     <td>
                       <button type="button" className="btn-open-quote" onClick={() => openQuoteDetail(q.quoteNo)}>
@@ -419,7 +440,28 @@ export default function RetailShipmentsHistory({ viewMode = "quotes" }) {
                     <td style={{ color: "#64748b" }}>{q.transit}</td>
                     <td style={{ fontWeight: 800 }}>{q.totalFormatted}</td>
                     <td>
-                      <span className={`status-badge ${STATUS_CLASS[q.status] || "draft"}`}>{q.status}</span>
+                      {(() => {
+                        const norm = normalizeWorkflowStatus(q.status);
+                        const cfg = STATUS_CONFIG[norm] || { label: q.status, badgeClass: "status-tag-draft", color: "#64748b", bg: "#f1f5f9" };
+                        return (
+                          <span
+                            className="status-badge"
+                            style={{
+                              backgroundColor: cfg.bg || "#f1f5f9",
+                              color: cfg.color || "#0f172a",
+                              fontWeight: 700,
+                              fontSize: "0.75rem",
+                              letterSpacing: "0.03em",
+                              textTransform: "uppercase",
+                              border: `1px solid ${cfg.color}33`,
+                              padding: "4px 8px",
+                              borderRadius: "6px",
+                            }}
+                          >
+                            {cfg.label || norm}
+                          </span>
+                        );
+                      })()}
                     </td>
                     <td style={{ color: "#64748b", fontSize: 12 }}>{q.created}</td>
                     <td>
