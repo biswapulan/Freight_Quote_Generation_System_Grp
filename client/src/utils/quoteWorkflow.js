@@ -83,13 +83,73 @@ export const STATUS_CONFIG = {
 };
 
 /**
+ * Canonical Shipment Status Flow (Section 10)
+ * DRAFT → SUBMITTED → PROCESSING → ANALYZED → QUOTED → CLOSED / CANCELLED
+ */
+export const SHIPMENT_STATUS_FLOW = [
+  "DRAFT",
+  "SUBMITTED",
+  "PROCESSING",
+  "ANALYZED",
+  "QUOTED",
+  "CLOSED",
+  "CANCELLED",
+];
+
+export const SHIPMENT_STATUS_CONFIG = {
+  DRAFT: { label: "DRAFT", color: "#64748b", bg: "#f1f5f9" },
+  SUBMITTED: { label: "SUBMITTED", color: "#0284c7", bg: "#e0f2fe" },
+  PROCESSING: { label: "PROCESSING", color: "#6366f1", bg: "#e0e7ff" },
+  ANALYZED: { label: "ANALYZED", color: "#d97706", bg: "#fef3c7" },
+  QUOTED: { label: "QUOTED", color: "#0284c7", bg: "#dbeafe" },
+  CLOSED: { label: "CLOSED", color: "#059669", bg: "#ecfdf5" },
+  CANCELLED: { label: "CANCELLED", color: "#991b1b", bg: "#fef2f2" },
+};
+
+export function normalizeShipmentStatus(raw) {
+  if (!raw) return "SUBMITTED";
+  const upper = String(raw).toUpperCase().trim();
+  if (upper === "DRAFT") return "DRAFT";
+  if (upper === "SUBMITTED" || upper === "CREATED" || upper === "REQUESTED") return "SUBMITTED";
+  if (upper === "PROCESSING" || upper === "IN_PROGRESS" || upper === "ROUTING") return "PROCESSING";
+  if (upper === "ANALYZED" || upper === "EVALUATED" || upper === "REVIEWED") return "ANALYZED";
+  if (upper === "QUOTED" || upper === "QUOTE_ISSUED" || upper === "OFFERED") return "QUOTED";
+  if (upper === "CLOSED" || upper === "ACCEPTED" || upper === "BOOKED" || upper === "COMPLETED") return "CLOSED";
+  if (upper === "CANCELLED" || upper === "REJECTED" || upper === "EXPIRED") return "CANCELLED";
+  return "SUBMITTED";
+}
+
+export function getShipmentStatusFromQuoteStatus(quoteStatus) {
+  const norm = normalizeWorkflowStatus(quoteStatus);
+  switch (norm) {
+    case "DRAFT":
+      return "SUBMITTED";
+    case "GENERATED":
+      return "PROCESSING";
+    case "PENDING_REVIEW":
+    case "CUSTOMS_FLAGGED":
+      return "ANALYZED";
+    case "APPROVED":
+    case "SENT":
+      return "QUOTED";
+    case "ACCEPTED":
+      return "CLOSED";
+    case "REJECTED":
+    case "EXPIRED":
+      return "CANCELLED";
+    default:
+      return "SUBMITTED";
+  }
+}
+
+/**
  * Standardize any legacy status string to current workflow status
  */
 export function normalizeWorkflowStatus(rawStatus) {
   if (!rawStatus) return "DRAFT";
   const upper = String(rawStatus).toUpperCase().trim();
   
-  if (upper === "DRAFT" || upper === "REQUESTED" || upper === "CREATED" || upper === "SUBMITTED") return "DRAFT";
+  if (upper === "DRAFT" || upper === "REQUESTED" || upper === "CREATED") return "DRAFT";
   if (upper === "GENERATED" || upper === "AI_ANALYZED" || upper === "ANALYZED") return "GENERATED";
   if (upper === "PENDING_REVIEW" || upper === "CUSTOMS_REVIEWED" || upper === "PENDING" || upper === "REVIEW") return "PENDING_REVIEW";
   if (upper === "CUSTOMS_FLAGGED" || upper === "FLAGGED") return "CUSTOMS_FLAGGED";

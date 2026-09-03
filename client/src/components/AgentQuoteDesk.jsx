@@ -31,10 +31,32 @@ export default function AgentQuoteDesk() {
     setPortFee(q.portFee || 15000);
   }
 
+  function handleApproveOnly() {
+    if (!activeModalQuote) return;
+    const finalAmount = calculateFinalCost(activeModalQuote, marginPct, fuelPct, portFee);
+    const updated = updateQuoteStatusInStore(
+      activeModalQuote.id || activeModalQuote.quoteNo,
+      "APPROVED",
+      {
+        marginPct: Number(marginPct),
+        fuelSurchargePct: Number(fuelPct),
+        portFee: Number(portFee),
+        totalNum: finalAmount,
+        totalFormatted: `₹ ${finalAmount.toLocaleString("en-IN")}`,
+        agentRemarks: `Commercial margin (${marginPct}%) approved by Operations Desk.`,
+        shipmentStatus: "ANALYZED",
+      }
+    );
+    setQuotes(updated);
+    setActionNotice(`Quote ${activeModalQuote.id || activeModalQuote.quoteNo} commercials APPROVED.`);
+    setActiveModalQuote(null);
+    setTimeout(() => setActionNotice(null), 4000);
+  }
+
   function handleSaveQuote() {
     if (!activeModalQuote) return;
     const finalAmount = calculateFinalCost(activeModalQuote, marginPct, fuelPct, portFee);
-    const newStatus = "FINAL_QUOTE_SENT";
+    const newStatus = "SENT";
 
     const updated = updateQuoteStatusInStore(
       activeModalQuote.id || activeModalQuote.quoteNo,
@@ -47,11 +69,12 @@ export default function AgentQuoteDesk() {
         totalFormatted: `₹ ${finalAmount.toLocaleString("en-IN")}`,
         agentRemarks: `Commercial margin (${marginPct}%) validated by Operations Desk. Final verified quote dispatched to customer.`,
         finalQuoteSentAt: new Date().toISOString(),
+        shipmentStatus: "QUOTED",
       }
     );
 
     setQuotes(updated);
-    setActionNotice(`Final Quotation for ${activeModalQuote.id || activeModalQuote.quoteNo} dispatched to Customer with status: FINAL_QUOTE_SENT`);
+    setActionNotice(`Final Quotation for ${activeModalQuote.id || activeModalQuote.quoteNo} dispatched to Customer with status: SENT`);
     setActiveModalQuote(null);
     setTimeout(() => setActionNotice(null), 4000);
   }
@@ -327,7 +350,7 @@ export default function AgentQuoteDesk() {
               </div>
             </div>
 
-            <div className="modal-actions" style={{ display: "flex", justifyContent: "flex-end", gap: "10px" }}>
+            <div className="modal-actions" style={{ display: "flex", justifyContent: "flex-end", gap: "10px", flexWrap: "wrap" }}>
               <button
                 type="button"
                 className="agent-btn-secondary"
@@ -337,11 +360,19 @@ export default function AgentQuoteDesk() {
               </button>
               <button
                 type="button"
+                className="agent-btn-secondary"
+                style={{ background: "#ede9fe", color: "#6d28d9", border: "1px solid #ddd6fe", display: "inline-flex", alignItems: "center", gap: "6px", fontWeight: "700" }}
+                onClick={handleApproveOnly}
+              >
+                <FileCheck size={15} /> Approve Commercials
+              </button>
+              <button
+                type="button"
                 className="agent-btn-primary"
-                style={{ background: "#d97706", display: "inline-flex", alignItems: "center", gap: "6px" }}
+                style={{ background: "#0284c7", display: "inline-flex", alignItems: "center", gap: "6px", fontWeight: "700" }}
                 onClick={handleSaveQuote}
               >
-                <Send size={15} /> Validate Commercials &amp; Send Final Quote
+                <Send size={15} /> Send Final Quote to Customer
               </button>
             </div>
           </div>
