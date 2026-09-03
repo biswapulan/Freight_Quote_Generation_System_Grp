@@ -28,6 +28,9 @@ import { useRetailQuotes } from "../context/RetailQuotesContext";
 import {
   STATUS_CONFIG,
   normalizeWorkflowStatus,
+  SHIPMENT_STATUS_CONFIG,
+  normalizeShipmentStatus,
+  getShipmentStatusFromQuoteStatus,
   getPlatformQuotes,
   updateQuoteStatusInStore,
 } from "../utils/quoteWorkflow";
@@ -91,7 +94,10 @@ export default function RetailShipmentsHistory({ viewMode = "quotes" }) {
         (item.destination && item.destination.toLowerCase().includes(q));
       const matchesLane = laneFilter === "all" || item.laneCode === laneFilter;
       const matchesMode = modeFilter === "all" || item.mode === modeFilter;
-      const matchesStatus = statusFilter === "all" || normalizeWorkflowStatus(item.status) === statusFilter;
+      const effectiveStatus = isShipmentMode
+        ? (item.shipmentStatus ? normalizeShipmentStatus(item.shipmentStatus) : getShipmentStatusFromQuoteStatus(item.status))
+        : normalizeWorkflowStatus(item.status);
+      const matchesStatus = statusFilter === "all" || effectiveStatus === statusFilter;
 
       let matchesDate = true;
       if (item.createdAt) {
@@ -314,14 +320,28 @@ export default function RetailShipmentsHistory({ viewMode = "quotes" }) {
           </select>
           <select className="form-select" style={{ width: "auto" }} value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
             <option value="all">All statuses</option>
-            <option value="DRAFT">DRAFT</option>
-            <option value="GENERATED">GENERATED</option>
-            <option value="PENDING_REVIEW">PENDING_REVIEW</option>
-            <option value="APPROVED">APPROVED</option>
-            <option value="SENT">SENT</option>
-            <option value="ACCEPTED">ACCEPTED</option>
-            <option value="REJECTED">REJECTED</option>
-            <option value="EXPIRED">EXPIRED</option>
+            {isShipmentMode ? (
+              <>
+                <option value="DRAFT">DRAFT</option>
+                <option value="SUBMITTED">SUBMITTED</option>
+                <option value="PROCESSING">PROCESSING</option>
+                <option value="ANALYZED">ANALYZED</option>
+                <option value="QUOTED">QUOTED</option>
+                <option value="CLOSED">CLOSED</option>
+                <option value="CANCELLED">CANCELLED</option>
+              </>
+            ) : (
+              <>
+                <option value="DRAFT">DRAFT</option>
+                <option value="GENERATED">GENERATED</option>
+                <option value="PENDING_REVIEW">PENDING_REVIEW</option>
+                <option value="APPROVED">APPROVED</option>
+                <option value="SENT">SENT</option>
+                <option value="ACCEPTED">ACCEPTED</option>
+                <option value="REJECTED">REJECTED</option>
+                <option value="EXPIRED">EXPIRED</option>
+              </>
+            )}
           </select>
           <select className="form-select" style={{ width: "auto" }} value={dateFilter} onChange={(e) => setDateFilter(e.target.value)}>
             <option value="all">All Time</option>
@@ -412,8 +432,8 @@ export default function RetailShipmentsHistory({ viewMode = "quotes" }) {
                     </td>
                     <td>
                       {(() => {
-                        const norm = normalizeWorkflowStatus(q.status);
-                        const cfg = STATUS_CONFIG[norm] || { label: q.status, badgeClass: "status-tag-draft", color: "#64748b", bg: "#f1f5f9" };
+                        const shipStatus = q.shipmentStatus ? normalizeShipmentStatus(q.shipmentStatus) : getShipmentStatusFromQuoteStatus(q.status);
+                        const cfg = SHIPMENT_STATUS_CONFIG[shipStatus] || SHIPMENT_STATUS_CONFIG.SUBMITTED;
                         return (
                           <span
                             className="status-badge"
@@ -429,7 +449,7 @@ export default function RetailShipmentsHistory({ viewMode = "quotes" }) {
                               borderRadius: "6px",
                             }}
                           >
-                            {cfg.label || norm}
+                            {cfg.label || shipStatus}
                           </span>
                         );
                       })()}
@@ -550,7 +570,29 @@ export default function RetailShipmentsHistory({ viewMode = "quotes" }) {
                           borderRadius: "6px",
                         }}
                       >
-                        {cfg.label || norm}
+                        Quote: {cfg.label || norm}
+                      </span>
+                    );
+                  })()}
+                  {(() => {
+                    const shipStatus = selectedQuote.shipmentStatus ? normalizeShipmentStatus(selectedQuote.shipmentStatus) : getShipmentStatusFromQuoteStatus(selectedQuote.status);
+                    const cfg = SHIPMENT_STATUS_CONFIG[shipStatus] || SHIPMENT_STATUS_CONFIG.SUBMITTED;
+                    return (
+                      <span
+                        className="status-badge"
+                        style={{
+                          backgroundColor: cfg.bg,
+                          color: cfg.color,
+                          fontWeight: 700,
+                          fontSize: "0.75rem",
+                          letterSpacing: "0.03em",
+                          textTransform: "uppercase",
+                          border: `1px solid ${cfg.color}33`,
+                          padding: "4px 10px",
+                          borderRadius: "6px",
+                        }}
+                      >
+                        Shipment: {cfg.label || shipStatus}
                       </span>
                     );
                   })()}

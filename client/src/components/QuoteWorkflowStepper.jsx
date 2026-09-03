@@ -1,6 +1,6 @@
 import React from "react";
 import { Check, Clock, AlertTriangle, ShieldCheck, Cpu, User, FileCheck } from "lucide-react";
-import { STATUS_CONFIG, normalizeWorkflowStatus } from "../utils/quoteWorkflow";
+import { STATUS_CONFIG, normalizeWorkflowStatus, getShipmentStatusFromQuoteStatus } from "../utils/quoteWorkflow";
 import "./QuoteWorkflowStepper.css";
 
 const STAGES = [
@@ -18,6 +18,7 @@ export default function QuoteWorkflowStepper({ status, requiresCustoms = true, c
   const currentStep = currentConfig.stepIndex || 1;
   const isRejected = normStatus === "REJECTED";
   const isFlagged = normStatus === "CUSTOMS_FLAGGED";
+  const shipmentStatus = getShipmentStatusFromQuoteStatus(normStatus);
 
   return (
     <div className={`qws-container ${compact ? "compact" : ""}`}>
@@ -60,6 +61,16 @@ export default function QuoteWorkflowStepper({ status, requiresCustoms = true, c
           );
         })}
       </div>
+
+      {!compact && (
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "10px", paddingTop: "8px", borderTop: "1px solid #e2e8f0", fontSize: "11px", color: "#64748b" }}>
+          <span><strong>Quote Status:</strong> <span style={{ color: currentConfig.color, fontWeight: 700 }}>{currentConfig.label}</span></span>
+          <span style={{ color: "#cbd5e1" }}>•</span>
+          <span><strong>Shipment Status:</strong> <span style={{ color: "#0284c7", fontWeight: 700 }}>{shipmentStatus}</span></span>
+          <span style={{ color: "#cbd5e1" }}>•</span>
+          <span><strong>Active Actor:</strong> {STAGES[Math.min(currentStep - 1, 5)]?.actor || "Customer"}</span>
+        </div>
+      )}
     </div>
   );
 }
