@@ -314,11 +314,11 @@ export default function DashboardShell() {
             <RetailOverview />
           ) : activeItem.slug === "request-quote" || activeItem.slug === "generate-quote" ? (
             <RetailGenerateQuote />
-          ) : activeItem.slug === "my-shipments" ||
-            activeItem.slug === "my-quotes" ||
-            activeItem.slug === "shipments-history" ||
-            activeItem.slug === "company-shipments" ? (
-            <RetailShipmentsHistory />
+          ) : activeItem.slug === "my-shipments" || activeItem.slug === "company-shipments" ? (
+            <RetailShipmentsHistory viewMode="shipments" />
+          ) : activeItem.slug === "my-quotes" ||
+            activeItem.slug === "shipments-history" ? (
+            <RetailShipmentsHistory viewMode="quotes" />
           ) : activeItem.slug === "bulk-quote" ? (
             <QuoteCalculator />
           ) : activeItem.slug === "saved-addresses" ? (
