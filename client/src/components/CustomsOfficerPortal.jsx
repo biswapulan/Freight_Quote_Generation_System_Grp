@@ -11,11 +11,14 @@ import {
   FileText,
 } from "lucide-react";
 import { signOffCustoms } from "../api/customs";
+import { getPlatformQuotes, updateQuoteStatusInStore, normalizeWorkflowStatus } from "../utils/quoteWorkflow";
+import QuoteWorkflowStepper from "./QuoteWorkflowStepper";
 import "./CustomsOfficerPortal.css";
 
 const INITIAL_CUSTOMS_SHIPMENTS = [
   {
     id: "SHP-1001",
+    quoteNo: "FQ-9001",
     customer: "ABC Electronics Pvt Ltd",
     origin: "Chennai, India",
     destination: "Rotterdam, Netherlands",
@@ -34,6 +37,7 @@ const INITIAL_CUSTOMS_SHIPMENTS = [
   },
   {
     id: "SHP-1002",
+    quoteNo: "FQ-9002",
     customer: "Apex Chemical Industries",
     origin: "Mumbai, India",
     destination: "Hamburg, Germany",
@@ -42,56 +46,63 @@ const INITIAL_CUSTOMS_SHIPMENTS = [
     documentsStatus: "Missing SDS",
     riskLevel: "HIGH",
     riskScore: 78,
-    status: "FLAGGED",
-    assignedOfficer: "Officer Sharma",
+    status: "PENDING_REVIEW",
+    assignedOfficer: "Officer Verma",
     documents: [
       { name: "Commercial Invoice", status: "VERIFIED" },
-      { name: "Bill of Lading", status: "PENDING" },
+      { name: "Dangerous Goods Declaration (DGD)", status: "VERIFIED" },
       { name: "Safety Data Sheet (SDS)", status: "MISSING" },
     ],
   },
   {
     id: "SHP-1003",
-    customer: "Global Pharma Labs",
-    origin: "Hyderabad, India",
-    destination: "Singapore, SG",
-    cargoType: "Temperature-Sensitive Vaccines",
-    hsCode: "3002.20",
-    documentsStatus: "4/4 Verified",
+    quoteNo: "FQ-9003",
+    customer: "Global Textiles Co",
+    origin: "Tirupur, India",
+    destination: "London Gateway, UK",
+    cargoType: "Organic Cotton Apparel",
+    hsCode: "5208.11",
+    documentsStatus: "2/2 Verified",
     riskLevel: "LOW",
-    riskScore: 18,
+    riskScore: 12,
     status: "APPROVED",
     assignedOfficer: "Officer Sharma",
     documents: [
       { name: "Commercial Invoice", status: "VERIFIED" },
-      { name: "Air Waybill", status: "VERIFIED" },
-      { name: "Cold Chain Log", status: "VERIFIED" },
-      { name: "Import Permit SG", status: "VERIFIED" },
+      { name: "Certificate of Origin", status: "VERIFIED" },
     ],
   },
   {
     id: "SHP-1004",
-    customer: "Nordic Timber Corp",
-    origin: "Kolkata, India",
-    destination: "Antwerp, Belgium",
-    cargoType: "Treated Timber & Lumber",
-    hsCode: "4407.11",
-    documentsStatus: "Pending Phytosanitary",
-    riskLevel: "MEDIUM",
-    riskScore: 45,
-    status: "PENDING_REVIEW",
-    assignedOfficer: "Officer Sharma",
+    quoteNo: "FQ-9004",
+    customer: "PharmaMed Global",
+    origin: "Hyderabad, India",
+    destination: "New York JFK, USA",
+    cargoType: "API Bulk Drugs (Cold Chain)",
+    hsCode: "3004.90",
+    documentsStatus: "Pending FDA Release",
+    riskLevel: "HIGH",
+    riskScore: 65,
+    status: "FLAGGED",
+    assignedOfficer: "Officer Rao",
     documents: [
       { name: "Commercial Invoice", status: "VERIFIED" },
-      { name: "Bill of Lading", status: "VERIFIED" },
-      { name: "Phytosanitary Certificate", status: "PENDING" },
+      { name: "FDA 2877 Declaration", status: "PENDING" },
+      { name: "Temperature Log Chart", status: "VERIFIED" },
     ],
   },
 ];
 
 export default function CustomsOfficerPortal({ initialTab = "pending-reviews" }) {
   const [activeTab, setActiveTab] = useState(initialTab || "pending-reviews");
-  const [shipments, setShipments] = useState(INITIAL_CUSTOMS_SHIPMENTS);
+  const [shipments, setShipments] = useState(() => {
+    try {
+      const saved = localStorage.getItem("freightai_customs_shipments");
+      return saved ? JSON.parse(saved) : INITIAL_CUSTOMS_SHIPMENTS;
+    } catch {
+      return INITIAL_CUSTOMS_SHIPMENTS;
+    }
+  });
   const [selectedShipment, setSelectedShipment] = useState(null);
   const [reviewModalOpen, setReviewModalOpen] = useState(false);
   const [officerNotes, setOfficerNotes] = useState("");
@@ -107,10 +118,10 @@ export default function CustomsOfficerPortal({ initialTab = "pending-reviews" })
     }
   }, [initialTab]);
 
-  const pendingCount = shipments.filter((s) => s.status === "PENDING_REVIEW").length;
+  const pendingCount = shipments.filter((s) => s.status === "PENDING_REVIEW" || s.status === "AI_ANALYZED").length;
   const missingDocCount = shipments.filter((s) => s.documentsStatus.toLowerCase().includes("missing") || s.documentsStatus.toLowerCase().includes("pending")).length;
-  const highRiskCount = shipments.filter((s) => s.riskLevel === "HIGH" || s.riskLevel === "CRITICAL").length;
-  const completedCount = shipments.filter((s) => s.status === "APPROVED" || s.status === "RESOLVED").length;
+  const highRiskCount = shipments.filter((s) => s.riskLevel === "HIGH" || s.riskLevel === "CRITICAL" || s.status === "FLAGGED").length;
+  const completedCount = shipments.filter((s) => s.status === "APPROVED" || s.status === "CUSTOMS_REVIEWED" || s.status === "RESOLVED").length;
 
   function openSignoffModal(shipment) {
     setSelectedShipment(shipment);
@@ -121,30 +132,46 @@ export default function CustomsOfficerPortal({ initialTab = "pending-reviews" })
   async function handleDecision(decision) {
     if (!selectedShipment) return;
 
+    const newStatus = decision === "APPROVE" ? "APPROVED" : "FLAGGED";
+    const workflowStatus = decision === "APPROVE" ? "CUSTOMS_REVIEWED" : "CUSTOMS_FLAGGED";
+
     try {
-      // Call backend customs signoff API if available
       await signOffCustoms({
         check_id: selectedShipment.id,
         decision: decision === "APPROVE" ? "APPROVED" : "FLAGGED",
         officer_name: selectedShipment.assignedOfficer || "Customs Officer",
         comments: officerNotes || `Officer sign-off: ${decision}`,
-      }).catch(() => {
-        // Fallback gracefully for demo/offline
-      });
+      }).catch(() => {});
 
-      setShipments((prev) =>
-        prev.map((s) =>
-          s.id === selectedShipment.id
-            ? {
-                ...s,
-                status: decision === "APPROVE" ? "APPROVED" : "FLAGGED",
-                riskLevel: decision === "APPROVE" ? "LOW" : "HIGH",
-              }
-            : s
-        )
+      const updated = shipments.map((s) =>
+        s.id === selectedShipment.id
+          ? {
+              ...s,
+              status: newStatus,
+              riskLevel: decision === "APPROVE" ? "LOW" : "HIGH",
+              officerNotes: officerNotes || `Signed off as ${decision}`,
+            }
+          : s
       );
 
-      setActionStatus(`Shipment ${selectedShipment.id} successfully marked as ${decision === "APPROVE" ? "APPROVED" : "FLAGGED"}.`);
+      setShipments(updated);
+      try {
+        localStorage.setItem("freightai_customs_shipments", JSON.stringify(updated));
+      } catch {}
+
+      // Synchronize with platform quotes store for Freight Agent and Customer
+      if (selectedShipment.quoteNo || selectedShipment.id) {
+        updateQuoteStatusInStore(
+          selectedShipment.quoteNo || selectedShipment.id,
+          workflowStatus,
+          {
+            customsRemarks: officerNotes || `Customs verification: ${decision === "APPROVE" ? "Approved & Released" : "Flagged on Hold"} by ${selectedShipment.assignedOfficer || "Officer Sharma"}`,
+            customsReviewedAt: new Date().toISOString()
+          }
+        );
+      }
+
+      setActionStatus(`Shipment ${selectedShipment.id} successfully marked as ${decision === "APPROVE" ? "CUSTOMS REVIEWED & APPROVED" : "FLAGGED ON HOLD"}. Forwarded to Freight Agent queue.`);
       setReviewModalOpen(false);
       setTimeout(() => setActionStatus(null), 4000);
     } catch (err) {
@@ -153,9 +180,9 @@ export default function CustomsOfficerPortal({ initialTab = "pending-reviews" })
   }
 
   const filteredShipments = shipments.filter((s) => {
-    if (activeTab === "pending-reviews") return s.status === "PENDING_REVIEW";
+    if (activeTab === "pending-reviews") return s.status === "PENDING_REVIEW" || s.status === "AI_ANALYZED";
     if (activeTab === "customs-risk-flags") return s.status === "FLAGGED" || s.riskLevel === "HIGH";
-    if (activeTab === "completed-reviews") return s.status === "APPROVED";
+    if (activeTab === "completed-reviews") return s.status === "APPROVED" || s.status === "CUSTOMS_REVIEWED";
     return true; // assigned-shipments, document-verification or all
   });
 

@@ -1,67 +1,16 @@
-import { useState } from "react";
-import { AlertTriangle } from "lucide-react";
+import { useState, useEffect } from "react";
+import { AlertTriangle, ShieldCheck, CheckCircle2, Send, FileCheck } from "lucide-react";
+import {
+  getPlatformQuotes,
+  updateQuoteStatusInStore,
+  STATUS_CONFIG,
+  normalizeWorkflowStatus,
+} from "../utils/quoteWorkflow";
+import QuoteWorkflowStepper from "./QuoteWorkflowStepper";
 import "./AgentQuoteDesk.css";
 
-const INITIAL_QUOTES = [
-  {
-    id: "FQ-8921",
-    client: "Nexus Global Corp",
-    clientEmail: "ops@nexusglobal.com",
-    origin: "Mumbai Port (INBOM)",
-    destination: "Rotterdam (NLRTM)",
-    mode: "Ocean FCL (40ft High Cube)",
-    cargoClass: "General Electronics",
-    weightKg: 14500,
-    baseRate: 210000,
-    marginPct: 10,
-    fuelSurchargePct: 8,
-    portFee: 15000,
-    status: "Pending Review",
-    requestedDate: "2026-08-12",
-  },
-  {
-    id: "FQ-8922",
-    client: "Apex Transports Ltd",
-    clientEmail: "logistics@apextrans.com",
-    origin: "Delhi Airport (DEL)",
-    destination: "Frankfurt Airport (FRA)",
-    mode: "Air Cargo Express",
-    cargoClass: "Pharma / Cold Chain",
-    weightKg: 850,
-    baseRate: 155000,
-    marginPct: 12,
-    fuelSurchargePct: 10,
-    portFee: 8000,
-    status: "Pending Review",
-    requestedDate: "2026-08-12",
-  },
-  {
-    id: "FQ-8919",
-    client: "Horizon Marine Exports",
-    clientEmail: "export@horizonmarine.in",
-    origin: "Chennai Port (INMAA)",
-    destination: "Hamburg (DEHAM)",
-    mode: "Ocean LCL",
-    cargoClass: "Textiles & Apparel",
-    weightKg: 4200,
-    baseRate: 110000,
-    marginPct: 15,
-    fuelSurchargePct: 6,
-    portFee: 12000,
-    status: "Approved",
-    requestedDate: "2026-08-11",
-  },
-];
-
 export default function AgentQuoteDesk() {
-  const [quotes, setQuotes] = useState(() => {
-    try {
-      const saved = localStorage.getItem("freightai_agent_quotes");
-      return saved ? JSON.parse(saved) : INITIAL_QUOTES;
-    } catch {
-      return INITIAL_QUOTES;
-    }
-  });
+  const [quotes, setQuotes] = useState(() => getPlatformQuotes());
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
 
@@ -69,34 +18,42 @@ export default function AgentQuoteDesk() {
   const [marginPct, setMarginPct] = useState(10);
   const [fuelPct, setFuelPct] = useState(8);
   const [portFee, setPortFee] = useState(15000);
+  const [actionNotice, setActionNotice] = useState(null);
+
+  useEffect(() => {
+    setQuotes(getPlatformQuotes());
+  }, []);
 
   function openPricingModal(q) {
     setActiveModalQuote(q);
     setMarginPct(q.marginPct || 10);
     setFuelPct(q.fuelSurchargePct || 8);
-    setPortFee(q.portFee || 12000);
+    setPortFee(q.portFee || 15000);
   }
 
   function handleSaveQuote() {
     if (!activeModalQuote) return;
-    setQuotes((prev) => {
-      const updated = prev.map((q) =>
-        q.id === activeModalQuote.id
-          ? {
-              ...q,
-              marginPct: Number(marginPct),
-              fuelSurchargePct: Number(fuelPct),
-              portFee: Number(portFee),
-              status: Number(marginPct) < 12.0 ? "Pending Approval (409)" : "Approved",
-            }
-          : q
-      );
-      try {
-        localStorage.setItem("freightai_agent_quotes", JSON.stringify(updated));
-      } catch {}
-      return updated;
-    });
+    const finalAmount = calculateFinalCost(activeModalQuote, marginPct, fuelPct, portFee);
+    const newStatus = "FINAL_QUOTE_SENT";
+
+    const updated = updateQuoteStatusInStore(
+      activeModalQuote.id || activeModalQuote.quoteNo,
+      newStatus,
+      {
+        marginPct: Number(marginPct),
+        fuelSurchargePct: Number(fuelPct),
+        portFee: Number(portFee),
+        totalNum: finalAmount,
+        totalFormatted: `₹ ${finalAmount.toLocaleString("en-IN")}`,
+        agentRemarks: `Commercial margin (${marginPct}%) validated by Operations Desk. Final verified quote dispatched to customer.`,
+        finalQuoteSentAt: new Date().toISOString(),
+      }
+    );
+
+    setQuotes(updated);
+    setActionNotice(`Final Quotation for ${activeModalQuote.id || activeModalQuote.quoteNo} dispatched to Customer with status: FINAL_QUOTE_SENT`);
     setActiveModalQuote(null);
+    setTimeout(() => setActionNotice(null), 4000);
   }
 
   const filteredQuotes = quotes.filter((q) => {
@@ -178,6 +135,12 @@ export default function AgentQuoteDesk() {
         </div>
       </div>
 
+      {actionNotice && (
+        <div style={{ padding: "12px 16px", background: "rgba(34, 197, 94, 0.15)", border: "1px solid rgba(34, 197, 94, 0.3)", borderRadius: "10px", color: "#16a34a", fontSize: "13.5px", display: "flex", alignItems: "center", gap: "8px", marginBottom: "16px", fontWeight: "600" }}>
+          <CheckCircle2 size={18} /> {actionNotice}
+        </div>
+      )}
+
       <div className="agent-panel-card">
         <div className="agent-table-wrap">
           <table className="agent-table">
@@ -190,45 +153,56 @@ export default function AgentQuoteDesk() {
                 <th>Base Cost</th>
                 <th>Margin / Fees</th>
                 <th>Final Quote</th>
-                <th>Status</th>
+                <th>Workflow Status</th>
                 <th>Action</th>
               </tr>
             </thead>
             <tbody>
               {filteredQuotes.map((q) => {
-                const finalCost = calculateFinalCost(q);
+                const finalCost = q.totalNum || calculateFinalCost(q);
+                const normStatus = normalizeWorkflowStatus(q.status);
+                const cfg = STATUS_CONFIG[normStatus] || STATUS_CONFIG.REQUESTED;
+
                 return (
-                  <tr key={q.id}>
-                    <td><strong>{q.id}</strong></td>
+                  <tr key={q.id || q.quoteNo}>
+                    <td><strong>{q.id || q.quoteNo}</strong></td>
                     <td>
-                      <div>{q.client}</div>
-                      <small style={{ color: "#64748b" }}>{q.clientEmail}</small>
+                      <div style={{ fontWeight: 600 }}>{q.customerName || q.client}</div>
+                      <small style={{ color: "#64748b" }}>{q.customerEmail || q.clientEmail}</small>
                     </td>
                     <td>
                       <div style={{ fontWeight: "600" }}>{q.origin}</div>
                       <small style={{ color: "#0284c7", fontWeight: "700" }}>&rarr; {q.destination}</small>
                     </td>
                     <td>
-                      <div>{q.mode}</div>
-                      <small style={{ color: "#64748b", fontWeight: "500" }}>{q.cargoClass} ({q.weightKg} kg)</small>
+                      <div>{q.modeLabel || q.mode}</div>
+                      <small style={{ color: "#64748b", fontWeight: "500" }}>{q.cargoType || q.cargoClass} ({q.weightKg || 12000} kg)</small>
                     </td>
-                    <td>₹{q.baseRate.toLocaleString("en-IN")}</td>
+                    <td>₹{Number(q.baseRate || 150000).toLocaleString("en-IN")}</td>
                     <td>
-                      <div>Margin: {q.marginPct}%</div>
-                      <small style={{ color: "#64748b" }}>Fuel: {q.fuelSurchargePct}%</small>
+                      <div>Margin: {q.marginPct || 10}%</div>
+                      <small style={{ color: "#64748b" }}>Fuel: {q.fuelSurchargePct || 8}%</small>
                     </td>
                     <td>
                       <strong style={{ color: "#059669", fontSize: "15px" }}>
-                        ₹{finalCost.toLocaleString("en-IN")}
+                        ₹{Number(finalCost).toLocaleString("en-IN")}
                       </strong>
                     </td>
                     <td>
                       <span
-                        className={`badge-status ${
-                          q.status === "Pending Review" ? "status-pending" : "status-approved"
-                        }`}
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          padding: "4px 10px",
+                          borderRadius: "999px",
+                          fontSize: "11.5px",
+                          fontWeight: "700",
+                          color: cfg.color,
+                          backgroundColor: cfg.bg,
+                          border: `1px solid ${cfg.color}30`,
+                        }}
                       >
-                        {q.status}
+                        {cfg.label}
                       </span>
                     </td>
                     <td>
@@ -237,7 +211,7 @@ export default function AgentQuoteDesk() {
                         className="agent-btn-sm"
                         onClick={() => openPricingModal(q)}
                       >
-                        {q.status === "Approved" ? "Edit Pricing" : "Review & Price"}
+                        {normStatus === "FINAL_QUOTE_SENT" || normStatus === "ACCEPTED" ? "View / Edit" : "Review & Send"}
                       </button>
                     </td>
                   </tr>
@@ -248,19 +222,35 @@ export default function AgentQuoteDesk() {
         </div>
       </div>
 
-      {/* Pricing Adjustment Modal */}
+      {/* Pricing Adjustment & Final Quote Modal */}
       {activeModalQuote && (
         <div className="modal-backdrop" onClick={() => setActiveModalQuote(null)}>
-          <div className="pricing-modal" onClick={(e) => e.stopPropagation()}>
-            <h3>Adjust Quote Pricing ({activeModalQuote.id})</h3>
-            <p style={{ color: "#94a3b8", fontSize: "13px", marginTop: "-10px", marginBottom: "20px" }}>
-              Client: {activeModalQuote.client} ({activeModalQuote.origin} to {activeModalQuote.destination})
+          <div className="pricing-modal" style={{ maxWidth: "680px" }} onClick={(e) => e.stopPropagation()}>
+            <h3 style={{ margin: "0 0 4px 0", fontSize: "18px", fontWeight: "800" }}>
+              Freight Operations Review: {activeModalQuote.id || activeModalQuote.quoteNo}
+            </h3>
+            <p style={{ color: "#64748b", fontSize: "13px", marginTop: "0", marginBottom: "12px" }}>
+              Client: <strong>{activeModalQuote.customerName || activeModalQuote.client}</strong> &bull; Route: {activeModalQuote.origin} &rarr; {activeModalQuote.destination}
             </p>
 
-            <div className="modal-form-grid">
+            {/* Visual Workflow Stepper */}
+            <QuoteWorkflowStepper status={activeModalQuote.status} compact />
+
+            {/* Customs Review Clearance Callout if available */}
+            {activeModalQuote.customsRemarks && (
+              <div style={{ background: "#f5f3ff", border: "1px solid #ddd6fe", borderRadius: "10px", padding: "12px 14px", margin: "12px 0", fontSize: "13px", color: "#5b21b6", display: "flex", alignItems: "flex-start", gap: "10px" }}>
+                <ShieldCheck size={18} style={{ flexShrink: 0, marginTop: "2px", color: "#7c3aed" }} />
+                <div>
+                  <strong>Customs Compliance Sign-off:</strong>
+                  <p style={{ margin: "2px 0 0 0", color: "#4c1d95" }}>{activeModalQuote.customsRemarks}</p>
+                </div>
+              </div>
+            )}
+
+            <div className="modal-form-grid" style={{ marginTop: "14px" }}>
               <div className="modal-field">
-                <label>Base Freight Cost (₹)</label>
-                <input type="number" value={activeModalQuote.baseRate} disabled readOnly />
+                <label>Base Carrier Freight (₹)</label>
+                <input type="number" value={activeModalQuote.baseRate || 185000} disabled readOnly />
               </div>
 
               <div className="modal-field">
@@ -273,7 +263,7 @@ export default function AgentQuoteDesk() {
               </div>
 
               <div className="modal-field">
-                <label>Fuel Surcharge (%)</label>
+                <label>Fuel Surcharge / BAF (%)</label>
                 <input
                   type="number"
                   value={fuelPct}
@@ -282,7 +272,7 @@ export default function AgentQuoteDesk() {
               </div>
 
               <div className="modal-field">
-                <label>Port & Handling Fee (₹)</label>
+                <label>Port &amp; Terminal Fee (₹)</label>
                 <input
                   type="number"
                   value={portFee}
@@ -294,50 +284,50 @@ export default function AgentQuoteDesk() {
             {Number(marginPct) < 12.0 && (
               <div
                 style={{
-                  background: "#450a0a",
-                  border: "1px solid #ef4444",
-                  borderRadius: "6px",
+                  background: "#fef2f2",
+                  border: "1px solid #fecaca",
+                  borderRadius: "8px",
                   padding: "12px",
-                  margin: "16px 0",
-                  color: "#fca5a5",
+                  margin: "14px 0",
+                  color: "#991b1b",
                   fontSize: "13px",
                 }}
               >
                 <strong style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
-                  <AlertTriangle size={15} /> HTTP 409 CONFLICT — QUOTE_BELOW_MARGIN_FLOOR
+                  <AlertTriangle size={15} /> Commercial Margin Warning
                 </strong>
                 <p style={{ margin: "4px 0 0 0" }}>
-                  Requested margin ({marginPct}%) is below the resolved lane floor (12.0%). Below-floor quotes cannot be issued directly and require PRICING_MANAGER approval.
+                  Requested margin ({marginPct}%) is below standard floor policy (12.0%).
                 </p>
               </div>
             )}
 
-            <div className="price-summary-box">
+            <div className="price-summary-box" style={{ margin: "16px 0" }}>
               <div className="price-row">
                 <span>Base Carrier Rate:</span>
-                <span>₹{activeModalQuote.baseRate.toLocaleString("en-IN")}</span>
+                <span>₹{Number(activeModalQuote.baseRate || 185000).toLocaleString("en-IN")}</span>
               </div>
               <div className="price-row">
                 <span>Agent Margin ({marginPct}%):</span>
-                <span>₹{Math.round(activeModalQuote.baseRate * (marginPct / 100)).toLocaleString("en-IN")}</span>
+                <span>₹{Math.round(Number(activeModalQuote.baseRate || 185000) * (marginPct / 100)).toLocaleString("en-IN")}</span>
               </div>
               <div className="price-row">
                 <span>Fuel Surcharge ({fuelPct}%):</span>
-                <span>₹{Math.round(activeModalQuote.baseRate * (fuelPct / 100)).toLocaleString("en-IN")}</span>
+                <span>₹{Math.round(Number(activeModalQuote.baseRate || 185000) * (fuelPct / 100)).toLocaleString("en-IN")}</span>
               </div>
               <div className="price-row">
                 <span>Port &amp; Handling Fees:</span>
                 <span>₹{Number(portFee).toLocaleString("en-IN")}</span>
               </div>
               <div className="price-row total-row">
-                <span>Total Final Quote:</span>
+                <span>Final Quotation to Customer:</span>
                 <span>
                   ₹{calculateFinalCost(activeModalQuote, marginPct, fuelPct, portFee).toLocaleString("en-IN")}
                 </span>
               </div>
             </div>
 
-            <div className="modal-actions">
+            <div className="modal-actions" style={{ display: "flex", justifyContent: "flex-end", gap: "10px" }}>
               <button
                 type="button"
                 className="agent-btn-secondary"
@@ -348,9 +338,10 @@ export default function AgentQuoteDesk() {
               <button
                 type="button"
                 className="agent-btn-primary"
+                style={{ background: "#d97706", display: "inline-flex", alignItems: "center", gap: "6px" }}
                 onClick={handleSaveQuote}
               >
-                {Number(marginPct) < 12.0 ? "Submit for Approval (409)" : "Issue Binding Quote"}
+                <Send size={15} /> Validate Commercials &amp; Send Final Quote
               </button>
             </div>
           </div>

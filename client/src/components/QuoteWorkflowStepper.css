@@ -1,0 +1,142 @@
+/* QuoteWorkflowStepper.css - 5-Stage Multi-Role Quote Progress Stepper */
+
+.qws-container {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  padding: 16px 20px;
+  margin: 14px 0;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.02);
+}
+
+.qws-container.compact {
+  padding: 10px 14px;
+  margin: 8px 0;
+}
+
+.qws-steps {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+}
+
+.qws-step-node {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  position: relative;
+  z-index: 2;
+}
+
+.qws-marker {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 700;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+
+/* Step Node States */
+.qws-step-node.pending .qws-marker {
+  background: #f1f5f9;
+  border: 1.5px solid #cbd5e1;
+  color: #94a3b8;
+}
+
+.qws-step-node.pending .qws-step-title {
+  color: #94a3b8;
+}
+
+.qws-step-node.active .qws-marker {
+  background: #0284c7;
+  border: 1.5px solid #0284c7;
+  color: #ffffff;
+  box-shadow: 0 0 0 4px rgba(2, 132, 199, 0.18);
+  animation: qwsPulse 2s infinite;
+}
+
+.qws-step-node.active .qws-step-title {
+  color: #0f172a;
+  font-weight: 700;
+}
+
+.qws-step-node.done .qws-marker {
+  background: #059669;
+  border: 1.5px solid #059669;
+  color: #ffffff;
+}
+
+.qws-step-node.done .qws-step-title {
+  color: #334155;
+}
+
+.qws-step-node.flagged .qws-marker {
+  background: #dc2626;
+  border: 1.5px solid #dc2626;
+  color: #ffffff;
+  box-shadow: 0 0 0 4px rgba(220, 38, 38, 0.18);
+}
+
+.qws-step-node.rejected .qws-marker {
+  background: #991b1b;
+  border: 1.5px solid #991b1b;
+  color: #ffffff;
+}
+
+.qws-info {
+  display: flex;
+  flex-direction: column;
+}
+
+.qws-step-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: #475569;
+  white-space: nowrap;
+}
+
+.qws-actor-badge {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: #64748b;
+  letter-spacing: 0.04em;
+}
+
+/* Connectors between nodes */
+.qws-connector {
+  flex: 1;
+  height: 2px;
+  background: #e2e8f0;
+  margin: 0 8px;
+  transition: background 0.3s ease;
+}
+
+.qws-connector.done {
+  background: #059669;
+}
+
+.qws-connector.active {
+  background: linear-gradient(90deg, #059669 0%, #0284c7 100%);
+}
+
+@keyframes qwsPulse {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.08); }
+  100% { transform: scale(1); }
+}
+
+@media (max-width: 860px) {
+  .qws-actor-badge {
+    display: none;
+  }
+  .qws-step-title {
+    font-size: 10.5px;
+  }
+}

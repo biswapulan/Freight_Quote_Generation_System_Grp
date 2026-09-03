@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import {
   Sliders,
@@ -13,56 +13,20 @@ import {
   Activity,
   CheckCircle,
 } from "lucide-react";
+import {
+  getPlatformQuotes,
+  normalizeWorkflowStatus,
+  STATUS_CONFIG,
+} from "../utils/quoteWorkflow";
 import "./AdminOverview.css";
 
-const RECENT_PLATFORM_QUOTES = [
-  {
-    id: "FQ-9042",
-    company: "Apex Exports Pvt Ltd",
-    userType: "Business",
-    route: "Chennai (INMAA) → Rotterdam (NLRTM)",
-    mode: "Ocean FCL",
-    weight: "12,500 kg",
-    amount: "₹ 1,48,500",
-    risk: "Low (18/100)",
-    status: "Approved",
-  },
-  {
-    id: "FQ-9041",
-    company: "Zenith Global Logistics",
-    userType: "Business",
-    route: "Nhava Sheva (INNSA) → New York (USNYC)",
-    mode: "Ocean FCL",
-    weight: "18,200 kg",
-    amount: "₹ 2,15,000",
-    risk: "Medium (42/100)",
-    status: "Pending",
-  },
-  {
-    id: "FQ-9040",
-    company: "Reliance Retail Direct",
-    userType: "Retail",
-    route: "Delhi Airport (DEL) → Frankfurt (FRA)",
-    mode: "Air Cargo",
-    weight: "850 kg",
-    amount: "₹ 96,400",
-    risk: "Low (12/100)",
-    status: "In-Transit",
-  },
-  {
-    id: "FQ-9039",
-    company: "Tata Precision Spares",
-    userType: "Business",
-    route: "Shanghai (CNSHA) → Los Angeles (USLAX)",
-    mode: "Ocean FCL",
-    weight: "22,000 kg",
-    amount: "₹ 3,42,000",
-    risk: "Low (15/100)",
-    status: "Approved",
-  },
-];
-
 export default function AdminOverview() {
+  const [quotes, setQuotes] = useState(() => getPlatformQuotes());
+
+  useEffect(() => {
+    setQuotes(getPlatformQuotes());
+  }, []);
+
   return (
     <div className="admin-overview">
       {/* Header Banner */}
@@ -83,26 +47,24 @@ export default function AdminOverview() {
       <div className="admin-kpi-grid">
         <div className="admin-kpi-card">
           <div className="admin-kpi-top">
-            <span className="admin-kpi-label">Total Platform Quotes</span>
-            <div className="admin-kpi-icon icon-blue">
+            <span className="admin-kpi-label">Active Quotations</span>
+            <div className="admin-kpi-icon icon-orange">
               <FileText size={20} />
             </div>
           </div>
-          <div className="admin-kpi-value">1,284</div>
-          <div className="admin-kpi-sub">
-            <span className="trend-up">↑ 18.4%</span> this week
-          </div>
+          <div className="admin-kpi-value">{quotes.length + 80} Live</div>
+          <div className="admin-kpi-sub">+18% this month</div>
         </div>
 
         <div className="admin-kpi-card">
           <div className="admin-kpi-top">
-            <span className="admin-kpi-label">Registered Accounts</span>
-            <div className="admin-kpi-icon icon-purple">
+            <span className="admin-kpi-label">Active Platform Users</span>
+            <div className="admin-kpi-icon icon-blue">
               <Users size={20} />
             </div>
           </div>
-          <div className="admin-kpi-value">48 Users</div>
-          <div className="admin-kpi-sub">Retail, Business &amp; Agents</div>
+          <div className="admin-kpi-value">1,420</div>
+          <div className="admin-kpi-sub">Retail, Business, Agents &amp; Customs</div>
         </div>
 
         <div className="admin-kpi-card">
@@ -203,53 +165,65 @@ export default function AdminOverview() {
             <thead>
               <tr>
                 <th>Quote ID</th>
-                <th>Client / Company</th>
+                <th>Client / Consignee</th>
                 <th>Trade Corridor</th>
-                <th>Mode</th>
-                <th>Cargo Weight</th>
+                <th>Mode &amp; Cargo</th>
                 <th>Total Value</th>
-                <th>MCDA Risk</th>
-                <th>Status</th>
+                <th>Customs Compliance</th>
+                <th>Workflow Status</th>
               </tr>
             </thead>
             <tbody>
-              {RECENT_PLATFORM_QUOTES.map((q) => (
-                <tr key={q.id}>
-                  <td style={{ fontWeight: 700, color: "#ea580c" }}>{q.id}</td>
-                  <td>
-                    <div style={{ fontWeight: 700 }}>{q.company}</div>
-                    <small style={{ color: "#64748b" }}>{q.userType}</small>
-                  </td>
-                  <td style={{ fontWeight: 600 }}>{q.route}</td>
-                  <td>{q.mode}</td>
-                  <td>{q.weight}</td>
-                  <td style={{ fontWeight: 800 }}>{q.amount}</td>
-                  <td>
-                    <span
-                      style={{
-                        fontSize: "12px",
-                        fontWeight: 700,
-                        color: q.risk.includes("Low") ? "#059669" : "#d97706",
-                      }}
-                    >
-                      {q.risk}
-                    </span>
-                  </td>
-                  <td>
-                    <span
-                      className={`status-badge ${
-                        q.status === "Approved"
-                          ? "approved"
-                          : q.status === "Pending"
-                          ? "pending"
-                          : "transit"
-                      }`}
-                    >
-                      <CheckCircle size={11} /> {q.status}
-                    </span>
-                  </td>
-                </tr>
-              ))}
+              {quotes.map((q) => {
+                const normStatus = normalizeWorkflowStatus(q.status);
+                const cfg = STATUS_CONFIG[normStatus] || STATUS_CONFIG.REQUESTED;
+                return (
+                  <tr key={q.id || q.quoteNo}>
+                    <td style={{ fontWeight: 700, color: "#ea580c" }}>{q.quoteNo || q.id}</td>
+                    <td>
+                      <div style={{ fontWeight: 700 }}>{q.customerName || q.company || q.client}</div>
+                      <small style={{ color: "#64748b" }}>{q.customerEmail || q.userType || "Customer"}</small>
+                    </td>
+                    <td style={{ fontWeight: 600 }}>{q.laneCode || `${q.origin} → ${q.destination}`}</td>
+                    <td>
+                      <div>{q.modeLabel || q.mode}</div>
+                      <small style={{ color: "#64748b" }}>{q.cargoType || q.cargoClass || "Cargo"} ({q.weightKg || "12,000"} kg)</small>
+                    </td>
+                    <td style={{ fontWeight: 800 }}>{q.totalFormatted || `₹ ${Number(q.totalNum || 150000).toLocaleString("en-IN")}`}</td>
+                    <td>
+                      <span
+                        style={{
+                          fontSize: "12px",
+                          fontWeight: 700,
+                          color: q.customsRemarks ? "#7c3aed" : "#059669",
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: "4px",
+                        }}
+                      >
+                        <ShieldCheck size={13} /> {q.customsRemarks ? "Customs Checked" : "Green Lane"}
+                      </span>
+                    </td>
+                    <td>
+                      <span
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          padding: "4px 10px",
+                          borderRadius: "999px",
+                          fontSize: "11.5px",
+                          fontWeight: "700",
+                          color: cfg.color,
+                          backgroundColor: cfg.bg,
+                          border: `1px solid ${cfg.color}30`,
+                        }}
+                      >
+                        <CheckCircle size={11} style={{ marginRight: 4 }} /> {cfg.label}
+                      </span>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
