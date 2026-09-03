@@ -68,6 +68,7 @@ const AGENT_SECTIONS = [
   "Quote Requests",
   "Quote Review",
   "Generated Quotes",
+  "Customs Clearance",
   "AI Pricing Analysis",
   "Risk Analysis",
   "Customers",
@@ -98,6 +99,7 @@ const ADMIN_SECTIONS = [
   "AI Agent Monitor",
   "AI Pricing Monitor",
   "Risk Intelligence",
+  "Customs Portal",
   "Users",
   "Master Data",
   "All Shipments",
@@ -256,7 +258,7 @@ export default function DashboardShell() {
             ) : activeItem.slug === "support" ? (
               <Support />
             ) : (
-              <CustomsOfficerPortal />
+              <CustomsOfficerPortal initialTab={activeItem.slug} />
             )
           ) : /* Admin Portal Views */
           role === "admin" ? (
@@ -264,6 +266,8 @@ export default function DashboardShell() {
               <AdminOverview />
             ) : activeItem.slug === "rate-config" ? (
               <AdminRateConfig />
+            ) : activeItem.slug === "customs-portal" ? (
+              <CustomsOfficerPortal />
             ) : activeItem.slug === "users" || activeItem.slug === "user-management" ? (
               <AdminUsers />
             ) : activeItem.slug === "master-data" ? (
@@ -293,6 +297,8 @@ export default function DashboardShell() {
               activeItem.slug === "quote-review" ||
               activeItem.slug === "generated-quotes" ? (
               <AgentQuoteDesk />
+            ) : activeItem.slug === "customs-clearance" ? (
+              <CustomsOfficerPortal />
             ) : activeItem.slug === "ai-pricing-analysis" || activeItem.slug === "risk-analysis" ? (
               <M3IntelligenceDashboard />
             ) : activeItem.slug === "customers" ? (

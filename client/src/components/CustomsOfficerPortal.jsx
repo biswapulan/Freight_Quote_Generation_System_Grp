@@ -87,13 +87,23 @@ const INITIAL_CUSTOMS_SHIPMENTS = [
   },
 ];
 
-export default function CustomsOfficerPortal() {
-  const [activeTab, setActiveTab] = useState("pending-reviews");
+export default function CustomsOfficerPortal({ initialTab = "pending-reviews" }) {
+  const [activeTab, setActiveTab] = useState(initialTab || "pending-reviews");
   const [shipments, setShipments] = useState(INITIAL_CUSTOMS_SHIPMENTS);
   const [selectedShipment, setSelectedShipment] = useState(null);
   const [reviewModalOpen, setReviewModalOpen] = useState(false);
   const [officerNotes, setOfficerNotes] = useState("");
   const [actionStatus, setActionStatus] = useState(null);
+
+  useEffect(() => {
+    if (initialTab) {
+      if (initialTab === "dashboard" || initialTab === "pending-reviews") {
+        setActiveTab("pending-reviews");
+      } else {
+        setActiveTab(initialTab);
+      }
+    }
+  }, [initialTab]);
 
   const pendingCount = shipments.filter((s) => s.status === "PENDING_REVIEW").length;
   const missingDocCount = shipments.filter((s) => s.documentsStatus.toLowerCase().includes("missing") || s.documentsStatus.toLowerCase().includes("pending")).length;
@@ -149,15 +159,17 @@ export default function CustomsOfficerPortal() {
 
   return (
     <div className="cop-container">
-      <div className="cop-header">
-        <div>
-          <span className="cop-title-badge">
-            <ShieldCheck size={13} /> Customs Officer Station
-          </span>
+      {/* Top Banner */}
+      <div className="cop-header-banner">
+        <div className="cop-title-block">
           <h1>Customs Compliance &amp; Regulatory Gate</h1>
-          <p className="cop-subtitle">
+          <p>
             Verify international trade compliance, HS code classifications, legal document checklists, and digital officer sign-off.
           </p>
+        </div>
+        <div className="cop-badge-tag">
+          <span className="cop-badge-dot" />
+          <ShieldCheck size={14} /> Customs Officer Station Active
         </div>
       </div>
 
