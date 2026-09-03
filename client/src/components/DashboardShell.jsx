@@ -26,6 +26,8 @@ import M1RouteDashboard from "./M1RouteDashboard";
 import M3IntelligenceDashboard from "./M3IntelligenceDashboard";
 import CustomsOfficerPortal from "./CustomsOfficerPortal";
 import AIAgentMonitor from "./AIAgentMonitor";
+import NotificationsCenter from "./NotificationsCenter";
+import DocumentsCenter from "./DocumentsCenter";
 import "./Logo.css";
 import "./DashboardShell.css";
 
@@ -242,8 +244,12 @@ export default function DashboardShell() {
         }`}
       >
         <RetailQuotesProvider>
-          {/* Universal M3 / Telemetry Views */}
-          {activeItem.slug === "m3-intelligence" ? (
+          {/* Universal M3 / Telemetry / Shared Views */}
+          {activeItem.slug === "notifications" ? (
+            <NotificationsCenter />
+          ) : activeItem.slug === "documents" ? (
+            <DocumentsCenter />
+          ) : activeItem.slug === "m3-intelligence" ? (
             <M3IntelligenceDashboard mode="all" />
           ) : activeItem.slug === "risk-intelligence" || activeItem.slug === "risk-analysis" ? (
             <M3IntelligenceDashboard mode="risk" />
@@ -262,7 +268,7 @@ export default function DashboardShell() {
             )
           ) : /* Admin Portal Views */
           role === "admin" ? (
-            activeItem.slug === "dashboard" || activeItem.slug === "analytics" || activeItem.slug === "reports" || activeItem.slug === "audit-logs" || activeItem.slug === "settings" || activeItem.slug === "notifications" ? (
+            activeItem.slug === "dashboard" || activeItem.slug === "analytics" || activeItem.slug === "reports" || activeItem.slug === "audit-logs" || activeItem.slug === "settings" ? (
               <AdminOverview />
             ) : activeItem.slug === "rate-config" || activeItem.slug === "pricing-rules" ? (
               <AdminRateConfig />
@@ -289,9 +295,9 @@ export default function DashboardShell() {
             )
           ) : /* Freight Agent Views */
           role === "agent" ? (
-            activeItem.slug === "dashboard" || activeItem.slug === "notifications" ? (
+            activeItem.slug === "dashboard" ? (
               <AgentOverview />
-            ) : activeItem.slug === "shipment-requests" || activeItem.slug === "all-shipments" || activeItem.slug === "documents" ? (
+            ) : activeItem.slug === "shipment-requests" || activeItem.slug === "all-shipments" ? (
               <AgentShipmentDispatch />
             ) : activeItem.slug === "quote-requests" ||
               activeItem.slug === "quote-review" ||
@@ -321,11 +327,11 @@ export default function DashboardShell() {
               <AgentOverview />
             )
           ) : /* Customer Portal Views (Retail & Business) */
-          activeItem.slug === "dashboard" || activeItem.slug === "notifications" ? (
+          activeItem.slug === "dashboard" ? (
             <RetailOverview />
           ) : activeItem.slug === "request-quote" || activeItem.slug === "generate-quote" ? (
             <RetailGenerateQuote />
-          ) : activeItem.slug === "my-shipments" || activeItem.slug === "company-shipments" || activeItem.slug === "documents" ? (
+          ) : activeItem.slug === "my-shipments" || activeItem.slug === "company-shipments" ? (
             <RetailShipmentsHistory viewMode="shipments" />
           ) : activeItem.slug === "my-quotes" ||
             activeItem.slug === "shipments-history" ? (
