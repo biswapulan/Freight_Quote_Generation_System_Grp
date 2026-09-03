@@ -7,6 +7,8 @@ import {
   AlertOctagon,
   CheckCircle,
   ArrowRight,
+  X,
+  FileText,
 } from "lucide-react";
 import { signOffCustoms } from "../api/customs";
 import "./CustomsOfficerPortal.css";
@@ -328,43 +330,69 @@ export default function CustomsOfficerPortal({ initialTab = "pending-reviews" })
       {reviewModalOpen && selectedShipment && (
         <div className="cop-modal-overlay" onClick={() => setReviewModalOpen(false)}>
           <div className="cop-modal" onClick={(e) => e.stopPropagation()}>
-            <h3>Customs Inspection & Verification: {selectedShipment.id}</h3>
-            <p style={{ margin: 0, fontSize: "13px", color: "#94a3b8" }}>
-              Shipper: <strong>{selectedShipment.customer}</strong> | Route: {selectedShipment.origin} to {selectedShipment.destination}
-            </p>
-
-            <div style={{ fontSize: "12px", color: "#38bdf8" }}>
-              Declared Cargo: <strong>{selectedShipment.cargoType}</strong> (HS: {selectedShipment.hsCode})
-            </div>
-
-            <div className="cop-checklist">
-              <span style={{ fontSize: "12px", fontWeight: 700, textTransform: "uppercase", color: "#94a3b8" }}>
-                Mandatory Regulatory Documents
-              </span>
-              {selectedShipment.documents.map((doc, idx) => (
-                <label key={idx} className="cop-check-item">
-                  <input type="checkbox" defaultChecked={doc.status === "VERIFIED"} />
-                  <span>{doc.name} — <strong style={{ color: doc.status === "VERIFIED" ? "#4ade80" : doc.status === "MISSING" ? "#f87171" : "#fbbf24" }}>{doc.status}</strong></span>
-                </label>
-              ))}
-            </div>
-
-            <div>
-              <label style={{ display: "block", fontSize: "12px", fontWeight: 600, marginBottom: "6px" }}>
-                Officer Notes / Compliance Remarks:
-              </label>
-              <textarea
-                className="cop-textarea"
-                placeholder="Enter customs regulatory comments, duty assessment, or required export amendments..."
-                value={officerNotes}
-                onChange={(e) => setOfficerNotes(e.target.value)}
-              />
-            </div>
-
-            <div className="cop-modal-actions">
+            {/* Modal Header */}
+            <div className="cop-modal-header">
+              <div>
+                <h3>Customs Inspection &amp; Verification: {selectedShipment.id}</h3>
+                <p className="cop-modal-sub">
+                  Shipper: <strong>{selectedShipment.customer}</strong> &bull; {selectedShipment.origin} &rarr; {selectedShipment.destination}
+                </p>
+              </div>
               <button
                 type="button"
-                style={{ padding: "8px 16px", borderRadius: "6px", background: "transparent", border: "1px solid rgba(255, 255, 255, 0.2)", color: "#fff", cursor: "pointer" }}
+                className="cop-modal-close"
+                onClick={() => setReviewModalOpen(false)}
+                aria-label="Close modal"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="cop-modal-body">
+              <div className="cop-cargo-badge-info">
+                <FileText size={16} />
+                <span>
+                  Declared Cargo: <strong>{selectedShipment.cargoType}</strong> (Harmonized System Code: <strong>{selectedShipment.hsCode}</strong>)
+                </span>
+              </div>
+
+              <div className="cop-checklist">
+                <div className="cop-checklist-title">Mandatory Regulatory Documents Checklist</div>
+                {selectedShipment.documents.map((doc, idx) => {
+                  const statusClass = (doc.status || "").toLowerCase();
+                  return (
+                    <label key={idx} className="cop-check-item">
+                      <div className="cop-check-left">
+                        <input type="checkbox" defaultChecked={doc.status === "VERIFIED"} />
+                        <span className="cop-check-name">{doc.name}</span>
+                      </div>
+                      <span className={`cop-doc-badge ${statusClass}`}>
+                        {doc.status}
+                      </span>
+                    </label>
+                  );
+                })}
+              </div>
+
+              <div className="cop-notes-field">
+                <label className="cop-notes-label">
+                  Officer Inspection Notes &amp; Compliance Remarks:
+                </label>
+                <textarea
+                  className="cop-textarea"
+                  placeholder="Enter customs regulatory comments, assessed duty rates, or required cargo hold justifications..."
+                  value={officerNotes}
+                  onChange={(e) => setOfficerNotes(e.target.value)}
+                />
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="cop-modal-footer">
+              <button
+                type="button"
+                className="cop-btn-cancel"
                 onClick={() => setReviewModalOpen(false)}
               >
                 Cancel
@@ -379,10 +407,10 @@ export default function CustomsOfficerPortal({ initialTab = "pending-reviews" })
               <button
                 type="button"
                 className="cop-btn-action"
-                style={{ background: "#16a34a" }}
+                style={{ background: "#059669", padding: "10px 20px" }}
                 onClick={() => handleDecision("APPROVE")}
               >
-                Approve & Digital Sign-off
+                <CheckCircle2 size={16} /> Approve &amp; Digital Sign-off
               </button>
             </div>
           </div>
