@@ -19,6 +19,10 @@ import {
   FileText,
   ThumbsUp,
   ThumbsDown,
+  Cpu,
+  Zap,
+  AlertTriangle,
+  Send,
 } from "lucide-react";
 import { useRetailQuotes } from "../context/RetailQuotesContext";
 import {
@@ -137,6 +141,17 @@ export default function RetailShipmentsHistory({ viewMode = "quotes" }) {
     reloadQuotes();
     if (selectedQuote) {
       setSelectedQuote((prev) => ({ ...prev, status: "REJECTED" }));
+    }
+  }
+
+  function handleAdvanceWorkflow(quoteNo, nextStatus, remarks) {
+    updateQuoteStatusInStore(quoteNo, nextStatus, {
+      agentRemarks: remarks || `Advanced to ${nextStatus}`,
+      lastWorkflowTransitionAt: new Date().toISOString(),
+    });
+    reloadQuotes();
+    if (selectedQuote) {
+      setSelectedQuote((prev) => ({ ...prev, status: nextStatus }));
     }
   }
 
@@ -739,36 +754,117 @@ export default function RetailShipmentsHistory({ viewMode = "quotes" }) {
               </button>
 
               <div className="rsh-footer-actions">
-                {normalizeWorkflowStatus(selectedQuote.status) === "FINAL_QUOTE_SENT" || normalizeWorkflowStatus(selectedQuote.status) === "AI_ANALYZED" ? (
-                  <>
-                    <button
-                      type="button"
-                      style={{ background: "#fef2f2", color: "#dc2626", border: "1px solid #fecaca", padding: "10px 16px", borderRadius: "10px", fontWeight: "700", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: "6px" }}
-                      onClick={() => handleRejectQuote(selectedQuote.quoteNo || selectedQuote.id)}
-                    >
-                      <ThumbsDown size={14} /> Decline Quote
-                    </button>
-                    <button
-                      type="button"
-                      style={{ background: "#059669", color: "#ffffff", border: "none", padding: "10px 20px", borderRadius: "10px", fontWeight: "700", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: "8px", boxShadow: "0 4px 12px rgba(5, 150, 105, 0.25)" }}
-                      onClick={() => handleAcceptQuote(selectedQuote.quoteNo || selectedQuote.id)}
-                    >
-                      <ThumbsUp size={15} /> Accept Quote &amp; Confirm Booking
-                    </button>
-                  </>
-                ) : normalizeWorkflowStatus(selectedQuote.status) === "ACCEPTED" ? (
-                  <span style={{ display: "inline-flex", alignItems: "center", gap: "6px", padding: "8px 16px", background: "#ecfdf5", color: "#059669", borderRadius: "8px", fontWeight: "700", fontSize: "13px" }}>
-                    <CheckCircle2 size={16} /> Booking Confirmed &amp; Dispatched
-                  </span>
-                ) : normalizeWorkflowStatus(selectedQuote.status) === "REJECTED" ? (
-                  <span style={{ display: "inline-flex", alignItems: "center", gap: "6px", padding: "8px 16px", background: "#fef2f2", color: "#dc2626", borderRadius: "8px", fontWeight: "700", fontSize: "13px" }}>
-                    <X size={16} /> Quote Declined / Archived
-                  </span>
-                ) : (
-                  <span style={{ display: "inline-flex", alignItems: "center", gap: "6px", padding: "8px 16px", background: "#f1f5f9", color: "#475569", borderRadius: "8px", fontWeight: "600", fontSize: "13px" }}>
-                    <Clock size={16} /> Under Operations &amp; Customs Review
-                  </span>
-                )}
+                {(() => {
+                  const norm = normalizeWorkflowStatus(selectedQuote.status);
+                  const qId = selectedQuote.quoteNo || selectedQuote.id;
+
+                  if (norm === "SENT" || norm === "APPROVED") {
+                    return (
+                      <>
+                        <button
+                          type="button"
+                          style={{ background: "#fef2f2", color: "#dc2626", border: "1px solid #fecaca", padding: "9px 16px", borderRadius: "10px", fontWeight: "700", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: "6px" }}
+                          onClick={() => handleRejectQuote(qId)}
+                        >
+                          <ThumbsDown size={14} /> Decline Quote
+                        </button>
+                        <button
+                          type="button"
+                          style={{ background: "#059669", color: "#ffffff", border: "none", padding: "9px 20px", borderRadius: "10px", fontWeight: "700", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: "8px", boxShadow: "0 4px 12px rgba(5, 150, 105, 0.25)" }}
+                          onClick={() => handleAcceptQuote(qId)}
+                        >
+                          <ThumbsUp size={15} /> Accept Quote &amp; Confirm Booking
+                        </button>
+                      </>
+                    );
+                  }
+
+                  if (norm === "DRAFT") {
+                    return (
+                      <>
+                        <span style={{ display: "inline-flex", alignItems: "center", gap: "6px", padding: "7px 12px", background: "#e0f2fe", color: "#0369a1", borderRadius: "8px", fontWeight: "600", fontSize: "12px" }}>
+                          <User size={14} /> 1. Request Submitted
+                        </span>
+                        <button
+                          type="button"
+                          style={{ background: "#0284c7", color: "#ffffff", border: "none", padding: "8px 14px", borderRadius: "8px", fontWeight: "700", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: "6px", fontSize: "12px" }}
+                          onClick={() => handleAdvanceWorkflow(qId, "GENERATED", "AI Engine generated routes, ML pricing & risk.")}
+                        >
+                          <Cpu size={14} /> Trigger AI Engine
+                        </button>
+                      </>
+                    );
+                  }
+
+                  if (norm === "GENERATED") {
+                    return (
+                      <>
+                        <span style={{ display: "inline-flex", alignItems: "center", gap: "6px", padding: "7px 12px", background: "#e0e7ff", color: "#3730a3", borderRadius: "8px", fontWeight: "600", fontSize: "12px" }}>
+                          <Cpu size={14} /> 2. AI Pricing &amp; Risk Generated
+                        </span>
+                        <button
+                          type="button"
+                          style={{ background: "#6366f1", color: "#ffffff", border: "none", padding: "8px 14px", borderRadius: "8px", fontWeight: "700", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: "6px", fontSize: "12px" }}
+                          onClick={() => handleAdvanceWorkflow(qId, "PENDING_REVIEW", "Routed to Customs and Freight Agent review queue.")}
+                        >
+                          <ShieldCheck size={14} /> Forward to Customs Review
+                        </button>
+                      </>
+                    );
+                  }
+
+                  if (norm === "PENDING_REVIEW") {
+                    return (
+                      <>
+                        <span style={{ display: "inline-flex", alignItems: "center", gap: "6px", padding: "7px 12px", background: "#fef3c7", color: "#92400e", borderRadius: "8px", fontWeight: "600", fontSize: "12px" }}>
+                          <Clock size={14} /> 3. Customs &amp; Agent Review Queue
+                        </span>
+                        <button
+                          type="button"
+                          style={{ background: "#7c3aed", color: "#ffffff", border: "none", padding: "8px 14px", borderRadius: "8px", fontWeight: "700", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: "6px", fontSize: "12px" }}
+                          onClick={() => handleAdvanceWorkflow(qId, "SENT", "Customs cleared & Freight Agent dispatched final quote.")}
+                        >
+                          <Send size={14} /> Approve &amp; Send Final Quote
+                        </button>
+                      </>
+                    );
+                  }
+
+                  if (norm === "CUSTOMS_FLAGGED") {
+                    return (
+                      <>
+                        <span style={{ display: "inline-flex", alignItems: "center", gap: "6px", padding: "7px 12px", background: "#fee2e2", color: "#dc2626", borderRadius: "8px", fontWeight: "600", fontSize: "12px" }}>
+                          <AlertTriangle size={14} /> Customs Hold / Missing Docs
+                        </span>
+                        <button
+                          type="button"
+                          style={{ background: "#0284c7", color: "#ffffff", border: "none", padding: "8px 14px", borderRadius: "8px", fontWeight: "700", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: "6px", fontSize: "12px" }}
+                          onClick={() => handleAdvanceWorkflow(qId, "PENDING_REVIEW", "Documents re-uploaded by customer.")}
+                        >
+                          <FileText size={14} /> Upload Docs &amp; Re-verify
+                        </button>
+                      </>
+                    );
+                  }
+
+                  if (norm === "ACCEPTED") {
+                    return (
+                      <span style={{ display: "inline-flex", alignItems: "center", gap: "6px", padding: "7px 14px", background: "#ecfdf5", color: "#059669", borderRadius: "8px", fontWeight: "700", fontSize: "12.5px" }}>
+                        <CheckCircle2 size={15} /> 6. Booking Confirmed &amp; Dispatched
+                      </span>
+                    );
+                  }
+
+                  if (norm === "REJECTED") {
+                    return (
+                      <span style={{ display: "inline-flex", alignItems: "center", gap: "6px", padding: "7px 14px", background: "#fef2f2", color: "#dc2626", borderRadius: "8px", fontWeight: "700", fontSize: "12.5px" }}>
+                        <X size={15} /> 6. Quote Declined / Archived
+                      </span>
+                    );
+                  }
+
+                  return null;
+                })()}
 
                 <button
                   type="button"
