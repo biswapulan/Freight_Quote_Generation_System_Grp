@@ -16,9 +16,18 @@ import {
   ShieldCheck,
   CheckCircle2,
   Calendar,
-  FileText
+  FileText,
+  ThumbsUp,
+  ThumbsDown,
 } from "lucide-react";
 import { useRetailQuotes } from "../context/RetailQuotesContext";
+import {
+  STATUS_CONFIG,
+  normalizeWorkflowStatus,
+  getPlatformQuotes,
+  updateQuoteStatusInStore,
+} from "../utils/quoteWorkflow";
+import QuoteWorkflowStepper from "./QuoteWorkflowStepper";
 import "./RetailShipmentsHistory.css";
 
 const MODE_CLASS = { ocean_fcl: "ocean-fcl", air: "air-freight", ocean_lcl: "ocean-lcl", ocean: "ocean-fcl" };
@@ -103,10 +112,32 @@ export default function RetailShipmentsHistory({ viewMode = "quotes" }) {
   }
 
   function openQuoteDetail(quoteNo) {
-    const q = quotations.find((item) => item.quoteNo === quoteNo);
+    const q = quotations.find((item) => item.quoteNo === quoteNo || item.id === quoteNo);
     if (!q) return;
     setSelectedQuote(q);
     setCopied(false);
+  }
+
+  function handleAcceptQuote(quoteNo) {
+    updateQuoteStatusInStore(quoteNo, "ACCEPTED", {
+      agentRemarks: "Customer accepted quotation. Space locked on vessel.",
+      confirmedAt: new Date().toISOString(),
+    });
+    reloadQuotes();
+    if (selectedQuote) {
+      setSelectedQuote((prev) => ({ ...prev, status: "ACCEPTED" }));
+    }
+  }
+
+  function handleRejectQuote(quoteNo) {
+    updateQuoteStatusInStore(quoteNo, "REJECTED", {
+      agentRemarks: "Customer declined terms / cancelled request.",
+      rejectedAt: new Date().toISOString(),
+    });
+    reloadQuotes();
+    if (selectedQuote) {
+      setSelectedQuote((prev) => ({ ...prev, status: "REJECTED" }));
+    }
   }
 
   function copyQuoteId(id) {
@@ -460,10 +491,12 @@ export default function RetailShipmentsHistory({ viewMode = "quotes" }) {
 
             {/* Modal Body */}
             <div className="rsh-modal-body">
-              
-              {/* Route Journey Visual Banner */}
-              <div className="rsh-route-banner">
-                <div className="rsh-route-node">
+              {/* Multi-Role 5-Step Quote Lifecycle Stepper */}
+              <QuoteWorkflowStepper status={selectedQuote.status} />
+
+              {/* Route Summary Ribbon */}
+              <div className="rsh-route-ribbon">
+                <div className="rsh-route-node origin">
                   <div className="rsh-node-icon origin">
                     <MapPin size={16} />
                   </div>
@@ -500,7 +533,7 @@ export default function RetailShipmentsHistory({ viewMode = "quotes" }) {
               </div>
 
               {/* Live Cargo Milestone Telemetry Stepper for Booked Shipments */}
-              {(isShipmentMode || selectedQuote.status === "Booked") && (
+              {(isShipmentMode || normalizeWorkflowStatus(selectedQuote.status) === "ACCEPTED") && (
                 <div className="rsh-tracking-stepper-wrap">
                   <div className="rsh-stepper-head">
                     <div className="rsh-stepper-title">
@@ -629,7 +662,7 @@ export default function RetailShipmentsHistory({ viewMode = "quotes" }) {
 
             </div>
 
-            {/* Modal Footer */}
+            {/* Modal Footer with Customer Accept / Reject Actions */}
             <div className="rsh-modal-footer">
               <button
                 type="button"
@@ -638,7 +671,39 @@ export default function RetailShipmentsHistory({ viewMode = "quotes" }) {
               >
                 <Printer size={14} /> Print Summary
               </button>
+
               <div className="rsh-footer-actions">
+                {normalizeWorkflowStatus(selectedQuote.status) === "FINAL_QUOTE_SENT" || normalizeWorkflowStatus(selectedQuote.status) === "AI_ANALYZED" ? (
+                  <>
+                    <button
+                      type="button"
+                      style={{ background: "#fef2f2", color: "#dc2626", border: "1px solid #fecaca", padding: "10px 16px", borderRadius: "10px", fontWeight: "700", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: "6px" }}
+                      onClick={() => handleRejectQuote(selectedQuote.quoteNo || selectedQuote.id)}
+                    >
+                      <ThumbsDown size={14} /> Decline Quote
+                    </button>
+                    <button
+                      type="button"
+                      style={{ background: "#059669", color: "#ffffff", border: "none", padding: "10px 20px", borderRadius: "10px", fontWeight: "700", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: "8px", boxShadow: "0 4px 12px rgba(5, 150, 105, 0.25)" }}
+                      onClick={() => handleAcceptQuote(selectedQuote.quoteNo || selectedQuote.id)}
+                    >
+                      <ThumbsUp size={15} /> Accept Quote &amp; Confirm Booking
+                    </button>
+                  </>
+                ) : normalizeWorkflowStatus(selectedQuote.status) === "ACCEPTED" ? (
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: "6px", padding: "8px 16px", background: "#ecfdf5", color: "#059669", borderRadius: "8px", fontWeight: "700", fontSize: "13px" }}>
+                    <CheckCircle2 size={16} /> Booking Confirmed &amp; Dispatched
+                  </span>
+                ) : normalizeWorkflowStatus(selectedQuote.status) === "REJECTED" ? (
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: "6px", padding: "8px 16px", background: "#fef2f2", color: "#dc2626", borderRadius: "8px", fontWeight: "700", fontSize: "13px" }}>
+                    <X size={16} /> Quote Declined / Archived
+                  </span>
+                ) : (
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: "6px", padding: "8px 16px", background: "#f1f5f9", color: "#475569", borderRadius: "8px", fontWeight: "600", fontSize: "13px" }}>
+                    <Clock size={16} /> Under Operations &amp; Customs Review
+                  </span>
+                )}
+
                 <button
                   type="button"
                   className="btn-secondary-light"
@@ -646,13 +711,6 @@ export default function RetailShipmentsHistory({ viewMode = "quotes" }) {
                 >
                   Close
                 </button>
-                <Link
-                  to="/dashboard/request-quote"
-                  className="btn-orange-primary"
-                  onClick={() => setSelectedQuote(null)}
-                >
-                  + New Quote <ArrowRight size={14} />
-                </Link>
               </div>
             </div>
 
