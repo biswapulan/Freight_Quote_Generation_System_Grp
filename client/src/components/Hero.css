@@ -53,11 +53,12 @@
 }
 
 .fa-hero-left h1 {
-  font-size: 58px;
-  line-height: 1.08;
+  font-size: clamp(32px, 3.8vw, 48px);
+  line-height: 1.15;
   font-weight: 800;
-  letter-spacing: -0.5px;
+  letter-spacing: -0.02em;
   margin: 0;
+  max-width: 620px;
 }
 
 .fa-hero-description {
