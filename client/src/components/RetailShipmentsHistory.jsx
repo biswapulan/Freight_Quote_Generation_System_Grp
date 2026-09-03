@@ -87,7 +87,7 @@ export default function RetailShipmentsHistory({ viewMode = "quotes" }) {
         (item.destination && item.destination.toLowerCase().includes(q));
       const matchesLane = laneFilter === "all" || item.laneCode === laneFilter;
       const matchesMode = modeFilter === "all" || item.mode === modeFilter;
-      const matchesStatus = statusFilter === "all" || item.status === statusFilter;
+      const matchesStatus = statusFilter === "all" || normalizeWorkflowStatus(item.status) === statusFilter;
 
       let matchesDate = true;
       if (item.createdAt) {
@@ -299,8 +299,14 @@ export default function RetailShipmentsHistory({ viewMode = "quotes" }) {
           </select>
           <select className="form-select" style={{ width: "auto" }} value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
             <option value="all">All statuses</option>
-            <option value="Booked">Booked / In Transit</option>
-            <option value="Draft">Draft</option>
+            <option value="DRAFT">DRAFT</option>
+            <option value="GENERATED">GENERATED</option>
+            <option value="PENDING_REVIEW">PENDING_REVIEW</option>
+            <option value="APPROVED">APPROVED</option>
+            <option value="SENT">SENT</option>
+            <option value="ACCEPTED">ACCEPTED</option>
+            <option value="REJECTED">REJECTED</option>
+            <option value="EXPIRED">EXPIRED</option>
           </select>
           <select className="form-select" style={{ width: "auto" }} value={dateFilter} onChange={(e) => setDateFilter(e.target.value)}>
             <option value="all">All Time</option>
