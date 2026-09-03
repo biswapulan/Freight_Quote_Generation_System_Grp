@@ -1,14 +1,18 @@
 /**
  * Shared Quote Workflow & Lifecycle State Definitions
- * Multi-Role Pipeline: Customer -> AI Services -> Customs Officer -> Freight Agent -> Customer (Decision) -> Admin
+ * Role Connection:
+ * Customer submits data → AI services analyze it → Freight Agent performs human review 
+ * → Customs Officer participates when customs review is required 
+ * → Freight Agent sends final quote → Customer accepts/rejects 
+ * → Admin manages and monitors the platform.
  */
 
 export const WORKFLOW_STAGES = [
   { id: "REQUESTED", label: "1. Requested", actor: "Customer", desc: "Shipment details & documents submitted" },
   { id: "AI_ANALYZED", label: "2. AI Analyzed", actor: "AI Services", desc: "Pricing, route & risk engine computed" },
-  { id: "CUSTOMS_REVIEWED", label: "3. Customs Reviewed", actor: "Customs Officer", desc: "HS code & trade regulatory sign-off" },
-  { id: "FINAL_QUOTE_SENT", label: "4. Final Quote Sent", actor: "Freight Agent", desc: "Commercial validation & margins applied" },
-  { id: "ACCEPTED", label: "5. Accepted / Confirmed", actor: "Customer", desc: "Cargo booking locked & confirmed" },
+  { id: "CUSTOMS_REVIEWED", label: "3. Customs Review", actor: "Customs Officer", desc: "Participates when customs review is required" },
+  { id: "FINAL_QUOTE_SENT", label: "4. Final Quote Sent", actor: "Freight Agent", desc: "Human review, commercial validation & margins" },
+  { id: "ACCEPTED", label: "5. Customer Decision", actor: "Customer", desc: "Customer views final quote and accepts / rejects" },
 ];
 
 export const STATUS_CONFIG = {
