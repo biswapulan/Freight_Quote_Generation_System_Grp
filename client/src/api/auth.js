@@ -117,7 +117,9 @@ async function request(endpoint, data, { method = "POST", token, timeoutMs = 120
       // If email has standard role keyword or valid format
       if (normalizedEmail && normalizedEmail.includes("@")) {
         const detectedRole =
-          normalizedEmail.includes("agent")
+          normalizedEmail.includes("customs") || normalizedEmail.includes("officer")
+            ? "customs"
+            : normalizedEmail.includes("agent")
             ? "agent"
             : normalizedEmail.includes("admin")
             ? "admin"
@@ -130,7 +132,12 @@ async function request(endpoint, data, { method = "POST", token, timeoutMs = 120
           full_name: normalizedEmail.split("@")[0].toUpperCase(),
           email: normalizedEmail,
           role: detectedRole,
-          company_name: detectedRole === "business" ? "Enterprise Corp" : "",
+          company_name:
+            detectedRole === "business"
+              ? "Enterprise Corp"
+              : detectedRole === "customs"
+              ? "Port Customs & Border Authority"
+              : "",
         };
       }
     }

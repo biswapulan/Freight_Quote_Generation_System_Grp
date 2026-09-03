@@ -147,13 +147,24 @@ export default function DashboardShell() {
 
   if (!user) return null;
 
-  const role = (user.role || "retail").toLowerCase();
+  const rawRole = (user.role || "").toLowerCase();
+  const userEmail = (user.email || "").toLowerCase();
+  const role =
+    rawRole === "customs" || rawRole === "customs_officer" || userEmail.includes("customs") || userEmail.includes("officer")
+      ? "customs"
+      : rawRole === "admin" || userEmail.includes("admin")
+      ? "admin"
+      : rawRole === "agent" || userEmail.includes("agent")
+      ? "agent"
+      : rawRole === "business" || userEmail.includes("business")
+      ? "business"
+      : "retail";
 
   const sections =
-    role === "admin"
-      ? ADMIN_SECTIONS
-      : role === "customs" || role === "customs_officer"
+    role === "customs"
       ? CUSTOMS_SECTIONS
+      : role === "admin"
+      ? ADMIN_SECTIONS
       : role === "agent"
       ? AGENT_SECTIONS
       : role === "business"
