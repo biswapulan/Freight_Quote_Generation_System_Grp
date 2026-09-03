@@ -517,13 +517,31 @@ export default function RetailShipmentsHistory({ viewMode = "quotes" }) {
                   </div>
                 </div>
                 <div className="rsh-header-badges">
-                  <span className={`status-badge ${STATUS_CLASS[selectedQuote.status] || "draft"}`}>
-                    {selectedQuote.status === "Booked" && <CheckCircle2 size={12} style={{ display: "inline", marginRight: 4 }} />}
-                    {selectedQuote.status}
-                  </span>
+                  {(() => {
+                    const norm = normalizeWorkflowStatus(selectedQuote.status);
+                    const cfg = STATUS_CONFIG[norm] || { label: selectedQuote.status, color: "#0284c7", bg: "#e0f2fe" };
+                    return (
+                      <span
+                        className="status-badge"
+                        style={{
+                          backgroundColor: cfg.bg,
+                          color: cfg.color,
+                          fontWeight: 700,
+                          fontSize: "0.75rem",
+                          letterSpacing: "0.03em",
+                          textTransform: "uppercase",
+                          border: `1px solid ${cfg.color}33`,
+                          padding: "4px 10px",
+                          borderRadius: "6px",
+                        }}
+                      >
+                        {cfg.label || norm}
+                      </span>
+                    );
+                  })()}
                   <span className={`mode-badge ${MODE_CLASS[selectedQuote.mode] || "ocean-fcl"}`}>
                     <Ship size={12} style={{ display: "inline", marginRight: 4 }} />
-                    {selectedQuote.modeLabel}
+                    {selectedQuote.modeLabel || "Ocean Freight"}
                   </span>
                 </div>
               </div>
