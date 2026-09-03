@@ -18,6 +18,7 @@ import AgentQuoteDesk from "./AgentQuoteDesk";
 import AgentShipmentDispatch from "./AgentShipmentDispatch";
 import AgentSpotRates from "./AgentSpotRates";
 import AgentPerformance from "./AgentPerformance";
+import AdminOverview from "./AdminOverview";
 import AdminRateConfig from "./AdminRateConfig";
 import AdminUsers from "./AdminUsers";
 import AdminMasterData from "./AdminMasterData";
@@ -259,7 +260,9 @@ export default function DashboardShell() {
             )
           ) : /* Admin Portal Views */
           role === "admin" ? (
-            activeItem.slug === "dashboard" || activeItem.slug === "rate-config" ? (
+            activeItem.slug === "dashboard" ? (
+              <AdminOverview />
+            ) : activeItem.slug === "rate-config" ? (
               <AdminRateConfig />
             ) : activeItem.slug === "users" || activeItem.slug === "user-management" ? (
               <AdminUsers />
@@ -278,7 +281,7 @@ export default function DashboardShell() {
             ) : activeItem.slug === "support" ? (
               <Support />
             ) : (
-              <AdminRateConfig />
+              <AdminOverview />
             )
           ) : /* Freight Agent Views */
           role === "agent" ? (
