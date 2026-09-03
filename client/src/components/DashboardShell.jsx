@@ -240,12 +240,14 @@ export default function DashboardShell() {
       >
         <RetailQuotesProvider>
           {/* Universal M3 / Telemetry Views */}
-          {activeItem.slug === "m3-intelligence" || activeItem.slug === "risk-intelligence" ? (
-            <M3IntelligenceDashboard />
+          {activeItem.slug === "m3-intelligence" ? (
+            <M3IntelligenceDashboard mode="all" />
+          ) : activeItem.slug === "risk-intelligence" || activeItem.slug === "risk-analysis" ? (
+            <M3IntelligenceDashboard mode="risk" />
+          ) : activeItem.slug === "ai-pricing-monitor" || activeItem.slug === "ai-pricing-analysis" ? (
+            <M3IntelligenceDashboard mode="pricing" />
           ) : activeItem.slug === "ai-agent-monitor" ? (
             <AIAgentMonitor />
-          ) : activeItem.slug === "ai-pricing-monitor" ? (
-            <M3IntelligenceDashboard />
           ) : /* Customs Officer Portal Views */
           role === "customs" || role === "customs_officer" ? (
             activeItem.slug === "profile" ? (

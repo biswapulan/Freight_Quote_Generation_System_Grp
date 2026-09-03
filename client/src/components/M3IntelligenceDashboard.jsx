@@ -172,7 +172,7 @@ const MASTER_COMMODITIES = [
   { code: "930200", desc: "Revolvers, Munitions & Military Firearms (Restricted)", category: "Prohibited / Arms" },
 ];
 
-export default function M3IntelligenceDashboard() {
+export default function M3IntelligenceDashboard({ mode = "all" }) {
   const [selectedLane, setSelectedLane] = useState(GLOBAL_TRADE_CORRIDORS[0]);
   const [customOrigin, setCustomOrigin] = useState(GLOBAL_TRADE_CORRIDORS[0].origin);
   const [customDest, setCustomDest] = useState(GLOBAL_TRADE_CORRIDORS[0].destination);
@@ -225,19 +225,38 @@ export default function M3IntelligenceDashboard() {
       ? GLOBAL_TRADE_CORRIDORS
       : GLOBAL_TRADE_CORRIDORS.filter((c) => c.region === selectedRegion);
 
+  const bannerTitle =
+    mode === "pricing"
+      ? "AI Pricing Monitor — Dynamic ML Rate Engine"
+      : mode === "risk"
+      ? "Risk Intelligence & Route Safety Suite"
+      : "Milestone 3 — Intelligence & Compliance Suite";
+
+  const bannerSubtitle =
+    mode === "pricing"
+      ? "Real-time machine learning freight predictions, multi-model regression benchmarks (Linear vs Random Forest vs Ridge), and container fuel elasticity modeling."
+      : mode === "risk"
+      ? "Global marine weather modeling, Open-Meteo telemetry, international HS tariff verification & multi-factor risk policy gating."
+      : "Global Marine Weather Modeling, Open-Meteo Telemetry, International HS Tariff Verification & Multi-Factor Risk Policy Gating";
+
+  const badgeText =
+    mode === "pricing"
+      ? "AI ML Pricing Engine (Active)"
+      : mode === "risk"
+      ? "Risk & Safety Engine (Active)"
+      : "M3 Live Production Mode (Phases 1-4 Active)";
+
   return (
     <div className="m3-dashboard">
       {/* Top Banner */}
       <div className="m3-header-banner">
         <div className="m3-title-block">
-          <h1>Milestone 3 — Intelligence &amp; Compliance Suite</h1>
-          <p>
-            Global Marine Weather Modeling, Open-Meteo Telemetry, International HS Tariff Verification &amp; Multi-Factor Risk Policy Gating
-          </p>
+          <h1>{bannerTitle}</h1>
+          <p>{bannerSubtitle}</p>
         </div>
         <div className="m3-badge-tag">
           <span className="m3-badge-dot" />
-          M3 Live Production Mode (Phases 1-4 Active)
+          {badgeText}
         </div>
       </div>
 
@@ -372,44 +391,52 @@ export default function M3IntelligenceDashboard() {
       {/* Intelligence Modules Stack */}
       <div className="m3-modules-stack">
         {/* Module 1: Weather Intelligence */}
-        <WeatherRiskPanel
-          shipmentId={selectedLane.id}
-          origin={customOrigin}
-          destination={customDest}
-          transitDays={customTransit}
-          onWeatherAssessed={handleWeatherAssessed}
-        />
+        {(mode === "all" || mode === "risk") && (
+          <WeatherRiskPanel
+            shipmentId={selectedLane.id}
+            origin={customOrigin}
+            destination={customDest}
+            transitDays={customTransit}
+            onWeatherAssessed={handleWeatherAssessed}
+          />
+        )}
 
         {/* Module 2: Customs Compliance & RAG Engine */}
-        <CustomsComplianceCard
-          shipmentId={selectedLane.id}
-          originCountry={customOrigin}
-          destinationCountry={customDest}
-          hsCode={customHS}
-          commodity={customCommodity}
-          incoterm={customIncoterm}
-          onComplianceUpdated={handleComplianceUpdated}
-        />
+        {(mode === "all" || mode === "risk") && (
+          <CustomsComplianceCard
+            shipmentId={selectedLane.id}
+            originCountry={customOrigin}
+            destinationCountry={customDest}
+            hsCode={customHS}
+            commodity={customCommodity}
+            incoterm={customIncoterm}
+            onComplianceUpdated={handleComplianceUpdated}
+          />
+        )}
 
         {/* Module 3: Multi-Factor Risk Assessment & Policy Gating */}
-        <RiskExplainabilityCard
-          shipmentId={selectedLane.id}
-          weatherScore={weatherScore}
-          customsScore={customsScore}
-          customsStatus={customsStatus}
-          origin={customOrigin}
-          destination={customDest}
-          cargoType={customCommodity}
-          hsCode={customHS}
-        />
+        {(mode === "all" || mode === "risk") && (
+          <RiskExplainabilityCard
+            shipmentId={selectedLane.id}
+            weatherScore={weatherScore}
+            customsScore={customsScore}
+            customsStatus={customsStatus}
+            origin={customOrigin}
+            destination={customDest}
+            cargoType={customCommodity}
+            hsCode={customHS}
+          />
+        )}
 
         {/* Module 4: Machine Learning Freight Pricing & Market Benchmarks */}
-        <MLPricingComparisonCard
-          origin={customOrigin}
-          destination={customDest}
-          cargoType={customCommodity}
-          transitDays={customTransit}
-        />
+        {(mode === "all" || mode === "pricing") && (
+          <MLPricingComparisonCard
+            origin={customOrigin}
+            destination={customDest}
+            cargoType={customCommodity}
+            transitDays={customTransit}
+          />
+        )}
       </div>
     </div>
   );
