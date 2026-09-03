@@ -2,7 +2,7 @@ import "./Logo.css";
 import "./AuthPage.css";
 import React, { useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { FaEye, FaEyeSlash, FaCheck, FaEnvelope, FaLock, FaUser, FaArrowLeft, FaSpinner, FaShieldAlt, FaBoxes, FaGlobeAmericas, FaCog, FaCrosshairs, FaBuilding, FaShoppingCart } from "react-icons/fa";
+import { FaEye, FaEyeSlash, FaCheck, FaEnvelope, FaLock, FaUser, FaArrowLeft, FaSpinner, FaShieldAlt, FaBoxes, FaGlobeAmericas } from "react-icons/fa";
 import { login as loginRequest, signup, forgotPassword } from "../api/auth";
 import { useAuth } from "../context/AuthContext";
 import Logo from "./Logo";
@@ -49,15 +49,6 @@ setErrorMsg("");
 setLoading(false);
 }
 
-// ---- Demo offline credentials (used when Django backend is not running) ----
-const DEMO_USERS = {
-  "admin@freightai.com":    { token: "demo-token-admin",    role: "admin",    name: "Admin User",      email: "admin@freightai.com",    companyName: "FreightAI HQ" },
-  "agent@freightai.com":   { token: "demo-token-agent",    role: "agent",    name: "Freight Agent",    email: "agent@freightai.com",    companyName: "FreightAI HQ" },
-  "business@freightai.com":{ token: "demo-token-biz",      role: "business", name: "Business User",    email: "business@freightai.com", companyName: "Apex Exports Pvt Ltd" },
-  "retail@freightai.com":  { token: "demo-token-retail",   role: "retail",   name: "Retail Customer",  email: "retail@freightai.com",   companyName: null },
-};
-const DEMO_PASSWORD = "demo123";
-
 async function handleLoginSubmit(e) {
 e.preventDefault();
 setErrorMsg("");
@@ -67,28 +58,11 @@ try {
   const data = await loginRequest(loginData);
   auth.login(data);
   navigate("/dashboard");
-} catch {
-  // Backend unreachable — try demo offline credentials
-  const demoUser = DEMO_USERS[loginData.email.toLowerCase().trim()];
-  if (demoUser && loginData.password === DEMO_PASSWORD) {
-    auth.login(demoUser);
-    navigate("/dashboard");
-  } else if (demoUser) {
-    setErrorMsg("Demo password is: demo123");
-  } else {
-    setErrorMsg("Unable to connect to server. Use a demo account below to explore the platform.");
-  }
+} catch (err) {
+  setErrorMsg(err.message || "Invalid credentials or server unavailable. Please try again.");
 } finally {
   setLoading(false);
 }
-}
-
-function demoLogin(email) {
-  const demoUser = DEMO_USERS[email];
-  if (demoUser) {
-    auth.login(demoUser);
-    navigate("/dashboard");
-  }
 }
 
 async function handleForgotSubmit(e) {
@@ -250,51 +224,6 @@ Forgot password?
 <button type="submit" className="primary-btn" disabled={loading} aria-busy={loading}>
 {loading ? <><FaSpinner className="button-loader" /> Logging in...</> : "Log In"}
 </button>
-
-<div
-  style={{
-    marginTop: "20px",
-    borderTop: "1px solid #1e293b",
-    paddingTop: "18px",
-  }}
->
-  <p style={{ fontSize: "12px", color: "#64748b", textAlign: "center", marginBottom: "12px", fontWeight: "600", letterSpacing: "0.5px", textTransform: "uppercase" }}>
-    Quick Demo Access
-  </p>
-  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
-    {[
-      { label: "Admin", icon: <FaCog size={12} />, email: "admin@freightai.com", color: "#dc2626" },
-      { label: "Agent", icon: <FaCrosshairs size={12} />, email: "agent@freightai.com", color: "#0284c7" },
-      { label: "Business", icon: <FaBuilding size={12} />, email: "business@freightai.com", color: "#7c3aed" },
-      { label: "Retail", icon: <FaShoppingCart size={12} />, email: "retail@freightai.com", color: "#059669" },
-    ].map(({ label, icon, email, color }) => (
-      <button
-        key={email}
-        type="button"
-        onClick={() => demoLogin(email)}
-        style={{
-          background: "transparent",
-          border: `1px solid ${color}`,
-          color: color,
-          borderRadius: "8px",
-          padding: "8px 12px",
-          cursor: "pointer",
-          fontSize: "12px",
-          fontWeight: "700",
-          display: "inline-flex",
-          alignItems: "center",
-          justifyContent: "center",
-          gap: "6px",
-          transition: "all 0.2s ease",
-        }}
-        onMouseOver={(e) => { e.currentTarget.style.background = color; e.currentTarget.style.color = "#fff"; }}
-        onMouseOut={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = color; }}
-      >
-        {label}
-      </button>
-    ))}
-  </div>
-</div>
 
 </form>
 
