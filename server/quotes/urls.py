@@ -3,6 +3,7 @@ from .views import (
     ShipmentCreateView,
     ShipmentQuoteGenerateView,
     CustomerQuoteListView,
+    CustomerQuoteDecisionView,
     AdminQuoteListView,
     AdminQuoteStatusUpdateView,
     QuoteMarginView,

@@ -154,9 +154,9 @@ return (
 
 <div className="auth-brand-overlay"></div>
 
-<Link to="/" className="auth-brand-logo">
+<div className="auth-brand-logo">
 <Logo variant="white" size={40} />
-</Link>
+</div>
 
 <div className="auth-brand-copy">
 <p className="auth-brand-eyebrow">Enterprise Logistics Platform</p>
@@ -181,9 +181,9 @@ quotes and live tracking from one intelligent dashboard.
 
 <div className="auth-form-panel">
 
-<Link to="/" className="auth-logo-mobile">
+<div className="auth-logo-mobile">
 <Logo variant="navy" size={34} />
-</Link>
+</div>
 
 <div className="auth-container">
 

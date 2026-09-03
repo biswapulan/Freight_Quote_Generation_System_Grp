@@ -81,53 +81,97 @@
 .ov-hero-text {
   position: relative;
   z-index: 1;
+  max-width: 600px;
 }
 
+.ov-hero-eyebrow,
 .ov-hero-kicker {
-  font-size: 12.5px;
+  font-size: 12px;
   font-weight: 700;
-  letter-spacing: 0.4px;
-  color: var(--fa-orange-light);
+  letter-spacing: 0.5px;
+  color: var(--fa-orange-light, #fbbf24);
   text-transform: uppercase;
   margin-bottom: 6px;
+  display: inline-block;
 }
 
 .ov-hero-title {
   font-size: 24px;
   font-weight: 800;
-  color: #fff;
-  margin-bottom: 4px;
+  color: #ffffff;
+  margin-bottom: 6px;
+  line-height: 1.2;
 }
 
+.ov-hero-sub,
 .ov-hero-date {
   font-size: 13.5px;
-  color: rgba(255, 255, 255, 0.65);
-  font-weight: 500;
+  color: rgba(255, 255, 255, 0.85);
+  font-weight: 400;
+  line-height: 1.5;
+  margin: 0;
 }
 
-.ov-hero-cta {
+.ov-hero-actions {
   position: relative;
   z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.ov-btn-primary,
+.ov-hero-cta {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  background: var(--fa-orange);
-  color: #fff;
-  border: none;
-  padding: 12px 22px;
+  background: var(--fa-orange, #f97316);
+  color: #ffffff !important;
+  border: 1px solid transparent;
+  padding: 11px 20px;
   border-radius: 10px;
-  font-weight: 800;
-  font-size: 14px;
+  font-weight: 700;
+  font-size: 13.5px;
   cursor: pointer;
-  text-decoration: none;
-  box-shadow: 0 10px 24px rgba(255, 152, 0, 0.35);
-  transition: 0.2s ease;
+  text-decoration: none !important;
+  box-shadow: 0 4px 16px rgba(249, 115, 22, 0.4);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   white-space: nowrap;
 }
 
+.ov-btn-primary:hover,
 .ov-hero-cta:hover {
-  background: var(--fa-orange-light);
-  transform: translateY(-1px);
+  background: #ea580c;
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(249, 115, 22, 0.5);
+  color: #ffffff !important;
+}
+
+.ov-btn-ghost {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(255, 255, 255, 0.12);
+  color: #ffffff !important;
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  padding: 11px 20px;
+  border-radius: 10px;
+  font-weight: 600;
+  font-size: 13.5px;
+  cursor: pointer;
+  text-decoration: none !important;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  white-space: nowrap;
+}
+
+.ov-btn-ghost:hover {
+  background: rgba(255, 255, 255, 0.22);
+  border-color: rgba(255, 255, 255, 0.45);
+  transform: translateY(-2px);
+  color: #ffffff !important;
 }
 
 /* ==========================================================================
@@ -599,7 +643,8 @@
   .ov-page { padding: 24px 16px 40px; gap: 18px; }
   .ov-hero { padding: 22px 20px; }
   .ov-hero-title { font-size: 20px; }
-  .ov-hero-cta { width: 100%; justify-content: center; }
+  .ov-hero-actions { width: 100%; }
+  .ov-btn-primary, .ov-btn-ghost, .ov-hero-cta { width: 100%; justify-content: center; }
   .ov-kpis { grid-template-columns: 1fr 1fr; gap: 12px; }
   .ov-kpi-card { padding: 14px; }
   .ov-kpi-value { font-size: 20px; }
