@@ -838,9 +838,17 @@ export default function RetailShipmentsHistory({ viewMode = "quotes" }) {
                       <FileText size={17} style={{ color: "#0284c7" }} />
                       <h4 style={{ margin: 0, fontSize: "14px", fontWeight: "800" }}>Trade &amp; Customs Documents (Regulatory Clearance Gate)</h4>
                     </div>
-                    <span style={{ fontSize: "12px", color: "#64748b" }}>
-                      HS Code: <strong style={{ color: "#0f172a" }}>{selectedQuote.hsCode || "8471.30"}</strong> &bull; Cargo: <strong style={{ color: "#0f172a" }}>{selectedQuote.cargoType || "General Commercial Goods"}</strong>
-                    </span>
+                    <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
+                      <span style={{ fontSize: "12px", color: "#64748b" }}>
+                        HS Code: <strong style={{ color: "#0f172a" }}>{selectedQuote.hsCode || "8471.30"}</strong> &bull; Cargo: <strong style={{ color: "#0f172a" }}>{selectedQuote.cargoType || "General Commercial Goods"}</strong>
+                      </span>
+                      <span style={{ color: "#cbd5e1" }}>&bull;</span>
+                      <span style={{ fontSize: "11px", color: "#64748b", fontWeight: 600 }}>Get Sample Docs:</span>
+                      <a href="/sample_trade_documents/Commercial_Invoice_INV2026.pdf" download style={{ fontSize: "11px", color: "#0284c7", fontWeight: 700, textDecoration: "underline" }}>Invoice</a>
+                      <a href="/sample_trade_documents/Packing_List_PL9921.pdf" download style={{ fontSize: "11px", color: "#0284c7", fontWeight: 700, textDecoration: "underline" }}>Packing List</a>
+                      <a href="/sample_trade_documents/Bill_of_Lading_Draft_BL4810.pdf" download style={{ fontSize: "11px", color: "#0284c7", fontWeight: 700, textDecoration: "underline" }}>B/L Draft</a>
+                      <a href="/sample_trade_documents/Certificate_of_Origin_COO2026.pdf" download style={{ fontSize: "11px", color: "#0284c7", fontWeight: 700, textDecoration: "underline" }}>Origin Cert</a>
+                    </div>
                   </div>
 
                   <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: "12px", marginBottom: "12px" }}>

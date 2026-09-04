@@ -404,6 +404,19 @@ export default function DocumentsCenter() {
                     * Please choose a document file from your computer before uploading.
                   </p>
                 )}
+
+                <div style={{ background: "#f8fafc", border: "1px dashed #cbd5e1", borderRadius: "10px", padding: "10px 14px", fontSize: "12px", color: "#475569", marginTop: "4px" }}>
+                  <div style={{ fontWeight: 700, color: "#0f172a", marginBottom: "4px" }}>
+                    Need sample trade documents to verify?
+                  </div>
+                  <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", alignItems: "center" }}>
+                    <span style={{ color: "#64748b" }}>Download sample PDFs:</span>
+                    <a href="/sample_trade_documents/Commercial_Invoice_INV2026.pdf" download style={{ color: "#0284c7", fontWeight: 700, textDecoration: "underline" }}>Commercial Invoice</a> &bull;
+                    <a href="/sample_trade_documents/Packing_List_PL9921.pdf" download style={{ color: "#0284c7", fontWeight: 700, textDecoration: "underline" }}>Packing List</a> &bull;
+                    <a href="/sample_trade_documents/Bill_of_Lading_Draft_BL4810.pdf" download style={{ color: "#0284c7", fontWeight: 700, textDecoration: "underline" }}>B/L Draft</a> &bull;
+                    <a href="/sample_trade_documents/Certificate_of_Origin_COO2026.pdf" download style={{ color: "#0284c7", fontWeight: 700, textDecoration: "underline" }}>Certificate of Origin</a>
+                  </div>
+                </div>
               </div>
 
               <div className="doc-modal-footer">
