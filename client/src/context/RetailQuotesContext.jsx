@@ -169,8 +169,19 @@ const MOCK_RETAIL_QUOTES = [
   },
 ];
 
+import {
+  getPlatformQuotes,
+  addOrUpdatePlatformQuote,
+  updateQuoteStatusInStore,
+  normalizeWorkflowStatus,
+} from "../utils/quoteWorkflow";
+
 function getLocalRetailQuotes() {
   try {
+    const platform = getPlatformQuotes();
+    if (Array.isArray(platform) && platform.length > 0) {
+      return platform;
+    }
     const saved = localStorage.getItem("freightai_retail_quotes");
     return saved ? JSON.parse(saved) : MOCK_RETAIL_QUOTES;
   } catch {
@@ -181,31 +192,6 @@ function getLocalRetailQuotes() {
 function saveLocalRetailQuotes(list) {
   try {
     localStorage.setItem("freightai_retail_quotes", JSON.stringify(list));
-  } catch {}
-}
-
-function syncToAgentDesk(quoteEntry) {
-  try {
-    const saved = localStorage.getItem("freightai_agent_quotes");
-    const currentList = saved ? JSON.parse(saved) : [];
-    const agentQuote = {
-      id: quoteEntry.quoteNo || `FQ-${quoteEntry.id?.slice(-4) || "8930"}`,
-      client: quoteEntry.customerName || "Retail Customer",
-      clientEmail: "retail@freightai.com",
-      origin: quoteEntry.origin || "Chennai Port (INMAA)",
-      destination: quoteEntry.destination || "Port of Singapore (SGSIN)",
-      mode: quoteEntry.modeLabel || "Ocean FCL",
-      cargoClass: "General Cargo",
-      weightKg: quoteEntry.totalNum ? Math.round(quoteEntry.totalNum / 40) : 12500,
-      baseRate: quoteEntry.breakdown?.distance_cost || 436250,
-      marginPct: 10,
-      fuelSurchargePct: 12,
-      portFee: quoteEntry.breakdown?.base_handling_fee || 18500,
-      status: quoteEntry.status === "Booked" ? "Approved" : "Pending Review",
-      requestedDate: new Date().toISOString().slice(0, 10),
-    };
-    const updated = [agentQuote, ...currentList.filter((q) => q.id !== agentQuote.id)];
-    localStorage.setItem("freightai_agent_quotes", JSON.stringify(updated));
   } catch {}
 }
 
@@ -250,21 +236,24 @@ export function RetailQuotesProvider({ children }) {
 
   const addQuotation = useCallback((entry) => {
     const transformed = entry.quoteNo ? entry : transformApiQuote(entry, user?.full_name);
+    // Add to shared platform quotes (synchronizing Customs & Agent desks)
+    addOrUpdatePlatformQuote(transformed);
+    
     setQuotations((prev) => {
-      const updated = [transformed, ...prev.filter((q) => q.id !== transformed.id)];
+      const updated = [transformed, ...prev.filter((q) => q.id !== transformed.id && q.quoteNo !== transformed.quoteNo)];
       saveLocalRetailQuotes(updated);
-      syncToAgentDesk(transformed);
       return updated;
     });
   }, [user?.full_name]);
 
-  const updateQuotationStatus = useCallback((idOrQuoteNo, newStatus) => {
+  const updateQuotationStatus = useCallback((idOrQuoteNo, newStatus, extra = {}) => {
+    // Update platform store
+    updateQuoteStatusInStore(idOrQuoteNo, newStatus, extra);
+
     setQuotations((prev) => {
       const updated = prev.map((q) => {
         if (q.id === idOrQuoteNo || q.quoteNo === idOrQuoteNo) {
-          const u = { ...q, status: newStatus };
-          syncToAgentDesk(u);
-          return u;
+          return { ...q, status: newStatus, ...extra };
         }
         return q;
       });

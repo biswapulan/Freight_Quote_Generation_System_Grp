@@ -150,14 +150,51 @@ export default function RetailShipmentsHistory({ viewMode = "quotes" }) {
     }
   }
 
-  function handleAdvanceWorkflow(quoteNo, nextStatus, remarks) {
-    updateQuoteStatusInStore(quoteNo, nextStatus, {
-      agentRemarks: remarks || `Advanced to ${nextStatus}`,
+  function handleCustomerRequestQuote(quoteNo) {
+    const extra = {
+      status: "REQUESTED",
+      shipmentStatus: "SUBMITTED",
+      agentRemarks: "Customer submitted official quote request. Forwarded to Operations & Customs Review queue.",
+      customsRemarks: "Shipment enquiry requested. Awaiting customs compliance verification.",
+      requiresCustomsReview: true,
       lastWorkflowTransitionAt: new Date().toISOString(),
-    });
+    };
+    updateQuoteStatusInStore(quoteNo, "REQUESTED", extra);
     reloadQuotes();
     if (selectedQuote) {
-      setSelectedQuote((prev) => ({ ...prev, status: nextStatus }));
+      setSelectedQuote((prev) => ({ ...prev, ...extra }));
+    }
+  }
+
+  function handleUploadDocument(docName) {
+    if (!selectedQuote) return;
+    const qId = selectedQuote.quoteNo || selectedQuote.id;
+    const currentDocs = selectedQuote.documents || [
+      { name: "Commercial Invoice", status: "PENDING" },
+      { name: "Packing List", status: "PENDING" },
+      { name: "Bill of Lading Draft", status: "PENDING" },
+      { name: "Certificate of Origin", status: "PENDING" },
+    ];
+
+    const updatedDocs = currentDocs.map((d) =>
+      d.name.toLowerCase() === docName.toLowerCase()
+        ? { ...d, status: "UPLOADED", uploadedAt: new Date().toISOString() }
+        : d
+    );
+
+    const extra = {
+      documents: updatedDocs,
+      documentsStatus: `${updatedDocs.filter((d) => d.status === "VERIFIED" || d.status === "UPLOADED").length}/${updatedDocs.length} Uploaded (Pending Customs Review)`,
+      customsRemarks: `Customer uploaded ${docName}. Pending verification by Customs Officer.`,
+      status: selectedQuote.status === "DRAFT" ? "REQUESTED" : "PENDING_REVIEW",
+      shipmentStatus: "ANALYZED",
+      lastWorkflowTransitionAt: new Date().toISOString(),
+    };
+
+    updateQuoteStatusInStore(qId, extra.status, extra);
+    reloadQuotes();
+    if (selectedQuote) {
+      setSelectedQuote((prev) => ({ ...prev, ...extra }));
     }
   }
 
@@ -781,6 +818,89 @@ export default function RetailShipmentsHistory({ viewMode = "quotes" }) {
                   </div>
                 </div>
 
+                {/* Trade & Customs Documents Panel */}
+                <div className="rsh-card-panel docs-panel" style={{ gridColumn: "1 / -1", marginTop: "16px", background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "12px", padding: "16px" }}>
+                  <div className="rsh-panel-head" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "8px", fontWeight: "700", color: "#0f172a" }}>
+                      <FileText size={16} style={{ color: "#0284c7" }} />
+                      <h4 style={{ margin: 0, fontSize: "14px", fontWeight: "800" }}>Trade &amp; Customs Documents (Regulatory Clearance Gate)</h4>
+                    </div>
+                    <span style={{ fontSize: "12px", color: "#64748b" }}>
+                      HS Code: <strong>{selectedQuote.hsCode || "8471.30"}</strong> &bull; Cargo: <strong>{selectedQuote.cargoType || "Commercial Goods"}</strong>
+                    </span>
+                  </div>
+
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "12px", marginBottom: "12px" }}>
+                    {(selectedQuote.documents || [
+                      { name: "Commercial Invoice", status: "PENDING" },
+                      { name: "Packing List", status: "PENDING" },
+                      { name: "Bill of Lading Draft", status: "PENDING" },
+                      { name: "Certificate of Origin", status: "PENDING" },
+                    ]).map((doc, idx) => {
+                      const isVerified = doc.status === "VERIFIED";
+                      const isUploaded = doc.status === "UPLOADED";
+                      return (
+                        <div
+                          key={idx}
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "space-between",
+                            padding: "10px 14px",
+                            background: "#ffffff",
+                            border: `1px solid ${isVerified ? "#a7f3d0" : isUploaded ? "#bae6fd" : "#e2e8f0"}`,
+                            borderRadius: "8px",
+                          }}
+                        >
+                          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                            {isVerified ? (
+                              <CheckCircle2 size={16} style={{ color: "#059669" }} />
+                            ) : isUploaded ? (
+                              <Clock size={16} style={{ color: "#0284c7" }} />
+                            ) : (
+                              <AlertTriangle size={16} style={{ color: "#d97706" }} />
+                            )}
+                            <span style={{ fontSize: "12.5px", fontWeight: 600, color: "#1e293b" }}>{doc.name}</span>
+                          </div>
+
+                          {isVerified ? (
+                            <span style={{ fontSize: "11px", fontWeight: 700, color: "#059669", background: "#ecfdf5", padding: "3px 8px", borderRadius: "6px" }}>
+                              VERIFIED
+                            </span>
+                          ) : isUploaded ? (
+                            <span style={{ fontSize: "11px", fontWeight: 700, color: "#0284c7", background: "#e0f2fe", padding: "3px 8px", borderRadius: "6px" }}>
+                              UPLOADED
+                            </span>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => handleUploadDocument(doc.name)}
+                              style={{
+                                fontSize: "11px",
+                                fontWeight: 700,
+                                color: "#0284c7",
+                                background: "#f0f9ff",
+                                border: "1px solid #bae6fd",
+                                padding: "4px 10px",
+                                borderRadius: "6px",
+                                cursor: "pointer",
+                              }}
+                            >
+                              Upload File
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {selectedQuote.customsRemarks && (
+                    <div style={{ fontSize: "12px", color: "#475569", background: "#ffffff", padding: "8px 12px", borderRadius: "8px", border: "1px dashed #cbd5e1" }}>
+                      <strong>Customs Officer Remarks:</strong> {selectedQuote.customsRemarks}
+                    </div>
+                  )}
+                </div>
+
               </div>
 
             </div>
@@ -800,7 +920,7 @@ export default function RetailShipmentsHistory({ viewMode = "quotes" }) {
                   const norm = normalizeWorkflowStatus(selectedQuote.status);
                   const qId = selectedQuote.quoteNo || selectedQuote.id;
 
-                  if (norm === "SENT" || norm === "APPROVED") {
+                  if (norm === "SENT") {
                     return (
                       <>
                         <button
@@ -824,83 +944,64 @@ export default function RetailShipmentsHistory({ viewMode = "quotes" }) {
                   if (norm === "DRAFT") {
                     return (
                       <>
-                        <span style={{ display: "inline-flex", alignItems: "center", gap: "6px", padding: "7px 12px", background: "#e0f2fe", color: "#0369a1", borderRadius: "8px", fontWeight: "600", fontSize: "12px" }}>
-                          <User size={14} /> 1. Request Submitted
+                        <span style={{ display: "inline-flex", alignItems: "center", gap: "6px", padding: "7px 12px", background: "#f1f5f9", color: "#475569", borderRadius: "8px", fontWeight: "600", fontSize: "12px" }}>
+                          Draft Saved — Not yet requested
                         </span>
                         <button
                           type="button"
-                          style={{ background: "#0284c7", color: "#ffffff", border: "none", padding: "8px 14px", borderRadius: "8px", fontWeight: "700", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: "6px", fontSize: "12px" }}
-                          onClick={() => handleAdvanceWorkflow(qId, "GENERATED", "AI Engine generated routes, ML pricing & risk.")}
+                          style={{ background: "#0284c7", color: "#ffffff", border: "none", padding: "8px 16px", borderRadius: "8px", fontWeight: "700", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: "6px", fontSize: "12.5px" }}
+                          onClick={() => handleCustomerRequestQuote(qId)}
                         >
-                          <Cpu size={14} /> Trigger AI Engine
+                          <Send size={14} /> Submit Quote Request
                         </button>
                       </>
                     );
                   }
 
-                  if (norm === "GENERATED") {
+                  if (norm === "REQUESTED" || norm === "GENERATED") {
                     return (
-                      <>
-                        <span style={{ display: "inline-flex", alignItems: "center", gap: "6px", padding: "7px 12px", background: "#e0e7ff", color: "#3730a3", borderRadius: "8px", fontWeight: "600", fontSize: "12px" }}>
-                          <Cpu size={14} /> 2. AI Pricing &amp; Risk Generated
-                        </span>
-                        <button
-                          type="button"
-                          style={{ background: "#6366f1", color: "#ffffff", border: "none", padding: "8px 14px", borderRadius: "8px", fontWeight: "700", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: "6px", fontSize: "12px" }}
-                          onClick={() => handleAdvanceWorkflow(qId, "PENDING_REVIEW", "Routed to Customs and Freight Agent review queue.")}
-                        >
-                          <ShieldCheck size={14} /> Forward to Customs Review
-                        </button>
-                      </>
+                      <span style={{ display: "inline-flex", alignItems: "center", gap: "8px", padding: "8px 14px", background: "#e0f2fe", color: "#0369a1", borderRadius: "8px", fontWeight: "600", fontSize: "12.5px" }}>
+                        <Clock size={15} /> Quote Requested &amp; AI Evaluated — In Operations &amp; Customs Queue
+                      </span>
                     );
                   }
 
                   if (norm === "PENDING_REVIEW") {
                     return (
-                      <>
-                        <span style={{ display: "inline-flex", alignItems: "center", gap: "6px", padding: "7px 12px", background: "#fef3c7", color: "#92400e", borderRadius: "8px", fontWeight: "600", fontSize: "12px" }}>
-                          <Clock size={14} /> 3. Customs &amp; Agent Review Queue
-                        </span>
-                        <button
-                          type="button"
-                          style={{ background: "#7c3aed", color: "#ffffff", border: "none", padding: "8px 14px", borderRadius: "8px", fontWeight: "700", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: "6px", fontSize: "12px" }}
-                          onClick={() => handleAdvanceWorkflow(qId, "SENT", "Customs cleared & Freight Agent dispatched final quote.")}
-                        >
-                          <Send size={14} /> Approve &amp; Send Final Quote
-                        </button>
-                      </>
+                      <span style={{ display: "inline-flex", alignItems: "center", gap: "8px", padding: "8px 14px", background: "#fef3c7", color: "#92400e", borderRadius: "8px", fontWeight: "600", fontSize: "12.5px" }}>
+                        <ShieldCheck size={15} /> Under Customs &amp; Freight Agent Review — Awaiting Final Quote
+                      </span>
                     );
                   }
 
                   if (norm === "CUSTOMS_FLAGGED") {
                     return (
-                      <>
-                        <span style={{ display: "inline-flex", alignItems: "center", gap: "6px", padding: "7px 12px", background: "#fee2e2", color: "#dc2626", borderRadius: "8px", fontWeight: "600", fontSize: "12px" }}>
-                          <AlertTriangle size={14} /> Customs Hold / Missing Docs
-                        </span>
-                        <button
-                          type="button"
-                          style={{ background: "#0284c7", color: "#ffffff", border: "none", padding: "8px 14px", borderRadius: "8px", fontWeight: "700", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: "6px", fontSize: "12px" }}
-                          onClick={() => handleAdvanceWorkflow(qId, "PENDING_REVIEW", "Documents re-uploaded by customer.")}
-                        >
-                          <FileText size={14} /> Upload Docs &amp; Re-verify
-                        </button>
-                      </>
+                      <span style={{ display: "inline-flex", alignItems: "center", gap: "8px", padding: "8px 14px", background: "#fee2e2", color: "#dc2626", borderRadius: "8px", fontWeight: "600", fontSize: "12.5px" }}>
+                        <AlertTriangle size={15} /> Customs Inspection Hold — Please upload requested documents above
+                      </span>
+                    );
+                  }
+
+                  if (norm === "APPROVED") {
+                    return (
+                      <span style={{ display: "inline-flex", alignItems: "center", gap: "8px", padding: "8px 14px", background: "#ede9fe", color: "#6d28d9", borderRadius: "8px", fontWeight: "600", fontSize: "12.5px" }}>
+                        <CheckCircle2 size={15} /> Commercials Approved — Freight Agent finalizing official quotation dispatch
+                      </span>
                     );
                   }
 
                   if (norm === "ACCEPTED") {
                     return (
-                      <span style={{ display: "inline-flex", alignItems: "center", gap: "6px", padding: "7px 14px", background: "#ecfdf5", color: "#059669", borderRadius: "8px", fontWeight: "700", fontSize: "12.5px" }}>
-                        <CheckCircle2 size={15} /> 6. Booking Confirmed &amp; Dispatched
+                      <span style={{ display: "inline-flex", alignItems: "center", gap: "8px", padding: "8px 16px", background: "#ecfdf5", color: "#059669", borderRadius: "8px", fontWeight: "700", fontSize: "13px" }}>
+                        <CheckCircle2 size={16} /> Booking Confirmed &amp; Dispatched (Space Locked)
                       </span>
                     );
                   }
 
                   if (norm === "REJECTED") {
                     return (
-                      <span style={{ display: "inline-flex", alignItems: "center", gap: "6px", padding: "7px 14px", background: "#fef2f2", color: "#dc2626", borderRadius: "8px", fontWeight: "700", fontSize: "12.5px" }}>
-                        <X size={15} /> 6. Quote Declined / Archived
+                      <span style={{ display: "inline-flex", alignItems: "center", gap: "8px", padding: "8px 16px", background: "#fef2f2", color: "#dc2626", borderRadius: "8px", fontWeight: "700", fontSize: "13px" }}>
+                        <X size={16} /> Quotation Declined / Archived
                       </span>
                     );
                   }

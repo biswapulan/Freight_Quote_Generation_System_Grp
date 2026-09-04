@@ -8,7 +8,7 @@
  */
 
 export const WORKFLOW_STAGES = [
-  { id: "DRAFT", label: "1. Draft", actor: "Customer", desc: "Shipment details & documents submitted" },
+  { id: "REQUESTED", label: "1. Requested", actor: "Customer", desc: "Shipment enquiry submitted by customer" },
   { id: "GENERATED", label: "2. Generated", actor: "AI Services", desc: "M1, M2 & M3 pricing and risk computed" },
   { id: "PENDING_REVIEW", label: "3. Pending Review", actor: "Customs / Agent", desc: "Customs document validation & operational check" },
   { id: "APPROVED", label: "4. Approved", actor: "Freight Agent", desc: "Commercial margin validated and approved" },
@@ -20,6 +20,13 @@ export const STATUS_CONFIG = {
   DRAFT: {
     label: "DRAFT",
     badgeClass: "badge-draft",
+    stepIndex: 1,
+    color: "#64748b",
+    bg: "#f1f5f9",
+  },
+  REQUESTED: {
+    label: "REQUESTED",
+    badgeClass: "badge-requested",
     stepIndex: 1,
     color: "#0284c7",
     bg: "#e0f2fe",
@@ -123,6 +130,8 @@ export function getShipmentStatusFromQuoteStatus(quoteStatus) {
   const norm = normalizeWorkflowStatus(quoteStatus);
   switch (norm) {
     case "DRAFT":
+      return "DRAFT";
+    case "REQUESTED":
       return "SUBMITTED";
     case "GENERATED":
       return "PROCESSING";
@@ -146,10 +155,11 @@ export function getShipmentStatusFromQuoteStatus(quoteStatus) {
  * Standardize any legacy status string to current workflow status
  */
 export function normalizeWorkflowStatus(rawStatus) {
-  if (!rawStatus) return "DRAFT";
+  if (!rawStatus) return "REQUESTED";
   const upper = String(rawStatus).toUpperCase().trim();
   
-  if (upper === "DRAFT" || upper === "REQUESTED" || upper === "CREATED") return "DRAFT";
+  if (upper === "DRAFT") return "DRAFT";
+  if (upper === "REQUESTED" || upper === "CREATED" || upper === "SUBMITTED") return "REQUESTED";
   if (upper === "GENERATED" || upper === "AI_ANALYZED" || upper === "ANALYZED") return "GENERATED";
   if (upper === "PENDING_REVIEW" || upper === "CUSTOMS_REVIEWED" || upper === "PENDING" || upper === "REVIEW") return "PENDING_REVIEW";
   if (upper === "CUSTOMS_FLAGGED" || upper === "FLAGGED") return "CUSTOMS_FLAGGED";
@@ -159,7 +169,7 @@ export function normalizeWorkflowStatus(rawStatus) {
   if (upper === "REJECTED" || upper === "CANCELLED") return "REJECTED";
   if (upper === "EXPIRED") return "EXPIRED";
   
-  return "DRAFT";
+  return "REQUESTED";
 }
 
 /**
@@ -366,5 +376,145 @@ export function updateQuoteStatusInStore(quoteId, newStatus, extraFields = {}) {
     return q;
   });
   savePlatformQuotes(updated);
+
+  // Sync to customs shipments if present
+  try {
+    const savedCustoms = localStorage.getItem("freightai_customs_shipments");
+    if (savedCustoms) {
+      const customsList = JSON.parse(savedCustoms);
+      const updatedCustoms = customsList.map((cs) => {
+        if (cs.id === quoteId || cs.quoteNo === quoteId) {
+          return {
+            ...cs,
+            status: newStatus,
+            ...(extraFields.customsRemarks ? { officerNotes: extraFields.customsRemarks } : {}),
+            ...(extraFields.documents ? { documents: extraFields.documents } : {}),
+            ...(extraFields.documentsStatus ? { documentsStatus: extraFields.documentsStatus } : {}),
+          };
+        }
+        return cs;
+      });
+      localStorage.setItem("freightai_customs_shipments", JSON.stringify(updatedCustoms));
+    }
+  } catch {}
+
   return updated;
 }
+
+export function addOrUpdatePlatformQuote(entry) {
+  const current = getPlatformQuotes();
+  const qId = entry.id || entry.quoteNo || `QT-${Date.now().toString().slice(-6)}`;
+  const qNo = entry.quoteNo || (qId.startsWith("QT-") ? qId : `QT-${qId.slice(-8).toUpperCase()}`);
+  
+  const existingIdx = current.findIndex((q) => q.id === qId || q.quoteNo === qNo);
+  
+  const standardDocuments = entry.documents && entry.documents.length > 0 ? entry.documents : [
+    { name: "Commercial Invoice", status: "PENDING" },
+    { name: "Packing List", status: "PENDING" },
+    { name: "Bill of Lading Draft", status: "PENDING" },
+    { name: "Certificate of Origin", status: "PENDING" }
+  ];
+
+  const fullQuote = {
+    id: qId,
+    quoteNo: qNo,
+    customerName: entry.customerName || entry.client || "Retail Customer",
+    customerEmail: entry.customerEmail || entry.clientEmail || "customer@freightai.com",
+    origin: entry.origin || entry.customerCity || "Nhava Sheva (INNSA)",
+    destination: entry.destination || "Port of Singapore (SGSIN)",
+    laneCode: entry.laneCode || "INNSA-SGSIN",
+    mode: entry.mode || "ocean",
+    modeLabel: entry.modeLabel || "Ocean Freight",
+    cargoType: entry.cargoType || "General Commercial Goods",
+    hsCode: entry.hsCode || "8471.30",
+    weightKg: entry.weightKg || (entry.basis ? parseInt(entry.basis) : 12500) || 12500,
+    volumeCbm: entry.volumeCbm || 30,
+    basis: entry.basis || "12,500 kg / 1 × 40HC",
+    transit: entry.transit || "14 d",
+    ruleBasedPrice: entry.ruleBasedPrice || entry.totalNum || 148500,
+    aiPredictedPrice: entry.aiPredictedPrice || (entry.totalNum ? Math.round(entry.totalNum * 0.98) : 145000),
+    recommendedPrice: entry.recommendedPrice || entry.totalNum || 148500,
+    baseRate: entry.baseRate || entry.breakdown?.distance_cost || 115000,
+    marginPct: entry.marginPct || 10.0,
+    fuelSurcharge: entry.fuelSurcharge || entry.breakdown?.fuel_surcharge || 19000,
+    totalNum: Number(entry.totalNum || 148500),
+    totalFormatted: entry.totalFormatted || `₹ ${Number(entry.totalNum || 148500).toLocaleString("en-IN")}`,
+    breakdown: entry.breakdown || {},
+    status: entry.status || "REQUESTED",
+    shipmentStatus: entry.shipmentStatus || getShipmentStatusFromQuoteStatus(entry.status || "REQUESTED"),
+    weatherRiskScore: 24,
+    weatherRiskLevel: "Low (24/100)",
+    customsRiskScore: 35,
+    customsRiskLevel: "Moderate (35/100)",
+    routeRiskScore: 18,
+    routeRiskLevel: "Low (18/100)",
+    overallRisk: "LOW",
+    requiresCustomsReview: entry.requiresCustomsReview !== undefined ? entry.requiresCustomsReview : true,
+    customsRemarks: entry.customsRemarks || "Awaiting customer document upload and customs officer compliance check.",
+    agentRemarks: entry.agentRemarks || "Quote enquiry ingested. Operations review pending commercial signoff.",
+    documents: standardDocuments,
+    documentsStatus: entry.documentsStatus || "Pending Documents Upload",
+    createdAt: entry.createdAt || new Date().toISOString(),
+    created: entry.created || "Today"
+  };
+
+  let updatedList;
+  if (existingIdx >= 0) {
+    updatedList = [...current];
+    updatedList[existingIdx] = { ...updatedList[existingIdx], ...fullQuote };
+  } else {
+    updatedList = [fullQuote, ...current];
+  }
+
+  savePlatformQuotes(updatedList);
+
+  // Synchronize with customs shipments list
+  try {
+    const savedCustoms = localStorage.getItem("freightai_customs_shipments");
+    const customsList = savedCustoms ? JSON.parse(savedCustoms) : [];
+    const csShipment = {
+      id: fullQuote.id,
+      quoteNo: fullQuote.quoteNo,
+      customer: fullQuote.customerName,
+      origin: fullQuote.origin,
+      destination: fullQuote.destination,
+      cargoType: fullQuote.cargoType,
+      hsCode: fullQuote.hsCode,
+      documentsStatus: fullQuote.documentsStatus,
+      riskLevel: fullQuote.overallRisk === "LOW" ? "LOW" : "MEDIUM",
+      riskScore: fullQuote.customsRiskScore,
+      status: fullQuote.status === "APPROVED" || fullQuote.status === "SENT" ? "APPROVED" : "PENDING_REVIEW",
+      assignedOfficer: "Officer Sharma",
+      documents: fullQuote.documents,
+    };
+    const updatedCustoms = [csShipment, ...customsList.filter((s) => s.id !== csShipment.id && s.quoteNo !== csShipment.quoteNo)];
+    localStorage.setItem("freightai_customs_shipments", JSON.stringify(updatedCustoms));
+  } catch {}
+
+  // Synchronize with agent quotes desk
+  try {
+    const savedAgent = localStorage.getItem("freightai_agent_quotes");
+    const agentList = savedAgent ? JSON.parse(savedAgent) : [];
+    const agentEntry = {
+      id: fullQuote.quoteNo,
+      client: fullQuote.customerName,
+      clientEmail: fullQuote.customerEmail,
+      origin: fullQuote.origin,
+      destination: fullQuote.destination,
+      mode: fullQuote.modeLabel,
+      cargoClass: fullQuote.cargoType,
+      weightKg: fullQuote.weightKg,
+      baseRate: fullQuote.baseRate,
+      marginPct: fullQuote.marginPct,
+      fuelSurchargePct: 8,
+      portFee: 15000,
+      status: fullQuote.status,
+      requestedDate: new Date().toISOString().slice(0, 10),
+    };
+    const updatedAgent = [agentEntry, ...agentList.filter((a) => a.id !== agentEntry.id)];
+    localStorage.setItem("freightai_agent_quotes", JSON.stringify(updatedAgent));
+  } catch {}
+
+  return updatedList;
+}
+

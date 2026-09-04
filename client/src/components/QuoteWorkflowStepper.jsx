@@ -4,7 +4,7 @@ import { STATUS_CONFIG, normalizeWorkflowStatus, getShipmentStatusFromQuoteStatu
 import "./QuoteWorkflowStepper.css";
 
 const STAGES = [
-  { id: "DRAFT", name: "1. Draft", actor: "Customer", icon: User },
+  { id: "REQUESTED", name: "1. Requested", actor: "Customer", icon: User },
   { id: "GENERATED", name: "2. Generated", actor: "AI Engine", icon: Cpu },
   { id: "PENDING_REVIEW", name: "3. Pending Review", actor: "Customs / Ops", icon: ShieldCheck },
   { id: "APPROVED", name: "4. Approved", actor: "Operations", icon: FileCheck },
@@ -14,16 +14,26 @@ const STAGES = [
 
 export default function QuoteWorkflowStepper({ status, requiresCustoms = true, compact = false }) {
   const normStatus = normalizeWorkflowStatus(status);
-  const currentConfig = STATUS_CONFIG[normStatus] || STATUS_CONFIG.DRAFT;
+  const currentConfig = STATUS_CONFIG[normStatus] || STATUS_CONFIG.REQUESTED;
   const currentStep = currentConfig.stepIndex || 1;
   const isRejected = normStatus === "REJECTED";
   const isFlagged = normStatus === "CUSTOMS_FLAGGED";
   const shipmentStatus = getShipmentStatusFromQuoteStatus(normStatus);
 
+  const stagesList = STAGES.map((s, idx) => {
+    if (idx === 0) {
+      return {
+        ...s,
+        name: normStatus === "DRAFT" ? "1. Draft (Saved)" : "1. Requested",
+      };
+    }
+    return s;
+  });
+
   return (
     <div className={`qws-container ${compact ? "compact" : ""}`}>
       <div className="qws-steps">
-        {STAGES.map((stage, idx) => {
+        {stagesList.map((stage, idx) => {
           const stepNum = idx + 1;
           const isDone = currentStep > stepNum || (stepNum === 6 && normStatus === "ACCEPTED");
           const isActive = currentStep === stepNum;
@@ -54,7 +64,7 @@ export default function QuoteWorkflowStepper({ status, requiresCustoms = true, c
                   <span className="qws-actor-badge">{stage.actor}</span>
                 </div>
               </div>
-              {idx < STAGES.length - 1 && (
+              {idx < stagesList.length - 1 && (
                 <div className={`qws-connector ${isDone ? "done" : isActive ? "active" : ""}`} />
               )}
             </React.Fragment>
@@ -68,7 +78,7 @@ export default function QuoteWorkflowStepper({ status, requiresCustoms = true, c
           <span style={{ color: "#cbd5e1" }}>•</span>
           <span><strong>Shipment Status:</strong> <span style={{ color: "#0284c7", fontWeight: 700 }}>{shipmentStatus}</span></span>
           <span style={{ color: "#cbd5e1" }}>•</span>
-          <span><strong>Active Actor:</strong> {STAGES[Math.min(currentStep - 1, 5)]?.actor || "Customer"}</span>
+          <span><strong>Active Actor:</strong> {stagesList[Math.min(currentStep - 1, 5)]?.actor || "Customer"}</span>
         </div>
       )}
     </div>
