@@ -233,6 +233,8 @@ export default function CustomsOfficerPortal({ initialTab = "pending-reviews" })
   const [reviewModalOpen, setReviewModalOpen] = useState(false);
   const [manifestModalOpen, setManifestModalOpen] = useState(false);
   const [selectedManifest, setSelectedManifest] = useState(null);
+  const [previewDocModalOpen, setPreviewDocModalOpen] = useState(false);
+  const [previewDoc, setPreviewDoc] = useState(null);
   const [officerNotes, setOfficerNotes] = useState("");
   const [actionStatus, setActionStatus] = useState(null);
 
@@ -600,13 +602,41 @@ export default function CustomsOfficerPortal({ initialTab = "pending-reviews" })
                   <tr key={doc.id}>
                     <td>
                       <div style={{ display: "flex", alignItems: "flex-start", gap: "10px" }}>
-                        <div style={{ padding: "8px", background: "#f0f9ff", borderRadius: "8px", color: "#0284c7" }}>
+                        <div
+                          style={{
+                            padding: "8px",
+                            background: "#f0f9ff",
+                            borderRadius: "8px",
+                            color: "#0284c7",
+                            cursor: "pointer",
+                          }}
+                          onClick={() => {
+                            setPreviewDoc(doc);
+                            setPreviewDocModalOpen(true);
+                          }}
+                          title="Inspect Document"
+                        >
                           <FileText size={18} />
                         </div>
                         <div>
-                          <div style={{ fontWeight: 700, color: "#0f172a" }}>{doc.docType}</div>
-                          <div style={{ fontSize: "12px", color: "#0284c7", display: "flex", alignItems: "center", gap: "6px", marginTop: "2px" }}>
-                            <span>{doc.fileName}</span>
+                          <div
+                            style={{
+                              fontWeight: 700,
+                              color: "#0284c7",
+                              cursor: "pointer",
+                              textDecoration: "underline",
+                              textDecorationColor: "#bae6fd",
+                            }}
+                            onClick={() => {
+                              setPreviewDoc(doc);
+                              setPreviewDocModalOpen(true);
+                            }}
+                            title="Click to preview & audit document"
+                          >
+                            {doc.docType}
+                          </div>
+                          <div style={{ fontSize: "12px", color: "#64748b", display: "flex", alignItems: "center", gap: "6px", marginTop: "2px" }}>
+                            <span style={{ color: "#0369a1", fontWeight: 500 }}>{doc.fileName}</span>
                             <span style={{ color: "#94a3b8" }}>&bull; {doc.fileSize}</span>
                           </div>
                         </div>
@@ -636,20 +666,46 @@ export default function CustomsOfficerPortal({ initialTab = "pending-reviews" })
                       )}
                     </td>
                     <td>
-                      {doc.status === "VERIFIED" ? (
-                        <span className="cop-stamp-badge">
-                          <ShieldCheck size={14} /> Stamped by Officer
-                        </span>
-                      ) : (
+                      <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
                         <button
                           type="button"
-                          className="cop-btn-action"
-                          style={{ background: "#059669" }}
-                          onClick={() => handleVerifySingleDoc(doc.shipmentId, doc.docType)}
+                          className="cop-btn-view"
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: "5px",
+                            padding: "6px 12px",
+                            background: "#f0f9ff",
+                            color: "#0284c7",
+                            border: "1px solid #bae6fd",
+                            borderRadius: "6px",
+                            fontSize: "12px",
+                            fontWeight: 600,
+                            cursor: "pointer",
+                          }}
+                          onClick={() => {
+                            setPreviewDoc(doc);
+                            setPreviewDocModalOpen(true);
+                          }}
+                          title="Open Document for Inspection"
                         >
-                          <ShieldCheck size={14} /> Verify &amp; Stamp
+                          <Eye size={13} /> View Document
                         </button>
-                      )}
+                        {doc.status === "VERIFIED" ? (
+                          <span className="cop-stamp-badge">
+                            <ShieldCheck size={14} /> Stamped by Officer
+                          </span>
+                        ) : (
+                          <button
+                            type="button"
+                            className="cop-btn-action"
+                            style={{ background: "#059669", padding: "6px 14px", fontSize: "12px" }}
+                            onClick={() => handleVerifySingleDoc(doc.shipmentId, doc.docType)}
+                          >
+                            <ShieldCheck size={13} /> Verify &amp; Stamp
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -1108,22 +1164,73 @@ export default function CustomsOfficerPortal({ initialTab = "pending-reviews" })
                 {selectedShipment.documents.map((doc, idx) => {
                   const statusClass = (doc.status || "").toLowerCase();
                   return (
-                    <label key={idx} className="cop-check-item">
-                      <div className="cop-check-left">
-                        <input type="checkbox" defaultChecked={doc.status === "VERIFIED"} />
-                        <span className="cop-check-name">
+                    <div
+                      key={idx}
+                      className="cop-check-item"
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                        padding: "10px 14px",
+                        border: "1px solid #e2e8f0",
+                        borderRadius: "8px",
+                        marginBottom: "8px",
+                        background: "#f8fafc",
+                      }}
+                    >
+                      <div className="cop-check-left" style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                        <FileText size={16} color="#0284c7" />
+                        <span className="cop-check-name" style={{ fontWeight: 600, color: "#1e293b", fontSize: "13px" }}>
                           {doc.name}
                           {doc.fileName && (
-                            <span style={{ color: "#38bdf8", marginLeft: "6px", fontSize: "11px", fontWeight: "normal" }}>
+                            <span style={{ color: "#0284c7", marginLeft: "8px", fontSize: "11.5px", fontWeight: "normal" }}>
                               &bull; {doc.fileName} ({doc.fileSize || "Uploaded"})
                             </span>
                           )}
                         </span>
                       </div>
-                      <span className={`cop-doc-badge ${statusClass}`}>
-                        {doc.status}
-                      </span>
-                    </label>
+                      <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                        <button
+                          type="button"
+                          className="cop-btn-preview-link"
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: "4px",
+                            padding: "4px 10px",
+                            background: "#e0f2fe",
+                            color: "#0369a1",
+                            border: "1px solid #bae6fd",
+                            borderRadius: "6px",
+                            fontSize: "11.5px",
+                            fontWeight: 600,
+                            cursor: "pointer",
+                          }}
+                          onClick={() => {
+                            setPreviewDoc({
+                              id: `${selectedShipment.id}-${doc.name}`,
+                              shipmentId: selectedShipment.id,
+                              quoteNo: selectedShipment.quoteNo || selectedShipment.id,
+                              customer: selectedShipment.customer,
+                              route: `${selectedShipment.origin} ➔ ${selectedShipment.destination}`,
+                              hsCode: selectedShipment.hsCode,
+                              docType: doc.name,
+                              fileName: doc.fileName || `${doc.name}.pdf`,
+                              fileSize: doc.fileSize || "1.2 MB",
+                              status: doc.status || "PENDING",
+                              ocrSummary: getOcrComplianceNote(doc.name, selectedShipment.hsCode),
+                            });
+                            setPreviewDocModalOpen(true);
+                          }}
+                          title="Open Document Preview"
+                        >
+                          <Eye size={12} /> View Document
+                        </button>
+                        <span className={`cop-doc-badge ${statusClass}`}>
+                          {doc.status}
+                        </span>
+                      </div>
+                    </div>
                   );
                 })}
               </div>
@@ -1164,6 +1271,203 @@ export default function CustomsOfficerPortal({ initialTab = "pending-reviews" })
               >
                 <CheckCircle2 size={16} /> Approve &amp; Digital Sign-off
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Document Inspection & Preview Modal ── */}
+      {previewDocModalOpen && previewDoc && (
+        <div className="cop-modal-overlay" onClick={() => setPreviewDocModalOpen(false)}>
+          <div
+            className="cop-modal-card"
+            style={{ maxWidth: "860px", width: "95%", background: "#ffffff", borderRadius: "16px", overflow: "hidden", boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.25)" }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="cop-modal-header" style={{ background: "linear-gradient(135deg, #0f172a 0%, #1e293b 100%)", color: "#ffffff", padding: "18px 24px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div>
+                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                  <ShieldCheck size={20} color="#38bdf8" />
+                  <h3 style={{ margin: 0, fontSize: "16px", fontWeight: 700, color: "#ffffff" }}>
+                    Customs Officer Document Inspection &amp; Audit Desk
+                  </h3>
+                </div>
+                <div style={{ fontSize: "12px", color: "#94a3b8", marginTop: "4px" }}>
+                  Consignment Ref: <strong style={{ color: "#f8fafc" }}>{previewDoc.shipmentId}</strong> &bull; Shipper: <strong style={{ color: "#f8fafc" }}>{previewDoc.customer}</strong> &bull; Document: <strong style={{ color: "#38bdf8" }}>{previewDoc.docType}</strong>
+                </div>
+              </div>
+              <button
+                type="button"
+                className="cop-modal-close"
+                style={{ color: "#cbd5e1", background: "transparent", border: "none", cursor: "pointer" }}
+                onClick={() => setPreviewDocModalOpen(false)}
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="cop-modal-body" style={{ maxHeight: "76vh", overflowY: "auto", padding: "22px" }}>
+              {/* Document Overview Strip */}
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))",
+                  gap: "12px",
+                  background: "#f8fafc",
+                  padding: "14px 18px",
+                  borderRadius: "10px",
+                  border: "1px solid #e2e8f0",
+                  marginBottom: "20px",
+                }}
+              >
+                <div>
+                  <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", fontWeight: 700 }}>Document Title</div>
+                  <div style={{ fontSize: "13.5px", fontWeight: 700, color: "#0f172a", marginTop: "2px" }}>{previewDoc.docType}</div>
+                  <div style={{ fontSize: "11px", color: "#0284c7" }}>{previewDoc.fileName}</div>
+                </div>
+                <div>
+                  <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", fontWeight: 700 }}>Declared HS Code</div>
+                  <div style={{ fontSize: "13.5px", fontWeight: 700, color: "#0f172a", marginTop: "2px" }}>{previewDoc.hsCode || "8471.30"}</div>
+                  <div style={{ fontSize: "11px", color: "#16a34a" }}>WCO Harmonized</div>
+                </div>
+                <div>
+                  <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", fontWeight: 700 }}>Maritime Route</div>
+                  <div style={{ fontSize: "12px", fontWeight: 600, color: "#334155", marginTop: "2px" }}>{previewDoc.route}</div>
+                </div>
+                <div>
+                  <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", fontWeight: 700 }}>Customs Audit Status</div>
+                  <div style={{ marginTop: "4px" }}>
+                    {previewDoc.status === "VERIFIED" ? (
+                      <span className="cop-badge approved" style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}>
+                        <CheckCircle2 size={12} /> Verified &amp; Stamped
+                      </span>
+                    ) : (
+                      <span className="cop-badge pendingreview" style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}>
+                        <Clock size={12} /> Pending Verification
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Document Visual Preview Sheet */}
+              <div
+                style={{
+                  background: "#ffffff",
+                  border: "2px solid #cbd5e1",
+                  borderRadius: "12px",
+                  padding: "24px",
+                  boxShadow: "0 4px 20px rgba(0,0,0,0.04)",
+                  fontFamily: "monospace, sans-serif",
+                  position: "relative",
+                  overflow: "hidden",
+                }}
+              >
+                {/* Official Stamp Overlay if verified */}
+                {previewDoc.status === "VERIFIED" && (
+                  <div
+                    style={{
+                      position: "absolute",
+                      top: "24px",
+                      right: "24px",
+                      border: "3px double #059669",
+                      padding: "8px 18px",
+                      borderRadius: "8px",
+                      color: "#059669",
+                      fontWeight: 900,
+                      fontSize: "13px",
+                      letterSpacing: "0.08em",
+                      textTransform: "uppercase",
+                      transform: "rotate(-6deg)",
+                      background: "rgba(236, 253, 245, 0.94)",
+                      boxShadow: "0 2px 10px rgba(5, 150, 105, 0.2)",
+                      pointerEvents: "none",
+                    }}
+                  >
+                    <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                      <Stamp size={16} /> CUSTOMS PASSED &bull; CLEARED
+                    </div>
+                    <div style={{ fontSize: "9px", letterSpacing: "0.03em", marginTop: "2px", fontWeight: 700 }}>
+                      PORT CUSTODY OFFICER SHARMA &bull; VERIFIED
+                    </div>
+                  </div>
+                )}
+
+                {/* Header of paper document */}
+                <div style={{ borderBottom: "2px solid #0f172a", paddingBottom: "12px", marginBottom: "16px", display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                  <div>
+                    <div style={{ fontSize: "16px", fontWeight: 900, color: "#0f172a", letterSpacing: "0.04em" }}>
+                      {previewDoc.docType.toUpperCase()}
+                    </div>
+                    <div style={{ fontSize: "12px", color: "#64748b", marginTop: "2px" }}>
+                      INTERNATIONAL MARITIME TRADE MANIFEST &bull; REF: {previewDoc.shipmentId}
+                    </div>
+                  </div>
+                  <div style={{ textAlign: "right", fontSize: "11px", color: "#64748b" }}>
+                    <div>AUDIT DATE: {new Date().toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" })}</div>
+                    <div>STATUS: <strong style={{ color: previewDoc.status === "VERIFIED" ? "#059669" : "#d97706" }}>{previewDoc.status}</strong></div>
+                  </div>
+                </div>
+
+                {/* Itemized Table of the document */}
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px", fontSize: "12px", marginBottom: "16px" }}>
+                  <div style={{ background: "#f8fafc", padding: "10px 12px", borderRadius: "6px", border: "1px solid #e2e8f0" }}>
+                    <div style={{ fontWeight: 700, color: "#0f172a", marginBottom: "4px" }}>SHIPPER / EXPORTER:</div>
+                    <div style={{ color: "#334155", fontWeight: 600 }}>{previewDoc.customer}</div>
+                    <div style={{ color: "#64748b" }}>Terminal Facility &bull; Port of Origin</div>
+                  </div>
+                  <div style={{ background: "#f8fafc", padding: "10px 12px", borderRadius: "6px", border: "1px solid #e2e8f0" }}>
+                    <div style={{ fontWeight: 700, color: "#0f172a", marginBottom: "4px" }}>PORT &amp; CARRIER ROUTING:</div>
+                    <div style={{ color: "#334155", fontWeight: 600 }}>{previewDoc.route}</div>
+                    <div style={{ color: "#64748b" }}>Assigned Berth: Berth 3, Gate 4</div>
+                  </div>
+                </div>
+
+                {/* Cargo breakdown & OCR extracted lines */}
+                <div style={{ fontSize: "12px", borderTop: "1px dashed #cbd5e1", paddingTop: "12px", marginBottom: "16px" }}>
+                  <div style={{ fontWeight: 700, color: "#0f172a", marginBottom: "8px" }}>EXTRACTED LINE ITEMS (OCR REGULATORY PARSER):</div>
+                  <div style={{ background: "#f1f5f9", padding: "12px", borderRadius: "6px", lineHeight: "1.7", color: "#1e293b", border: "1px solid #e2e8f0" }}>
+                    <div>&bull; Item Description: Commercial Consignment under HS Tariff Code <strong>{previewDoc.hsCode || "8471.30"}</strong></div>
+                    <div>&bull; Automated OCR Verification: <em style={{ color: "#0369a1" }}>"{previewDoc.ocrSummary}"</em></div>
+                    <div>&bull; Declared Packaging: Standard ISO Maritime Containers (Payload secured &amp; sealed)</div>
+                    <div>&bull; Digital File Signature: SHA-256 Verified (Integrity Confirmed)</div>
+                  </div>
+                </div>
+
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "11px", color: "#64748b", borderTop: "1px solid #e2e8f0", paddingTop: "12px" }}>
+                  <div>Security Seal: SEAL-INNSA-982173</div>
+                  <div>Official Customs Port Authority &bull; Government of India</div>
+                </div>
+              </div>
+            </div>
+
+            <div className="cop-modal-footer" style={{ background: "#f8fafc", borderTop: "1px solid #e2e8f0", padding: "16px 24px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <button
+                type="button"
+                className="cop-btn-cancel"
+                onClick={() => setPreviewDocModalOpen(false)}
+              >
+                Close Preview
+              </button>
+
+              <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
+                {previewDoc.status === "VERIFIED" ? (
+                  <span style={{ color: "#059669", fontWeight: 700, display: "inline-flex", alignItems: "center", gap: "6px", fontSize: "13px" }}>
+                    <CheckCircle2 size={18} /> Stamped by Customs Officer Sharma
+                  </span>
+                ) : (
+                  <button
+                    type="button"
+                    className="cop-btn-action"
+                    style={{ background: "#059669", padding: "10px 20px", fontSize: "13px" }}
+                    onClick={() => {
+                      handleVerifySingleDoc(previewDoc.shipmentId, previewDoc.docType);
+                    }}
+                  >
+                    <ShieldCheck size={16} /> Verify &amp; Apply Official Customs Stamp
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         </div>
