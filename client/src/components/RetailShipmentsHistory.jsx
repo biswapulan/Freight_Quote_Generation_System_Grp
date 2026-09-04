@@ -34,6 +34,7 @@ import {
   getShipmentStatusFromQuoteStatus,
   getPlatformQuotes,
   updateQuoteStatusInStore,
+  syncQuoteDocumentsToVault,
 } from "../utils/quoteWorkflow";
 import QuoteWorkflowStepper from "./QuoteWorkflowStepper";
 import "./RetailShipmentsHistory.css";
@@ -205,6 +206,7 @@ export default function RetailShipmentsHistory({ viewMode = "quotes" }) {
     };
 
     updateQuoteStatusInStore(qId, extra.status, extra);
+    syncQuoteDocumentsToVault(selectedQuote, updatedDocs);
     reloadQuotes();
     if (selectedQuote) {
       setSelectedQuote((prev) => ({ ...prev, ...extra }));

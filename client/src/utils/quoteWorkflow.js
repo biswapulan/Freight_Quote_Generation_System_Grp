@@ -362,6 +362,73 @@ export function savePlatformQuotes(quotes) {
   } catch {}
 }
 
+export function syncQuoteDocumentsToVault(quote, documents) {
+  if (!quote || !documents || !Array.isArray(documents)) return;
+  try {
+    const qId = quote.quoteNo || quote.id || "SHP-1001";
+    const routeStr = quote.laneCode ||
+      (quote.origin && quote.destination
+        ? `${quote.origin} ➔ ${quote.destination}`
+        : "Chennai ➔ Rotterdam");
+
+    const savedVault = localStorage.getItem("freightai_vault_docs_v2");
+    let vaultList = [];
+    if (savedVault) {
+      try {
+        const parsed = JSON.parse(savedVault);
+        if (Array.isArray(parsed)) vaultList = parsed;
+      } catch {}
+    }
+
+    documents.forEach((d) => {
+      if (d.status === "UPLOADED" || d.status === "VERIFIED" || d.fileName) {
+        const docId = `doc-${qId}-${d.name.replace(/[^a-zA-Z0-9]/g, "_")}`;
+        const fileName = d.fileName || `${d.name.replace(/\s+/g, "_")}.pdf`;
+        const sizeStr = d.fileSize || "1.2 MB";
+        const uploadedTime = d.uploadedAt
+          ? (d.uploadedAt.includes("T")
+              ? "Today, " + new Date(d.uploadedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+              : d.uploadedAt)
+          : "Just now";
+
+        const vaultEntry = {
+          id: docId,
+          name: fileName,
+          type: d.name,
+          fileName: fileName,
+          shipmentRef: qId,
+          route: routeStr,
+          uploadedAt: uploadedTime,
+          size: sizeStr,
+          status: d.status === "VERIFIED" ? "VERIFIED" : "UNDER_REVIEW",
+          verifiedBy: d.status === "VERIFIED" ? (quote.assignedOfficer || "Customs Officer Sharma") : "AI Automated OCR Scanner",
+          notes: d.status === "VERIFIED"
+            ? `Verified & cleared by Customs Officer for shipment ${qId}.`
+            : `Uploaded by customer for shipment ${qId}. Queued for automated OCR validation & Customs Officer verification.`,
+        };
+
+        const existingIdx = vaultList.findIndex(
+          (v) => v.id === docId || (v.shipmentRef === qId && v.type === d.name)
+        );
+
+        if (existingIdx >= 0) {
+          vaultList[existingIdx] = { ...vaultList[existingIdx], ...vaultEntry };
+        } else {
+          vaultList.unshift(vaultEntry);
+        }
+      }
+    });
+
+    localStorage.setItem("freightai_vault_docs_v2", JSON.stringify(vaultList));
+    localStorage.removeItem("freightai_vault_cleared");
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("freightai_vault_updated"));
+    }
+  } catch (err) {
+    console.error("Failed to sync quote documents to vault:", err);
+  }
+}
+
 export function updateQuoteStatusInStore(quoteId, newStatus, extraFields = {}) {
   const current = getPlatformQuotes();
   const updated = current.map((q) => {
@@ -397,6 +464,14 @@ export function updateQuoteStatusInStore(quoteId, newStatus, extraFields = {}) {
       localStorage.setItem("freightai_customs_shipments", JSON.stringify(updatedCustoms));
     }
   } catch {}
+
+  // Sync to Document Management & Vault
+  if (extraFields.documents && Array.isArray(extraFields.documents)) {
+    const targetQuote = updated.find((q) => q.id === quoteId || q.quoteNo === quoteId);
+    if (targetQuote) {
+      syncQuoteDocumentsToVault(targetQuote, extraFields.documents);
+    }
+  }
 
   return updated;
 }
