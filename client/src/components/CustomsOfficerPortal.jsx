@@ -431,7 +431,14 @@ export default function CustomsOfficerPortal({ initialTab = "pending-reviews" })
                     <label key={idx} className="cop-check-item">
                       <div className="cop-check-left">
                         <input type="checkbox" defaultChecked={doc.status === "VERIFIED"} />
-                        <span className="cop-check-name">{doc.name}</span>
+                        <span className="cop-check-name">
+                          {doc.name}
+                          {doc.fileName && (
+                            <span style={{ color: "#38bdf8", marginLeft: "6px", fontSize: "11px", fontWeight: "normal" }}>
+                              &bull; {doc.fileName} ({doc.fileSize || "Uploaded"})
+                            </span>
+                          )}
+                        </span>
                       </div>
                       <span className={`cop-doc-badge ${statusClass}`}>
                         {doc.status}
