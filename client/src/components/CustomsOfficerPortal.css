@@ -549,3 +549,126 @@
   align-items: center;
   gap: 12px;
 }
+
+/* Distinct View Enhancements */
+.cop-view-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.cop-view-title {
+  font-size: 16px;
+  font-weight: 800;
+  color: #0f172a;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.cop-view-badge-count {
+  background: #f1f5f9;
+  color: #475569;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.cop-sla-urgent {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: #fef2f2;
+  color: #dc2626;
+  border: 1px solid #fecaca;
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-size: 11.5px;
+  font-weight: 700;
+}
+
+.cop-sla-normal {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: #f0fdf4;
+  color: #16a34a;
+  border: 1px solid #bbf7d0;
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-size: 11.5px;
+  font-weight: 700;
+}
+
+.cop-ocr-indicator {
+  font-size: 11.5px;
+  color: #0284c7;
+  background: #f0f9ff;
+  border: 1px dashed #bae6fd;
+  padding: 4px 8px;
+  border-radius: 6px;
+  margin-top: 4px;
+  display: inline-block;
+  line-height: 1.3;
+}
+
+.cop-manifest-spec {
+  font-size: 12px;
+  color: #64748b;
+  margin-top: 3px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.cop-val-tag {
+  font-weight: 700;
+  color: #0f172a;
+  font-size: 13.5px;
+}
+
+.cop-duty-sub {
+  font-size: 11px;
+  color: #64748b;
+}
+
+.cop-stamp-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #ecfdf5;
+  color: #059669;
+  border: 1px solid #a7f3d0;
+  padding: 6px 12px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.cop-hold-reason {
+  font-size: 12px;
+  color: #dc2626;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  padding: 6px 10px;
+  border-radius: 8px;
+  font-weight: 600;
+  max-width: 380px;
+  line-height: 1.4;
+}
+
+.cop-clearance-cert {
+  font-family: monospace;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #0284c7;
+  background: #f0f9ff;
+  padding: 4px 8px;
+  border-radius: 6px;
+  border: 1px solid #e0f2fe;
+}
