@@ -46,15 +46,15 @@ export default function CustomsComplianceCard({
     runValidation();
   }, [shipmentId, originCountry, destinationCountry, hsCode, commodity, incoterm]);
 
-  const handleUploadDoc = async (item) => {
+  const handleUploadDoc = async (item, file) => {
+    if (!file) return;
     setUploadingItemId(item.id);
     try {
-      const simulatedFileName = `${item.item_name.toLowerCase().replace(/[^a-z0-9]/g, "_")}.pdf`;
       const res = await uploadCustomsDocument({
         shipment_id: shipmentId,
         checklist_item_id: item.id,
         document_type: item.item_name,
-        file_name: simulatedFileName,
+        file_name: file.name,
       });
       if (res.compliance_check) {
         setCompliance((prev) => ({
@@ -191,15 +191,27 @@ export default function CustomsComplianceCard({
                   </td>
                   <td>
                     {item.status !== "VERIFIED" ? (
-                      <button
-                        type="button"
-                        className="agent-btn-sm"
-                        onClick={() => handleUploadDoc(item)}
-                        disabled={uploadingItemId === item.id}
-                      >
-                        <Upload size={12} style={{ display: "inline", marginRight: "4px" }} />
-                        {uploadingItemId === item.id ? "Attaching..." : "Upload Doc"}
-                      </button>
+                      <>
+                        <input
+                          type="file"
+                          id={`customs-doc-upload-${item.id}`}
+                          style={{ display: "none" }}
+                          accept=".pdf,.doc,.docx,.png,.jpg,.jpeg,.xlsx,.csv"
+                          disabled={uploadingItemId === item.id}
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) handleUploadDoc(item, file);
+                          }}
+                        />
+                        <label
+                          htmlFor={`customs-doc-upload-${item.id}`}
+                          className="agent-btn-sm"
+                          style={{ cursor: "pointer", display: "inline-flex", alignItems: "center" }}
+                        >
+                          <Upload size={12} style={{ marginRight: "4px" }} />
+                          {uploadingItemId === item.id ? "Attaching..." : "Upload Doc"}
+                        </label>
+                      </>
                     ) : (
                       <span style={{ fontSize: "12.5px", color: "#16a34a", fontWeight: 600 }}>Verified</span>
                     )}
