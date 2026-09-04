@@ -12,6 +12,9 @@ import {
   FileCheck,
   Shield,
   Trash2,
+  X,
+  Upload,
+  FileUp,
 } from "lucide-react";
 import "./DocumentsCenter.css";
 
@@ -79,28 +82,82 @@ const INITIAL_DOCUMENTS = [
 ];
 
 export default function DocumentsCenter() {
-  const [documents, setDocuments] = useState(INITIAL_DOCUMENTS);
+  const [documents, setDocuments] = useState(() => {
+    try {
+      const saved = localStorage.getItem("freightai_vault_docs_v2");
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        const cleaned = parsed.filter((d) => d.name !== "Uploaded_Customs_Declaration.pdf");
+        localStorage.setItem("freightai_vault_docs_v2", JSON.stringify(cleaned));
+        return cleaned;
+      }
+      return INITIAL_DOCUMENTS;
+    } catch {
+      return INITIAL_DOCUMENTS;
+    }
+  });
   const [searchTerm, setSearchTerm] = useState("");
   const [filterStatus, setFilterStatus] = useState("all");
   const [uploadSuccess, setUploadSuccess] = useState(false);
+  const [successMsg, setSuccessMsg] = useState("");
 
-  const handleSimulatedUpload = (e) => {
+  // Real Upload Modal State
+  const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
+  const [selectedFile, setSelectedFile] = useState(null);
+  const [docType, setDocType] = useState("Customs Declaration");
+  const [shipmentRef, setShipmentRef] = useState("SHP-1001");
+
+  const shipmentRoutes = {
+    "SHP-1001": "Chennai ➔ Rotterdam",
+    "SHP-1002": "Mumbai ➔ Hamburg",
+    "SHP-1003": "Nhava Sheva ➔ Jebel Ali",
+    "SHP-1004": "Hyderabad ➔ New York JFK",
+  };
+
+  const handleOpenUploadModal = () => {
+    setSelectedFile(null);
+    setIsUploadModalOpen(true);
+  };
+
+  const handleFileChange = (e) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setSelectedFile(file);
+    }
+  };
+
+  const handleConfirmUpload = (e) => {
     e.preventDefault();
+    if (!selectedFile) return;
+
+    const sizeFormatted = selectedFile.size > 1024 * 1024
+      ? `${(selectedFile.size / (1024 * 1024)).toFixed(1)} MB`
+      : `${Math.round(selectedFile.size / 1024)} KB`;
+
     const newDoc = {
       id: `doc-${Date.now()}`,
-      name: "Uploaded_Customs_Declaration.pdf",
-      type: "Customs Declaration",
-      shipmentRef: "SHP-1001",
-      route: "Chennai ➔ Rotterdam",
+      name: selectedFile.name,
+      type: docType,
+      shipmentRef: shipmentRef,
+      route: shipmentRoutes[shipmentRef] || "Chennai ➔ Rotterdam",
       uploadedAt: "Just now",
-      size: "1.1 MB",
+      size: sizeFormatted,
       status: "UNDER_REVIEW",
-      verifiedBy: "AI Automated Scanner",
-      notes: "Document parsed and routed to Customs Officer desk.",
+      verifiedBy: "AI Automated OCR Scanner",
+      notes: `Uploaded by user (${selectedFile.name}). Queued for OCR validation & Customs Officer verification.`,
     };
-    setDocuments([newDoc, ...documents]);
+
+    const updated = [newDoc, ...documents];
+    setDocuments(updated);
+    try {
+      localStorage.setItem("freightai_vault_docs_v2", JSON.stringify(updated));
+    } catch {}
+
+    setSuccessMsg(`"${selectedFile.name}" successfully uploaded and queued for automated OCR validation & customs review.`);
     setUploadSuccess(true);
-    setTimeout(() => setUploadSuccess(false), 4000);
+    setIsUploadModalOpen(false);
+    setSelectedFile(null);
+    setTimeout(() => setUploadSuccess(false), 6000);
   };
 
   const filteredDocs = documents.filter((doc) => {
@@ -129,7 +186,7 @@ export default function DocumentsCenter() {
           </div>
         </div>
 
-        <button className="doc-upload-btn" onClick={handleSimulatedUpload}>
+        <button className="doc-upload-btn" onClick={handleOpenUploadModal}>
           <UploadCloud size={18} /> Upload Document
         </button>
       </div>
@@ -137,7 +194,7 @@ export default function DocumentsCenter() {
       {uploadSuccess && (
         <div className="doc-alert-success">
           <CheckCircle2 size={18} />
-          <span>Document successfully uploaded and queued for automated OCR validation &amp; customs review.</span>
+          <span>{successMsg || "Document successfully uploaded and queued for automated OCR validation & customs review."}</span>
         </div>
       )}
 
@@ -257,6 +314,121 @@ export default function DocumentsCenter() {
           </tbody>
         </table>
       </div>
+
+      {/* Real Upload Document Modal */}
+      {isUploadModalOpen && (
+        <div className="doc-modal-overlay" onClick={() => setIsUploadModalOpen(false)}>
+          <div className="doc-modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="doc-modal-header">
+              <div className="doc-modal-title">
+                <UploadCloud size={22} className="doc-modal-icon" />
+                <h3>Upload Document to Vault</h3>
+              </div>
+              <button
+                className="doc-modal-close"
+                onClick={() => {
+                  setIsUploadModalOpen(false);
+                  setSelectedFile(null);
+                }}
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <form onSubmit={handleConfirmUpload} className="doc-modal-form">
+              <div className="doc-field-group">
+                <label className="doc-field-label">Document Type *</label>
+                <select
+                  className="doc-select-input"
+                  value={docType}
+                  onChange={(e) => setDocType(e.target.value)}
+                >
+                  <option value="Customs Declaration">Customs Declaration</option>
+                  <option value="Commercial Invoice">Commercial Invoice</option>
+                  <option value="Bill of Lading Draft">Bill of Lading Draft</option>
+                  <option value="Packing List">Packing List</option>
+                  <option value="Certificate of Origin">Certificate of Origin</option>
+                  <option value="Safety Data Sheet (MSDS)">Safety Data Sheet (MSDS)</option>
+                  <option value="Inspection Certificate">Inspection Certificate</option>
+                  <option value="Other">Other Supporting Document</option>
+                </select>
+              </div>
+
+              <div className="doc-field-group">
+                <label className="doc-field-label">Shipment Reference *</label>
+                <select
+                  className="doc-select-input"
+                  value={shipmentRef}
+                  onChange={(e) => setShipmentRef(e.target.value)}
+                >
+                  <option value="SHP-1001">SHP-1001 (Chennai ➔ Rotterdam)</option>
+                  <option value="SHP-1002">SHP-1002 (Mumbai ➔ Hamburg)</option>
+                  <option value="SHP-1003">SHP-1003 (Nhava Sheva ➔ Jebel Ali)</option>
+                  <option value="SHP-1004">SHP-1004 (Hyderabad ➔ New York JFK)</option>
+                </select>
+              </div>
+
+              <div className="doc-field-group">
+                <label className="doc-field-label">Select File to Upload *</label>
+                <input
+                  type="file"
+                  id="vault-file-upload-input"
+                  accept=".pdf,.doc,.docx,.png,.jpg,.jpeg,.xlsx,.csv"
+                  onChange={handleFileChange}
+                  style={{ display: "none" }}
+                />
+                <label htmlFor="vault-file-upload-input" className={`doc-dropzone ${selectedFile ? "has-file" : ""}`}>
+                  {selectedFile ? (
+                    <div className="doc-dropzone-selected">
+                      <FileCheck size={36} color="#16a34a" />
+                      <div className="doc-dropzone-fileinfo">
+                        <span className="doc-dropzone-filename">{selectedFile.name}</span>
+                        <span className="doc-dropzone-filesize">
+                          {selectedFile.size > 1024 * 1024
+                            ? `${(selectedFile.size / (1024 * 1024)).toFixed(2)} MB`
+                            : `${Math.round(selectedFile.size / 1024)} KB`}
+                        </span>
+                      </div>
+                      <span className="doc-dropzone-change">Click to choose another file</span>
+                    </div>
+                  ) : (
+                    <div className="doc-dropzone-prompt">
+                      <FileUp size={36} color="#f97316" />
+                      <div className="doc-dropzone-title">Click to select document from your computer</div>
+                      <div className="doc-dropzone-sub">Supports PDF, DOCX, XLSX, PNG, JPG (Max 25 MB)</div>
+                    </div>
+                  )}
+                </label>
+                {!selectedFile && (
+                  <p className="doc-file-hint-error">
+                    * Please choose a document file from your computer before uploading.
+                  </p>
+                )}
+              </div>
+
+              <div className="doc-modal-footer">
+                <button
+                  type="button"
+                  className="doc-btn-secondary"
+                  onClick={() => {
+                    setIsUploadModalOpen(false);
+                    setSelectedFile(null);
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="doc-btn-primary"
+                  disabled={!selectedFile}
+                >
+                  <UploadCloud size={16} /> Upload to Vault
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
