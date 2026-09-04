@@ -23,6 +23,7 @@ import {
   Zap,
   AlertTriangle,
   Send,
+  Upload,
 } from "lucide-react";
 import { useRetailQuotes } from "../context/RetailQuotesContext";
 import {
@@ -166,8 +167,8 @@ export default function RetailShipmentsHistory({ viewMode = "quotes" }) {
     }
   }
 
-  function handleUploadDocument(docName) {
-    if (!selectedQuote) return;
+  function handleFileSelected(docName, file) {
+    if (!selectedQuote || !file) return;
     const qId = selectedQuote.quoteNo || selectedQuote.id;
     const currentDocs = selectedQuote.documents || [
       { name: "Commercial Invoice", status: "PENDING" },
@@ -176,16 +177,28 @@ export default function RetailShipmentsHistory({ viewMode = "quotes" }) {
       { name: "Certificate of Origin", status: "PENDING" },
     ];
 
+    const sizeStr = file.size > 1024 * 1024
+      ? `${(file.size / (1024 * 1024)).toFixed(1)} MB`
+      : `${Math.round(file.size / 1024)} KB`;
+
     const updatedDocs = currentDocs.map((d) =>
       d.name.toLowerCase() === docName.toLowerCase()
-        ? { ...d, status: "UPLOADED", uploadedAt: new Date().toISOString() }
+        ? {
+            ...d,
+            status: "UPLOADED",
+            fileName: file.name,
+            fileSize: sizeStr,
+            uploadedAt: new Date().toISOString(),
+          }
         : d
     );
 
+    const uploadedCount = updatedDocs.filter((d) => d.status === "VERIFIED" || d.status === "UPLOADED").length;
+
     const extra = {
       documents: updatedDocs,
-      documentsStatus: `${updatedDocs.filter((d) => d.status === "VERIFIED" || d.status === "UPLOADED").length}/${updatedDocs.length} Uploaded (Pending Customs Review)`,
-      customsRemarks: `Customer uploaded ${docName}. Pending verification by Customs Officer.`,
+      documentsStatus: `${uploadedCount}/${updatedDocs.length} Uploaded (Pending Customs Review)`,
+      customsRemarks: `Customer uploaded "${file.name}" for ${docName}. Pending verification by Customs Officer.`,
       status: selectedQuote.status === "DRAFT" ? "REQUESTED" : "PENDING_REVIEW",
       shipmentStatus: "ANALYZED",
       lastWorkflowTransitionAt: new Date().toISOString(),
@@ -868,26 +881,79 @@ export default function RetailShipmentsHistory({ viewMode = "quotes" }) {
                               VERIFIED
                             </span>
                           ) : isUploaded ? (
-                            <span style={{ fontSize: "11px", fontWeight: 700, color: "#0284c7", background: "#e0f2fe", padding: "3px 8px", borderRadius: "6px" }}>
-                              UPLOADED
-                            </span>
+                            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                              <div style={{ textAlign: "right" }}>
+                                <span style={{ fontSize: "11px", fontWeight: 700, color: "#0284c7", background: "#e0f2fe", padding: "3px 8px", borderRadius: "6px", display: "inline-block" }}>
+                                  UPLOADED
+                                </span>
+                                {doc.fileName && (
+                                  <div style={{ fontSize: "10.5px", color: "#64748b", maxWidth: "120px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={doc.fileName}>
+                                    {doc.fileName}
+                                  </div>
+                                )}
+                              </div>
+                              <label
+                                title="Choose another file to replace"
+                                style={{
+                                  fontSize: "10.5px",
+                                  fontWeight: 600,
+                                  color: "#475569",
+                                  background: "#f1f5f9",
+                                  border: "1px solid #cbd5e1",
+                                  padding: "3px 7px",
+                                  borderRadius: "5px",
+                                  cursor: "pointer",
+                                  display: "inline-flex",
+                                  alignItems: "center",
+                                  gap: "3px",
+                                }}
+                              >
+                                <Upload size={10} /> Replace
+                                <input
+                                  type="file"
+                                  accept=".pdf,.doc,.docx,.png,.jpg,.jpeg,.xlsx,.csv"
+                                  style={{ display: "none" }}
+                                  onChange={(e) => {
+                                    const file = e.target.files?.[0];
+                                    if (file) {
+                                      handleFileSelected(doc.name, file);
+                                    }
+                                    e.target.value = "";
+                                  }}
+                                />
+                              </label>
+                            </div>
                           ) : (
-                            <button
-                              type="button"
-                              onClick={() => handleUploadDocument(doc.name)}
+                            <label
                               style={{
                                 fontSize: "11px",
                                 fontWeight: 700,
                                 color: "#0284c7",
                                 background: "#f0f9ff",
                                 border: "1px solid #bae6fd",
-                                padding: "4px 10px",
+                                padding: "5px 12px",
                                 borderRadius: "6px",
                                 cursor: "pointer",
+                                display: "inline-flex",
+                                alignItems: "center",
+                                gap: "5px",
+                                boxShadow: "0 1px 2px rgba(2, 132, 199, 0.08)",
                               }}
                             >
-                              Upload File
-                            </button>
+                              <Upload size={12} /> Upload File
+                              <input
+                                type="file"
+                                accept=".pdf,.doc,.docx,.png,.jpg,.jpeg,.xlsx,.csv"
+                                style={{ display: "none" }}
+                                onChange={(e) => {
+                                  const file = e.target.files?.[0];
+                                  if (file) {
+                                    handleFileSelected(doc.name, file);
+                                  }
+                                  e.target.value = "";
+                                }}
+                              />
+                            </label>
                           )}
                         </div>
                       );
