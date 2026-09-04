@@ -104,7 +104,8 @@ export default function DocumentsCenter() {
   // Real Upload Modal State
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
   const [selectedFile, setSelectedFile] = useState(null);
-  const [docType, setDocType] = useState("Customs Declaration");
+  const [docName, setDocName] = useState("");
+  const [docType, setDocType] = useState("");
   const [shipmentRef, setShipmentRef] = useState("SHP-1001");
 
   const shipmentRoutes = {
@@ -116,6 +117,8 @@ export default function DocumentsCenter() {
 
   const handleOpenUploadModal = () => {
     setSelectedFile(null);
+    setDocName("");
+    setDocType("");
     setIsUploadModalOpen(true);
   };
 
@@ -124,6 +127,30 @@ export default function DocumentsCenter() {
     if (file) {
       setSelectedFile(file);
     }
+  };
+
+  const handleDeleteDoc = (id) => {
+    const updated = documents.filter((d) => d.id !== id);
+    setDocuments(updated);
+    try {
+      localStorage.setItem("freightai_vault_docs_v2", JSON.stringify(updated));
+    } catch {}
+  };
+
+  const handleClearAll = () => {
+    if (window.confirm("Are you sure you want to clear all documents from the vault?")) {
+      setDocuments([]);
+      try {
+        localStorage.setItem("freightai_vault_docs_v2", JSON.stringify([]));
+      } catch {}
+    }
+  };
+
+  const handleRestoreDefaults = () => {
+    setDocuments(INITIAL_DOCUMENTS);
+    try {
+      localStorage.setItem("freightai_vault_docs_v2", JSON.stringify(INITIAL_DOCUMENTS));
+    } catch {}
   };
 
   const handleConfirmUpload = (e) => {
@@ -136,8 +163,9 @@ export default function DocumentsCenter() {
 
     const newDoc = {
       id: `doc-${Date.now()}`,
-      name: selectedFile.name,
-      type: docType,
+      name: docName.trim(),
+      type: docType.trim(),
+      fileName: selectedFile.name,
       shipmentRef: shipmentRef,
       route: shipmentRoutes[shipmentRef] || "Chennai ➔ Rotterdam",
       uploadedAt: "Just now",
@@ -153,18 +181,23 @@ export default function DocumentsCenter() {
       localStorage.setItem("freightai_vault_docs_v2", JSON.stringify(updated));
     } catch {}
 
-    setSuccessMsg(`"${selectedFile.name}" successfully uploaded and queued for automated OCR validation & customs review.`);
+    setSuccessMsg(`"${newDoc.name || selectedFile.name}" successfully uploaded and queued for automated OCR validation & customs review.`);
     setUploadSuccess(true);
     setIsUploadModalOpen(false);
     setSelectedFile(null);
+    setDocName("");
+    setDocType("");
     setTimeout(() => setUploadSuccess(false), 6000);
   };
 
   const filteredDocs = documents.filter((doc) => {
+    const docNameStr = (doc.name || doc.fileName || "").toLowerCase();
+    const docRefStr = (doc.shipmentRef || "").toLowerCase();
+    const docTypeStr = (doc.type || "").toLowerCase();
     const matchesSearch =
-      doc.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      doc.shipmentRef.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      doc.type.toLowerCase().includes(searchTerm.toLowerCase());
+      docNameStr.includes(searchTerm.toLowerCase()) ||
+      docRefStr.includes(searchTerm.toLowerCase()) ||
+      docTypeStr.includes(searchTerm.toLowerCase());
 
     if (filterStatus === "verified") return matchesSearch && doc.status === "VERIFIED";
     if (filterStatus === "review") return matchesSearch && doc.status === "UNDER_REVIEW";
@@ -186,9 +219,56 @@ export default function DocumentsCenter() {
           </div>
         </div>
 
-        <button className="doc-upload-btn" onClick={handleOpenUploadModal}>
-          <UploadCloud size={18} /> Upload Document
-        </button>
+        <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
+          {documents.length > 0 ? (
+            <button
+              type="button"
+              className="doc-btn-secondary"
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "6px",
+                padding: "10px 16px",
+                borderRadius: "10px",
+                fontSize: "13px",
+                fontWeight: 600,
+                color: "#dc2626",
+                background: "#fef2f2",
+                border: "1px solid #fecaca",
+                cursor: "pointer",
+              }}
+              onClick={handleClearAll}
+              title="Clear all documents in Vault"
+            >
+              <Trash2 size={16} /> Clear Vault
+            </button>
+          ) : (
+            <button
+              type="button"
+              className="doc-btn-secondary"
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "6px",
+                padding: "10px 16px",
+                borderRadius: "10px",
+                fontSize: "13px",
+                fontWeight: 600,
+                color: "#475569",
+                background: "#f8fafc",
+                border: "1px solid #cbd5e1",
+                cursor: "pointer",
+              }}
+              onClick={handleRestoreDefaults}
+              title="Restore sample documents"
+            >
+              Restore Samples
+            </button>
+          )}
+          <button className="doc-upload-btn" onClick={handleOpenUploadModal}>
+            <UploadCloud size={18} /> Upload Document
+          </button>
+        </div>
       </div>
 
       {uploadSuccess && (
@@ -256,7 +336,7 @@ export default function DocumentsCenter() {
             {filteredDocs.length === 0 ? (
               <tr>
                 <td colSpan={6} className="doc-empty-cell">
-                  No documents found matching the filter criteria.
+                  No documents found in vault. Click "Upload Document" or "Restore Samples".
                 </td>
               </tr>
             ) : (
@@ -268,8 +348,25 @@ export default function DocumentsCenter() {
                         <FileText size={18} />
                       </div>
                       <div>
-                        <div className="doc-filename">{doc.name}</div>
-                        <div className="doc-category">{doc.type} • {doc.size}</div>
+                        <div className="doc-filename">
+                          {doc.name ? (
+                            doc.name
+                          ) : (
+                            <span style={{ color: "#94a3b8", fontStyle: "italic" }}>
+                              {doc.fileName || "(Empty Name)"}
+                            </span>
+                          )}
+                        </div>
+                        <div className="doc-category">
+                          {doc.type ? (
+                            `${doc.type} • `
+                          ) : (
+                            <span style={{ color: "#94a3b8", fontStyle: "italic" }}>
+                              (Empty Type) •{" "}
+                            </span>
+                          )}
+                          {doc.size}
+                        </div>
                       </div>
                     </div>
                   </td>
@@ -302,9 +399,17 @@ export default function DocumentsCenter() {
                       <button
                         className="doc-icon-btn"
                         title="Download Document"
-                        onClick={() => alert(`Downloading ${doc.name}`)}
+                        onClick={() => alert(`Downloading ${doc.name || doc.fileName || "Document"}`)}
                       >
                         <Download size={16} />
+                      </button>
+                      <button
+                        className="doc-icon-btn"
+                        style={{ color: "#ef4444" }}
+                        title="Delete Document"
+                        onClick={() => handleDeleteDoc(doc.id)}
+                      >
+                        <Trash2 size={16} />
                       </button>
                     </div>
                   </td>
@@ -329,6 +434,8 @@ export default function DocumentsCenter() {
                 onClick={() => {
                   setIsUploadModalOpen(false);
                   setSelectedFile(null);
+                  setDocName("");
+                  setDocType("");
                 }}
               >
                 <X size={20} />
@@ -337,15 +444,27 @@ export default function DocumentsCenter() {
 
             <form onSubmit={handleConfirmUpload} className="doc-modal-form">
               <div className="doc-field-group">
-                <label className="doc-field-label">Document Type *</label>
+                <label className="doc-field-label">Document Name</label>
+                <input
+                  type="text"
+                  className="doc-select-input"
+                  placeholder="Leave empty or enter custom document name..."
+                  value={docName}
+                  onChange={(e) => setDocName(e.target.value)}
+                />
+              </div>
+
+              <div className="doc-field-group">
+                <label className="doc-field-label">Document Type</label>
                 <select
                   className="doc-select-input"
                   value={docType}
                   onChange={(e) => setDocType(e.target.value)}
                 >
-                  <option value="Customs Declaration">Customs Declaration</option>
+                  <option value="">-- Leave Empty or Select Document Type --</option>
                   <option value="Commercial Invoice">Commercial Invoice</option>
                   <option value="Bill of Lading Draft">Bill of Lading Draft</option>
+                  <option value="Customs Declaration">Customs Declaration</option>
                   <option value="Packing List">Packing List</option>
                   <option value="Certificate of Origin">Certificate of Origin</option>
                   <option value="Safety Data Sheet (MSDS)">Safety Data Sheet (MSDS)</option>
@@ -426,6 +545,8 @@ export default function DocumentsCenter() {
                   onClick={() => {
                     setIsUploadModalOpen(false);
                     setSelectedFile(null);
+                    setDocName("");
+                    setDocType("");
                   }}
                 >
                   Cancel
