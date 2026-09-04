@@ -98,7 +98,35 @@ export default function CustomsOfficerPortal({ initialTab = "pending-reviews" })
   const [shipments, setShipments] = useState(() => {
     try {
       const saved = localStorage.getItem("freightai_customs_shipments");
-      return saved ? JSON.parse(saved) : INITIAL_CUSTOMS_SHIPMENTS;
+      const list = saved ? JSON.parse(saved) : INITIAL_CUSTOMS_SHIPMENTS;
+      const platformQuotes = getPlatformQuotes();
+      const platformAsShipments = platformQuotes.map((q) => ({
+        id: q.id || q.quoteNo,
+        quoteNo: q.quoteNo || q.id,
+        customer: q.customerName || q.client || "Shipper",
+        origin: q.origin,
+        destination: q.destination,
+        cargoType: q.cargoType || q.cargoClass || "General Freight",
+        hsCode: q.hsCode || "8471.30",
+        documentsStatus: q.documentsStatus || "Documents Uploaded",
+        riskLevel: q.overallRisk || (q.customsRiskScore > 50 ? "HIGH" : "MEDIUM"),
+        riskScore: q.customsRiskScore || 35,
+        status: q.status === "APPROVED" || q.status === "SENT" || q.status === "ACCEPTED" ? "APPROVED" : q.status === "CUSTOMS_FLAGGED" ? "FLAGGED" : "PENDING_REVIEW",
+        assignedOfficer: "Officer Sharma",
+        documents: q.documents || [
+          { name: "Commercial Invoice", status: "VERIFIED" },
+          { name: "Packing List", status: "VERIFIED" },
+          { name: "Bill of Lading Draft", status: "PENDING" },
+          { name: "Certificate of Origin", status: "PENDING" },
+        ],
+      }));
+      const merged = [...list];
+      platformAsShipments.forEach((ps) => {
+        if (!merged.some((m) => m.id === ps.id || m.quoteNo === ps.quoteNo)) {
+          merged.unshift(ps);
+        }
+      });
+      return merged;
     } catch {
       return INITIAL_CUSTOMS_SHIPMENTS;
     }
@@ -133,7 +161,11 @@ export default function CustomsOfficerPortal({ initialTab = "pending-reviews" })
     if (!selectedShipment) return;
 
     const newStatus = decision === "APPROVE" ? "APPROVED" : "FLAGGED";
-    const workflowStatus = decision === "APPROVE" ? "CUSTOMS_REVIEWED" : "CUSTOMS_FLAGGED";
+    const verifiedDocs = (selectedShipment.documents || []).map((d) => ({
+      ...d,
+      status: decision === "APPROVE" ? "VERIFIED" : d.status,
+    }));
+    const docsSummary = decision === "APPROVE" ? "All Documents Verified & Cleared" : "Inspection Hold (Missing Docs)";
 
     try {
       await signOffCustoms({
@@ -150,6 +182,8 @@ export default function CustomsOfficerPortal({ initialTab = "pending-reviews" })
               status: newStatus,
               riskLevel: decision === "APPROVE" ? "LOW" : "HIGH",
               officerNotes: officerNotes || `Signed off as ${decision}`,
+              documents: verifiedDocs,
+              documentsStatus: docsSummary,
             }
           : s
       );
@@ -163,10 +197,15 @@ export default function CustomsOfficerPortal({ initialTab = "pending-reviews" })
       if (selectedShipment.quoteNo || selectedShipment.id) {
         updateQuoteStatusInStore(
           selectedShipment.quoteNo || selectedShipment.id,
-          workflowStatus,
+          decision === "APPROVE" ? "PENDING_REVIEW" : "CUSTOMS_FLAGGED",
           {
-            customsRemarks: officerNotes || `Customs verification: ${decision === "APPROVE" ? "Approved & Released" : "Flagged on Hold"} by ${selectedShipment.assignedOfficer || "Officer Sharma"}`,
-            customsReviewedAt: new Date().toISOString()
+            documents: verifiedDocs,
+            documentsStatus: docsSummary,
+            customsRemarks: officerNotes || `Customs verification: ${decision === "APPROVE" ? "All regulatory documents approved & released" : "Flagged on Hold"} by ${selectedShipment.assignedOfficer || "Officer Sharma"}. HS Code compliance confirmed.`,
+            customsReviewedAt: new Date().toISOString(),
+            requiresCustomsReview: false,
+            customsRiskScore: decision === "APPROVE" ? 10 : 75,
+            customsRiskLevel: decision === "APPROVE" ? "Low (10/100)" : "High (75/100)",
           }
         );
       }

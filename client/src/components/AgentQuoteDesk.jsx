@@ -21,7 +21,12 @@ export default function AgentQuoteDesk() {
   const [actionNotice, setActionNotice] = useState(null);
 
   useEffect(() => {
-    setQuotes(getPlatformQuotes());
+    function refresh() {
+      setQuotes(getPlatformQuotes());
+    }
+    refresh();
+    window.addEventListener("storage", refresh);
+    return () => window.removeEventListener("storage", refresh);
   }, []);
 
   function openPricingModal(q) {
@@ -43,7 +48,7 @@ export default function AgentQuoteDesk() {
         portFee: Number(portFee),
         totalNum: finalAmount,
         totalFormatted: `₹ ${finalAmount.toLocaleString("en-IN")}`,
-        agentRemarks: `Commercial margin (${marginPct}%) approved by Operations Desk.`,
+        agentRemarks: `Commercial margin (${marginPct}%) approved by Operations Desk. Ready to dispatch.`,
         shipmentStatus: "ANALYZED",
       }
     );
@@ -67,7 +72,7 @@ export default function AgentQuoteDesk() {
         portFee: Number(portFee),
         totalNum: finalAmount,
         totalFormatted: `₹ ${finalAmount.toLocaleString("en-IN")}`,
-        agentRemarks: `Commercial margin (${marginPct}%) validated by Operations Desk. Final verified quote dispatched to customer.`,
+        agentRemarks: `Commercial margin (${marginPct}%) validated by Operations Desk. Final official quotation dispatched to customer.`,
         finalQuoteSentAt: new Date().toISOString(),
         shipmentStatus: "QUOTED",
       }
@@ -80,14 +85,22 @@ export default function AgentQuoteDesk() {
   }
 
   const filteredQuotes = quotes.filter((q) => {
-    const matchesSearch =
-      q.id.toLowerCase().includes(search.toLowerCase()) ||
-      q.client.toLowerCase().includes(search.toLowerCase()) ||
-      q.origin.toLowerCase().includes(search.toLowerCase()) ||
-      q.destination.toLowerCase().includes(search.toLowerCase());
+    const qId = q.id || q.quoteNo || "";
+    const client = q.customerName || q.client || "";
+    const origin = q.origin || "";
+    const dest = q.destination || "";
 
+    const matchesSearch =
+      qId.toLowerCase().includes(search.toLowerCase()) ||
+      client.toLowerCase().includes(search.toLowerCase()) ||
+      origin.toLowerCase().includes(search.toLowerCase()) ||
+      dest.toLowerCase().includes(search.toLowerCase());
+
+    const normStatus = normalizeWorkflowStatus(q.status);
     const matchesStatus =
-      statusFilter === "All" || q.status === statusFilter;
+      statusFilter === "All" ||
+      normStatus === statusFilter ||
+      q.status === statusFilter;
 
     return matchesSearch && matchesStatus;
   });

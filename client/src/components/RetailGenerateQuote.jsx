@@ -581,7 +581,47 @@ export default function RetailGenerateQuote() {
   }
 
   function saveDraft() {
-    window.alert("Draft saved. You can continue editing this enquiry anytime.");
+    const oP = PORTS_MASTER.find((p) => p.id === form.originId);
+    const dP = PORTS_MASTER.find((p) => p.id === form.destId);
+    const originName = oP ? oP.name : form.originId || "Nhava Sheva (INNSA), Mumbai";
+    const destName = dP ? dP.name : form.destId || "Port of Singapore (SGSIN)";
+    const originCity = oP ? oP.name.split(",")[0].trim() : "Origin";
+    const quoteCode = `QT-${Math.random().toString(36).slice(2, 10).toUpperCase()}`;
+    const estTotal = summaryStats.totalWeight > 0 ? summaryStats.totalWeight * 12 : 125000;
+
+    const draftEntry = {
+      id: "qt_" + Math.random().toString(36).slice(2, 10),
+      quoteNo: quoteCode,
+      customerName: user?.full_name || form.custName || "Retail Customer",
+      customerCity: originCity,
+      laneCode: `${originName} → ${destName}`,
+      laneSub: `${oP?.code || form.originId} → ${dP?.code || form.destId}`,
+      origin: originName,
+      destination: destName,
+      mode: form.mode,
+      modeLabel: form.mode === "ocean" ? "Ocean Freight" : form.mode === "air" ? "Air Freight" : "Road Freight",
+      basis: `${summaryStats.totalWeight.toLocaleString()} kg / ${summaryStats.containerSummaryStr}`,
+      transit: "14 d",
+      totalFormatted: `₹ ${Math.round(estTotal).toLocaleString("en-IN")}`,
+      totalNum: estTotal,
+      breakdown: {
+        base_handling_fee: 14500,
+        distance_cost: Math.round(estTotal * 0.75),
+        fuel_surcharge: Math.round(estTotal * 0.15),
+        total: estTotal,
+      },
+      status: "DRAFT",
+      shipmentStatus: "DRAFT",
+      agentRemarks: "Quote enquiry saved as DRAFT by customer. Awaiting submission.",
+      customsRemarks: "Draft enquiry created. No documents uploaded yet.",
+      created: "Today",
+      createdAt: new Date().toISOString(),
+    };
+
+    if (addQuotation) {
+      addQuotation(draftEntry);
+    }
+    window.alert("Enquiry saved as DRAFT in My Quotes. You can review or request anytime.");
   }
 
   const oPort = PORTS_MASTER.find((p) => p.id === form.originId);
@@ -1062,7 +1102,10 @@ export default function RetailGenerateQuote() {
           totalFormatted: `₹ ${Math.round(result.breakdown?.total || 0).toLocaleString("en-IN")}`,
           totalNum: Number(result.breakdown?.total || 0),
           breakdown: result.breakdown || {},
-          status: "Draft",
+          status: "GENERATED",
+          shipmentStatus: "PROCESSING",
+          agentRemarks: "AI Services generated route, tariff breakdown, and dynamic pricing.",
+          customsRemarks: "AI analysis complete. Awaiting customer request and document submission.",
           created: "Today",
           createdAt: new Date().toISOString(),
         });
@@ -1092,6 +1135,20 @@ export default function RetailGenerateQuote() {
     }
   }
 
+  function handleSaveAsDraftInModal() {
+    if (!generatedQuote) return;
+    if (updateQuotationStatus) {
+      updateQuotationStatus(generatedQuote.id, "DRAFT", {
+        shipmentStatus: "DRAFT",
+        agentRemarks: "Quote offer saved as DRAFT by customer. Awaiting customer request.",
+        customsRemarks: "Draft enquiry saved.",
+      });
+    }
+    setShowQuoteModal(false);
+    window.alert("Quotation saved as DRAFT in My Quotes.");
+    if (reloadQuotes) reloadQuotes();
+  }
+
   async function handleConfirmShipment() {
     if (!generatedQuote) return;
 
@@ -1100,12 +1157,19 @@ export default function RetailGenerateQuote() {
     const refCode = `BK-${(generatedQuote.id || Date.now().toString()).slice(-8).toUpperCase()}`;
 
     try {
-      const confirmedQuote = await confirmQuote(token, generatedQuote.id);
-      setGeneratedQuote(confirmedQuote);
+      const confirmedQuote = await confirmQuote(token, generatedQuote.id).catch(() => null);
+      if (confirmedQuote) {
+        setGeneratedQuote(confirmedQuote);
+      }
       setShowQuoteModal(false);
       setBookingRef(refCode);
       if (updateQuotationStatus) {
-        updateQuotationStatus(generatedQuote.id, "DRAFT");
+        updateQuotationStatus(generatedQuote.id, "REQUESTED", {
+          shipmentStatus: "SUBMITTED",
+          requiresCustomsReview: true,
+          agentRemarks: "Customer requested quote. Dispatched to Freight Agent and Customs review queue.",
+          customsRemarks: "Shipment requested. Awaiting document verification by Customs Officer.",
+        });
       }
       setShowSuccessModal(true);
       if (reloadQuotes) {
@@ -1115,7 +1179,12 @@ export default function RetailGenerateQuote() {
       setShowQuoteModal(false);
       setBookingRef(refCode);
       if (updateQuotationStatus) {
-        updateQuotationStatus(generatedQuote.id, "DRAFT");
+        updateQuotationStatus(generatedQuote.id, "REQUESTED", {
+          shipmentStatus: "SUBMITTED",
+          requiresCustomsReview: true,
+          agentRemarks: "Customer requested quote. Dispatched to Freight Agent and Customs review queue.",
+          customsRemarks: "Shipment requested. Awaiting document verification by Customs Officer.",
+        });
       }
       setShowSuccessModal(true);
       if (reloadQuotes) {
@@ -1981,6 +2050,9 @@ export default function RetailGenerateQuote() {
               <div className="modal-prompt-actions">
                 <button type="button" className="btn-confirm-booking" onClick={handleConfirmShipment} disabled={confirming}>
                   <CheckCircle size={16} /> {confirming ? "Submitting request..." : "Yes, Proceed to Request the Quote"}
+                </button>
+                <button type="button" className="btn-secondary-light" onClick={handleSaveAsDraftInModal}>
+                  Save as Draft
                 </button>
                 <button type="button" className="btn-secondary-light" onClick={exportPDF}>
                   <FileText size={14} /> Download PDF Only
