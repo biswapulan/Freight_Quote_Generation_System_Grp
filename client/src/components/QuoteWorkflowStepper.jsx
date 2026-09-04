@@ -52,11 +52,11 @@ export default function QuoteWorkflowStepper({ status, requiresCustoms = true, c
               <div className={`qws-step-node ${stepClass}`}>
                 <div className="qws-marker">
                   {isDone ? (
-                    <Check size={13} strokeWidth={3} />
+                    <Check size={14} strokeWidth={2.5} />
                   ) : isActive && isRejected ? (
-                    <AlertTriangle size={13} />
+                    <AlertTriangle size={14} />
                   ) : (
-                    <Icon size={13} />
+                    <Icon size={14} />
                   )}
                 </div>
                 <div className="qws-info">
@@ -73,12 +73,30 @@ export default function QuoteWorkflowStepper({ status, requiresCustoms = true, c
       </div>
 
       {!compact && (
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "10px", paddingTop: "8px", borderTop: "1px solid #e2e8f0", fontSize: "11px", color: "#64748b" }}>
-          <span><strong>Quote Status:</strong> <span style={{ color: currentConfig.color, fontWeight: 700 }}>{currentConfig.label}</span></span>
-          <span style={{ color: "#cbd5e1" }}>•</span>
-          <span><strong>Shipment Status:</strong> <span style={{ color: "#0284c7", fontWeight: 700 }}>{shipmentStatus}</span></span>
-          <span style={{ color: "#cbd5e1" }}>•</span>
-          <span><strong>Active Actor:</strong> {stagesList[Math.min(currentStep - 1, 5)]?.actor || "Customer"}</span>
+        <div className="qws-meta-bar">
+          <div className="qws-meta-item">
+            <span className="qws-meta-label">Quote Status:</span>
+            <span
+              className="qws-meta-val quote-pill"
+              style={{ backgroundColor: `${currentConfig.color}15`, color: currentConfig.color, borderColor: `${currentConfig.color}40` }}
+            >
+              {currentConfig.label}
+            </span>
+          </div>
+          <div className="qws-meta-divider" />
+          <div className="qws-meta-item">
+            <span className="qws-meta-label">Shipment Status:</span>
+            <span className="qws-meta-val ship-pill">
+              {shipmentStatus}
+            </span>
+          </div>
+          <div className="qws-meta-divider" />
+          <div className="qws-meta-item">
+            <span className="qws-meta-label">Active Reviewer:</span>
+            <span className="qws-meta-actor">
+              {stagesList[Math.min(currentStep - 1, 5)]?.actor || "Customer"}
+            </span>
+          </div>
         </div>
       )}
     </div>
