@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   FileText,
   UploadCloud,
@@ -16,6 +16,7 @@ import {
   Upload,
   FileUp,
 } from "lucide-react";
+import { getPlatformQuotes } from "../utils/quoteWorkflow";
 import "./DocumentsCenter.css";
 
 const INITIAL_DOCUMENTS = [
@@ -40,8 +41,8 @@ const INITIAL_DOCUMENTS = [
     uploadedAt: "Today, 11:05",
     size: "840 KB",
     status: "VERIFIED",
-    verifiedBy: "Maersk Carrier EDI",
-    notes: "Original maritime draft approved for vessel CMA CGM Voltaire.",
+    verifiedBy: "Customs Officer Sharma",
+    notes: "Carrier pre-advice draft endorsed by Maersk Line terminal desk.",
   },
   {
     id: "doc-3",
@@ -53,7 +54,7 @@ const INITIAL_DOCUMENTS = [
     size: "2.1 MB",
     status: "VERIFIED",
     verifiedBy: "Customs Officer Sharma",
-    notes: "EU Directives 2014/53/EU compliant for electronics consignments.",
+    notes: "EU Directives 2014/53/EU and 2011/65/EU RoHS compliance validated.",
   },
   {
     id: "doc-4",
@@ -64,8 +65,8 @@ const INITIAL_DOCUMENTS = [
     uploadedAt: "2 days ago",
     size: "3.2 MB",
     status: "ACTION_REQUIRED",
-    verifiedBy: "Pending Verification",
-    notes: "Section 14 Transport Information requires revised UN number flashpoint.",
+    verifiedBy: "Customs Officer Patel",
+    notes: "Section 14 UN 1993 flashpoint test report missing accredited lab stamp. Resubmission required.",
   },
   {
     id: "doc-5",
@@ -76,30 +77,132 @@ const INITIAL_DOCUMENTS = [
     uploadedAt: "3 days ago",
     size: "950 KB",
     status: "UNDER_REVIEW",
-    verifiedBy: "Chamber of Commerce",
+    verifiedBy: "Automated Document OCR",
     notes: "Awaiting digital stamp from export authority.",
   },
 ];
 
-export default function DocumentsCenter() {
-  const [documents, setDocuments] = useState(() => {
-    try {
-      const saved = localStorage.getItem("freightai_vault_docs_v2");
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        const cleaned = parsed.filter((d) => d.name !== "Uploaded_Customs_Declaration.pdf");
-        localStorage.setItem("freightai_vault_docs_v2", JSON.stringify(cleaned));
-        return cleaned;
+export function getCombinedVaultDocuments() {
+  let vaultDocs = [];
+  try {
+    const saved = localStorage.getItem("freightai_vault_docs_v2");
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      if (Array.isArray(parsed)) {
+        vaultDocs = parsed.filter((d) => d.name !== "Uploaded_Customs_Declaration.pdf");
       }
-      return INITIAL_DOCUMENTS;
-    } catch {
+    }
+  } catch {}
+
+  // Automatically harvest any uploaded trade & customs documents across all active shipments and quotes!
+  try {
+    const platformQuotes = getPlatformQuotes();
+    const retailQuotesRaw = localStorage.getItem("freightai_retail_quotes");
+    const retailQuotes = retailQuotesRaw ? JSON.parse(retailQuotesRaw) : [];
+
+    const allQuotesMap = new Map();
+    if (Array.isArray(platformQuotes)) {
+      platformQuotes.forEach((q) => allQuotesMap.set(q.quoteNo || q.id, q));
+    }
+    if (Array.isArray(retailQuotes)) {
+      retailQuotes.forEach((q) => {
+        const id = q.quoteNo || q.id;
+        if (!allQuotesMap.has(id)) {
+          allQuotesMap.set(id, q);
+        } else {
+          const prev = allQuotesMap.get(id);
+          if (q.documents && Array.isArray(q.documents)) {
+            allQuotesMap.set(id, { ...prev, documents: q.documents });
+          }
+        }
+      });
+    }
+
+    allQuotesMap.forEach((quote) => {
+      if (Array.isArray(quote.documents)) {
+        quote.documents.forEach((d) => {
+          if (d.fileName || d.status === "UPLOADED" || d.status === "VERIFIED") {
+            const qId = quote.quoteNo || quote.id || "SHP-1001";
+            const docId = `doc-${qId}-${d.name.replace(/[^a-zA-Z0-9]/g, "_")}`;
+            const routeStr = quote.laneCode ||
+              (quote.origin && quote.destination
+                ? `${quote.origin} ➔ ${quote.destination}`
+                : "Chennai ➔ Rotterdam");
+            const fileName = d.fileName || `${d.name.replace(/\s+/g, "_")}.pdf`;
+            const sizeStr = d.fileSize || "1.2 MB";
+            const uploadedTime = d.uploadedAt
+              ? (d.uploadedAt.includes("T")
+                  ? "Today, " + new Date(d.uploadedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+                  : d.uploadedAt)
+              : "Just now";
+
+            const vaultEntry = {
+              id: docId,
+              name: fileName,
+              type: d.name,
+              fileName: fileName,
+              shipmentRef: qId,
+              route: routeStr,
+              uploadedAt: uploadedTime,
+              size: sizeStr,
+              status: d.status === "VERIFIED" ? "VERIFIED" : "UNDER_REVIEW",
+              verifiedBy: d.status === "VERIFIED" ? (quote.assignedOfficer || "Customs Officer Sharma") : "AI Automated OCR Scanner",
+              notes: d.status === "VERIFIED"
+                ? `Verified & cleared by Customs Officer for shipment ${qId}.`
+                : `Uploaded by customer for shipment ${qId}. Queued for automated OCR validation & Customs Officer verification.`,
+            };
+
+            const existingIdx = vaultDocs.findIndex(
+              (v) => v.id === docId || (v.shipmentRef === qId && v.type === d.name)
+            );
+
+            if (existingIdx >= 0) {
+              vaultDocs[existingIdx] = { ...vaultDocs[existingIdx], ...vaultEntry };
+            } else {
+              vaultDocs.unshift(vaultEntry);
+            }
+          }
+        });
+      }
+    });
+
+    if (vaultDocs.length > 0) {
+      localStorage.setItem("freightai_vault_docs_v2", JSON.stringify(vaultDocs));
+    }
+  } catch (err) {
+    console.error("Error aggregating quote documents into vault:", err);
+  }
+
+  if (vaultDocs.length === 0) {
+    const isCleared = localStorage.getItem("freightai_vault_cleared") === "true";
+    if (!isCleared) {
       return INITIAL_DOCUMENTS;
     }
-  });
+  }
+
+  return vaultDocs;
+}
+
+export default function DocumentsCenter() {
+  const [documents, setDocuments] = useState(() => getCombinedVaultDocuments());
   const [searchTerm, setSearchTerm] = useState("");
   const [filterStatus, setFilterStatus] = useState("all");
   const [uploadSuccess, setUploadSuccess] = useState(false);
   const [successMsg, setSuccessMsg] = useState("");
+
+  // Sync real-time when documents are uploaded in Quote Modal or Customs Portal
+  useEffect(() => {
+    const handleVaultSync = () => {
+      setDocuments(getCombinedVaultDocuments());
+    };
+
+    window.addEventListener("freightai_vault_updated", handleVaultSync);
+    window.addEventListener("storage", handleVaultSync);
+    return () => {
+      window.removeEventListener("freightai_vault_updated", handleVaultSync);
+      window.removeEventListener("storage", handleVaultSync);
+    };
+  }, []);
 
   // Real Upload Modal State
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
@@ -142,6 +245,7 @@ export default function DocumentsCenter() {
       setDocuments([]);
       try {
         localStorage.setItem("freightai_vault_docs_v2", JSON.stringify([]));
+        localStorage.setItem("freightai_vault_cleared", "true");
       } catch {}
     }
   };
@@ -150,6 +254,7 @@ export default function DocumentsCenter() {
     setDocuments(INITIAL_DOCUMENTS);
     try {
       localStorage.setItem("freightai_vault_docs_v2", JSON.stringify(INITIAL_DOCUMENTS));
+      localStorage.removeItem("freightai_vault_cleared");
     } catch {}
   };
 
@@ -179,6 +284,7 @@ export default function DocumentsCenter() {
     setDocuments(updated);
     try {
       localStorage.setItem("freightai_vault_docs_v2", JSON.stringify(updated));
+      localStorage.removeItem("freightai_vault_cleared");
     } catch {}
 
     setSuccessMsg(`"${newDoc.name || selectedFile.name}" successfully uploaded and queued for automated OCR validation & customs review.`);
