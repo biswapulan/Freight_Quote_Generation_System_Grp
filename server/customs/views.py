@@ -70,6 +70,18 @@ def _sync_quote_customs_analysis(shipment_id, check):
     items = list(check.checklist_items.all())
     outstanding = [i.item_name for i in items if i.status != "VERIFIED"]
 
+    # Recompute readiness and status from the checklist as it stands now.
+    # These were only ever recalculated inside the verify endpoint, using the
+    # item count at that moment, so anything that changed the checklist
+    # afterwards left the check frozen: a consignment with every document
+    # verified still read NEEDS_DOCUMENTS at 94% and never left the queue.
+    # An officer's own sign-off decision is never overwritten.
+    if items and check.status not in ("APPROVED", "REJECTED"):
+        verified = len(items) - len(outstanding)
+        check.readiness_score = round(70.0 + (verified / len(items)) * 30.0, 1)
+        check.status = "NEEDS_REVIEW" if verified == len(items) else "NEEDS_DOCUMENTS"
+        check.save(update_fields=["readiness_score", "status"])
+
     for quote in Quote.objects.filter(shipment_id=shipment_id):
         analysis = quote.analysis or {}
         customs = analysis.get("customs")
