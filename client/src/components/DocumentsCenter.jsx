@@ -44,6 +44,8 @@ export function mapApiDocument(doc, quotesById = new Map()) {
     fileName: doc.file_name,
     fileUrl: doc.file_url || "",
     shipmentRef: doc.shipment_id,
+    quoteNo: quote?.quoteNo || quote?.id || "",
+    customer: quote?.customerName || quote?.customerEmail || "",
     route: quote ? `${quote.origin} ➔ ${quote.destination}` : "—",
     uploadedAt: uploadedAt
       ? uploadedAt.toLocaleString("en-IN", {
@@ -209,7 +211,7 @@ export default function DocumentsCenter() {
 
   const filteredDocs = documents.filter((doc) => {
     const docNameStr = (doc.name || doc.fileName || "").toLowerCase();
-    const docRefStr = (doc.shipmentRef || "").toLowerCase();
+    const docRefStr = `${doc.shipmentRef || ""} ${doc.quoteNo || ""}`.toLowerCase();
     const docTypeStr = (doc.type || "").toLowerCase();
     const matchesSearch =
       docNameStr.includes(searchTerm.toLowerCase()) ||
@@ -221,6 +223,45 @@ export default function DocumentsCenter() {
     if (filterStatus === "action") return matchesSearch && doc.status === "ACTION_REQUIRED";
     return matchesSearch;
   });
+
+  /**
+   * Documents grouped by the quote they belong to.
+   *
+   * A flat list repeated the shipment reference on every row and gave no sense
+   * of which papers belonged together, so finding one consignment's file set
+   * meant reading every row.
+   */
+  const docGroups = useMemo(() => {
+    const byQuote = new Map();
+    filteredDocs.forEach((doc) => {
+      const key = doc.quoteNo || doc.shipmentRef || "UNASSIGNED";
+      if (!byQuote.has(key)) {
+        byQuote.set(key, {
+          key,
+          quoteNo: doc.quoteNo || "",
+          shipmentRef: doc.shipmentRef,
+          customer: doc.customer,
+          route: doc.route,
+          docs: [],
+        });
+      }
+      byQuote.get(key).docs.push(doc);
+    });
+
+    return [...byQuote.values()].map((g) => {
+      const verified = g.docs.filter((d) => d.status === "VERIFIED").length;
+      const rejected = g.docs.filter((d) => d.status === "REJECTED").length;
+      return {
+        ...g,
+        total: g.docs.length,
+        verified,
+        rejected,
+        allVerified: g.docs.length > 0 && verified === g.docs.length,
+      };
+    });
+  }, [filteredDocs]);
+
+  const [openDocGroup, setOpenDocGroup] = useState(null);
 
   return (
     <div className="doc-center">
@@ -293,117 +334,145 @@ export default function DocumentsCenter() {
         </div>
       </div>
 
-      {/* Document Cards / Table */}
-      <div className="doc-table-card">
-        <table className="doc-table">
-          <thead>
-            <tr>
-              <th>Document Name &amp; Type</th>
-              <th>Shipment Ref</th>
-              <th>Route</th>
-              <th>Uploaded</th>
-              <th>Status</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filteredDocs.length === 0 ? (
-              <tr>
-                <td colSpan={6} className="doc-empty-cell">
-                  No documents found in vault. Click "Upload Document" or "Restore Samples".
-                </td>
-              </tr>
-            ) : (
-              filteredDocs.map((doc) => (
-                <tr key={doc.id}>
-                  <td>
-                    <div className="doc-name-cell">
-                      <div className="doc-type-icon">
-                        <FileText size={18} />
-                      </div>
-                      <div>
-                        <div className="doc-filename">
-                          {doc.name ? (
-                            doc.name
-                          ) : (
-                            <span style={{ color: "#94a3b8", fontStyle: "italic" }}>
-                              {doc.fileName || "(Empty Name)"}
-                            </span>
-                          )}
-                        </div>
-                        <div className="doc-category">
-                          {doc.type ? (
-                            `${doc.type} • `
-                          ) : (
-                            <span style={{ color: "#94a3b8", fontStyle: "italic" }}>
-                              (Empty Type) •{" "}
-                            </span>
-                          )}
-                          {doc.size}
-                        </div>
-                      </div>
-                    </div>
-                  </td>
-                  <td>
-                    <span className="doc-shipment-pill">{doc.shipmentRef}</span>
-                  </td>
-                  <td>
-                    <span className="doc-route-text">{doc.route}</span>
-                  </td>
-                  <td>
-                    <span className="doc-date-text">{doc.uploadedAt}</span>
-                  </td>
-                  <td>
-                    {doc.status === "VERIFIED" ? (
-                      <span className="doc-status-badge status-verified">
-                        <CheckCircle2 size={12} /> Verified
-                      </span>
-                    ) : doc.status === "ACTION_REQUIRED" ? (
-                      <span className="doc-status-badge status-action">
-                        <AlertTriangle size={12} /> Action Needed
-                      </span>
-                    ) : (
-                      <span className="doc-status-badge status-review">
-                        <Clock size={12} /> Under Review
-                      </span>
-                    )}
-                  </td>
-                  <td>
-                    <div className="doc-action-group">
-                      <button
-                        className="doc-icon-btn"
-                        title="Download Document"
-                        onClick={() => {
-                          const url =
-                            doc.fileDataUrl ||
-                            (doc.fileName
-                              ? `/sample_trade_documents/${doc.fileName}`
-                              : "/sample_trade_documents/Bill_of_Lading_Draft_BL4810.pdf");
-                          const a = document.createElement("a");
-                          a.href = url;
-                          a.download = doc.fileName || `${doc.name || "document"}.pdf`;
-                          document.body.appendChild(a);
-                          a.click();
-                          document.body.removeChild(a);
-                        }}
-                      >
-                        <Download size={16} />
-                      </button>
-                      <button
-                        className="doc-icon-btn"
-                        style={{ color: "#ef4444" }}
-                        title="Delete Document"
-                        onClick={() => handleDeleteDoc(doc.id)}
-                      >
-                        <Trash2 size={16} />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
+      {/* Documents grouped by the quote they belong to */}
+      <div className="doc-groups">
+        {docGroups.length === 0 ? (
+          <div className="doc-empty-cell" style={{ padding: "34px", textAlign: "center" }}>
+            No documents found in vault. Click &quot;Upload Document&quot; to add one.
+          </div>
+        ) : (
+          docGroups.map((group) => {
+            const isOpen = openDocGroup === group.key;
+            return (
+              <div
+                key={group.key}
+                className={`doc-group${isOpen ? " open" : ""}${group.allVerified ? " done" : ""}`}
+              >
+                <button
+                  type="button"
+                  className="doc-group-head"
+                  onClick={() => setOpenDocGroup(isOpen ? null : group.key)}
+                  aria-expanded={isOpen}
+                >
+                  <span className="doc-group-caret">{isOpen ? "\u25be" : "\u25b8"}</span>
+
+                  <span className="doc-group-id">
+                    <strong>{group.quoteNo || group.shipmentRef}</strong>
+                    <span className="doc-group-sub">
+                      {group.customer || group.shipmentRef}
+                    </span>
+                  </span>
+
+                  <span className="doc-group-route">{group.route}</span>
+
+                  <span className="doc-group-count">
+                    {group.total} document{group.total === 1 ? "" : "s"}
+                  </span>
+
+                  <span
+                    className={`doc-group-pill ${
+                      group.rejected ? "bad" : group.allVerified ? "ok" : "pending"
+                    }`}
+                  >
+                    {group.rejected
+                      ? `${group.rejected} rejected`
+                      : group.allVerified
+                      ? "All verified"
+                      : `${group.total - group.verified} awaiting check`}
+                  </span>
+                </button>
+
+                {isOpen && (
+                  <div className="doc-group-body">
+                    <table className="doc-table">
+                      <thead>
+                        <tr>
+                          <th>Document Name &amp; Type</th>
+                          <th>Uploaded</th>
+                          <th>Status</th>
+                          <th>Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {group.docs.map((doc) => (
+                          <tr key={doc.id}>
+                            <td>
+                              <div className="doc-name-cell">
+                                <div className="doc-file-icon">
+                                  <FileText size={18} />
+                                </div>
+                                <div>
+                                  <div className="doc-file-name">{doc.fileName}</div>
+                                  <div className="doc-file-meta">
+                                    {doc.type} &bull; {doc.size}
+                                  </div>
+                                </div>
+                              </div>
+                            </td>
+                            <td className="doc-muted">{doc.uploadedAt}</td>
+                            <td>
+                              <span
+                                className={`doc-status-pill ${
+                                  doc.status === "VERIFIED"
+                                    ? "ok"
+                                    : doc.status === "REJECTED"
+                                    ? "bad"
+                                    : "pending"
+                                }`}
+                              >
+                                {doc.status === "VERIFIED" ? (
+                                  <>
+                                    <CheckCircle2 size={13} /> Verified
+                                  </>
+                                ) : doc.status === "REJECTED" ? (
+                                  <>
+                                    <AlertTriangle size={13} /> Rejected
+                                  </>
+                                ) : (
+                                  <>
+                                    <Clock size={13} /> Awaiting check
+                                  </>
+                                )}
+                              </span>
+                              {doc.status === "REJECTED" && doc.notes && (
+                                <div className="doc-reject-note">{doc.notes}</div>
+                              )}
+                            </td>
+                            <td>
+                              <div className="doc-actions">
+                                {doc.fileUrl && (
+                                  <a
+                                    className="doc-icon-btn"
+                                    href={doc.fileUrl}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    title="Download document"
+                                  >
+                                    <Download size={16} />
+                                  </a>
+                                )}
+                                <button
+                                  type="button"
+                                  className="doc-icon-btn"
+                                  style={{ color: "#ef4444" }}
+                                  title="Delete document"
+                                  disabled={deletingDoc === doc.id}
+                                  onClick={() => handleDeleteDoc(doc.id)}
+                                >
+                                  <Trash2 size={16} />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            );
+          })
+        )}
       </div>
 
       {/* Real Upload Document Modal */}

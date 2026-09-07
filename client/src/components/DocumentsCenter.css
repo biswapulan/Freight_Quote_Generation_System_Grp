@@ -526,3 +526,76 @@
   cursor: not-allowed;
   box-shadow: none;
 }
+
+/* ---------------------------------------------------------------------------
+   VAULT GROUPED BY QUOTE
+   A flat list repeated the shipment reference on every row and gave no sense
+   of which papers belonged together.
+   --------------------------------------------------------------------------- */
+
+.doc-groups { display: flex; flex-direction: column; gap: 10px; }
+
+.doc-group {
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #fff;
+  overflow: hidden;
+}
+.doc-group.open { border-color: #bfdbfe; box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06); }
+.doc-group.done { border-color: #a7f3d0; }
+
+.doc-group-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  padding: 14px 16px;
+  background: #f8fafc;
+  border: 0;
+  cursor: pointer;
+  text-align: left;
+}
+.doc-group-head:hover { background: #f1f5f9; }
+.doc-group.done .doc-group-head { background: #f0fdf4; }
+
+.doc-group-caret { color: #64748b; font-size: 12px; width: 12px; flex-shrink: 0; }
+
+.doc-group-id { display: flex; flex-direction: column; min-width: 180px; }
+.doc-group-id strong { font-size: 13.5px; font-weight: 800; color: #0f172a; }
+.doc-group-sub { font-size: 11.5px; color: #64748b; }
+
+.doc-group-route { flex: 1; min-width: 0; font-size: 12.5px; color: #475569; }
+.doc-group-count { font-size: 12px; font-weight: 600; color: #64748b; white-space: nowrap; }
+
+.doc-group-pill {
+  flex-shrink: 0;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+.doc-group-pill.ok      { background: #dcfce7; color: #15803d; }
+.doc-group-pill.pending { background: #fef3c7; color: #b45309; }
+.doc-group-pill.bad     { background: #fee2e2; color: #b91c1c; }
+
+.doc-group-body { padding: 2px 14px 12px; border-top: 1px solid #e2e8f0; }
+
+.doc-status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 11.5px;
+  font-weight: 700;
+}
+.doc-status-pill.ok      { background: #ecfdf5; color: #047857; }
+.doc-status-pill.pending { background: #fffbeb; color: #b45309; }
+.doc-status-pill.bad     { background: #fef2f2; color: #b91c1c; }
+
+.doc-reject-note { margin-top: 4px; font-size: 11.5px; color: #b91c1c; max-width: 260px; }
+.doc-muted { color: #94a3b8; font-size: 12.5px; }
+.doc-actions { display: flex; gap: 6px; align-items: center; }
+.doc-icon-btn:disabled { opacity: 0.5; cursor: not-allowed; }
