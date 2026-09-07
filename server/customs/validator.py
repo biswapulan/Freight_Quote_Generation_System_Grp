@@ -132,16 +132,9 @@ class CustomsComplianceEngine:
                 "status": "PENDING",
             })
 
-        if clean_hs.startswith("85") or "electronic" in commodity.lower() or "converter" in commodity.lower():
-            checklist_items_data.append({
-                "item_name": "Declaration of Conformity (CE / FCC / BIS)",
-                "description": "Technical conformity certificate and safety standard declaration for electronic apparatus.",
-                "mandatory": True,
-                "document_required": True,
-                "citation": f"{destination_country} Electromagnetic Compatibility & Low Voltage Directive",
-                "evidence": "Mandatory for industrial and consumer electronic hardware.",
-                "status": "PENDING",
-            })
+        # A Declaration of Conformity used to be required for electronics. It was
+        # removed from the platform: customers do not supply one, so it only ever
+        # sat outstanding and held consignments in the customs queue.
 
         # (c) Incoterm Specific Documents
         incoterm_upper = incoterm.upper()

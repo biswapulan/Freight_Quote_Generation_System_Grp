@@ -102,8 +102,6 @@ function getOcrComplianceNote(docType, hsCode) {
     case "Safety Data Sheet (MSDS)":
     case "Material Safety Data Sheet (SDS)":
       return "Section 14 Hazmat Flashpoint & UN Transport classification audited.";
-    case "CE Certificate of Conformity":
-      return "EU Directives 2014/53/EU and RoHS compliance certificate validated.";
     default:
       return "Statutory trade document validated by automated OCR scanner.";
   }

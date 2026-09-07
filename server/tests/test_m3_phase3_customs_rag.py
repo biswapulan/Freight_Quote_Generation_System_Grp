@@ -48,7 +48,9 @@ class TestMilestone3Phase3CustomsRAG:
         item_names = [item["item_name"] for item in result["checklist_items"]]
         assert any("Commercial Invoice" in n for n in item_names)
         assert any("Certificate of Origin" in n for n in item_names)
-        assert any("Conformity" in n for n in item_names)
+        # The Declaration of Conformity requirement was removed from the
+        # platform; the packing list is now a checklist item in its own right.
+        assert any("Packing List" in n for n in item_names)
 
     def test_compliance_engine_hazardous_chemical(self):
         result = CustomsComplianceEngine.evaluate_shipment_compliance(

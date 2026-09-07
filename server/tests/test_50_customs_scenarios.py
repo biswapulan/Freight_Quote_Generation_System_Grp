@@ -14,12 +14,12 @@ CUSTOMS_SCENARIOS = [
     # 1-10: Solar, Electronics, High-Tech
     {"origin": "India", "dest": "Netherlands", "hs": "850440", "comm": "Solar Inverters", "incoterm": "CIF", "expected_status": "APPROVED", "required_doc_substr": "Origin"},
     {"origin": "China", "dest": "USA", "hs": "847130", "comm": "Laptops & Digital Computers", "incoterm": "FOB", "expected_status": "APPROVED", "required_doc_substr": "Commercial Invoice"},
-    {"origin": "Japan", "dest": "Germany", "hs": "850440", "comm": "Static Converters", "incoterm": "CIF", "expected_status": "APPROVED", "required_doc_substr": "Conformity"},
+    {"origin": "Japan", "dest": "Germany", "hs": "850440", "comm": "Static Converters", "incoterm": "CIF", "expected_status": "APPROVED", "required_doc_substr": "Bill of Lading"},
     {"origin": "India", "dest": "UAE", "hs": "850440", "comm": "Power Inverter Transformers", "incoterm": "CIF", "expected_status": "APPROVED", "required_doc_substr": "Commercial Invoice"},
     {"origin": "Taiwan", "dest": "USA", "hs": "847130", "comm": "Semiconductor Processing Units", "incoterm": "CIF", "expected_status": "APPROVED", "required_doc_substr": "Commercial Invoice"},
     {"origin": "South Korea", "dest": "UK", "hs": "850440", "comm": "Solar Inverters", "incoterm": "DDP", "expected_status": "APPROVED", "required_doc_substr": "Origin"},
     {"origin": "India", "dest": "Singapore", "hs": "847130", "comm": "Server Racks & Blade Chassis", "incoterm": "CIF", "expected_status": "APPROVED", "required_doc_substr": "Commercial Invoice"},
-    {"origin": "China", "dest": "Netherlands", "hs": "850440", "comm": "Photovoltaic Inverters", "incoterm": "CIF", "expected_status": "APPROVED", "required_doc_substr": "Conformity"},
+    {"origin": "China", "dest": "Netherlands", "hs": "850440", "comm": "Photovoltaic Inverters", "incoterm": "CIF", "expected_status": "APPROVED", "required_doc_substr": "Packing List"},
     {"origin": "USA", "dest": "India", "hs": "847130", "comm": "High-Performance Workstations", "incoterm": "FOB", "expected_status": "APPROVED", "required_doc_substr": "Commercial Invoice"},
     {"origin": "Germany", "dest": "UAE", "hs": "850440", "comm": "Industrial Variable Frequency Drives", "incoterm": "CIF", "expected_status": "APPROVED", "required_doc_substr": "Commercial Invoice"},
 
