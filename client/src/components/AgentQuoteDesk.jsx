@@ -12,6 +12,7 @@ import {
   RotateCw,
   Eye,
   XCircle,
+  X,
   Table as TableIcon,
   Check,
   Building2,
@@ -671,13 +672,25 @@ export default function AgentQuoteDesk() {
       {/* Pricing Adjustment & Final Quote Modal */}
       {activeModalQuote && (
         <div className="modal-backdrop" onClick={() => setActiveModalQuote(null)}>
-          <div className="pricing-modal" style={{ maxWidth: "680px" }} onClick={(e) => e.stopPropagation()}>
-            <h3 style={{ margin: "0 0 4px 0", fontSize: "18px", fontWeight: "800" }}>
-              Freight Operations Review: {activeModalQuote.id || activeModalQuote.quoteNo}
-            </h3>
-            <p style={{ color: "#64748b", fontSize: "13px", marginTop: "0", marginBottom: "12px" }}>
-              Client: <strong>{activeModalQuote.customerName || activeModalQuote.client}</strong> &bull; Route: {activeModalQuote.origin} &rarr; {activeModalQuote.destination}
-            </p>
+          <div className="pricing-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="pricing-modal-header">
+              <div>
+                <h3 className="pricing-modal-title">
+                  Freight Operations Review: {activeModalQuote.id || activeModalQuote.quoteNo}
+                </h3>
+                <p className="pricing-modal-subtitle">
+                  Client: <strong>{activeModalQuote.customerName || activeModalQuote.client}</strong> &bull; Route: {activeModalQuote.origin} &rarr; {activeModalQuote.destination}
+                </p>
+              </div>
+              <button
+                type="button"
+                className="pricing-modal-close"
+                onClick={() => setActiveModalQuote(null)}
+                aria-label="Close"
+              >
+                <X size={20} />
+              </button>
+            </div>
 
             {/* Visual Workflow Stepper */}
             <QuoteWorkflowStepper status={activeModalQuote.status} compact />
@@ -825,7 +838,7 @@ export default function AgentQuoteDesk() {
               </div>
             </div>
 
-            <div className="modal-actions" style={{ display: "flex", justifyContent: "flex-end", gap: "10px", flexWrap: "wrap" }}>
+            <div className="modal-actions">
               <button
                 type="button"
                 className="agent-btn-secondary"
@@ -834,12 +847,10 @@ export default function AgentQuoteDesk() {
               >
                 Cancel
               </button>
-              {/* PDF section 3, step 10: the agent may approve, modify,
-                  request information, or reject. */}
               <button
                 type="button"
                 className="agent-btn-secondary"
-                style={{ background: "#fef3c7", color: "#b45309", border: "1px solid #fde68a", fontWeight: 700 }}
+                style={{ background: "#fef3c7", color: "#b45309", border: "1px solid #fde68a" }}
                 onClick={handleRequestInfo}
                 disabled={busy}
               >
@@ -848,7 +859,7 @@ export default function AgentQuoteDesk() {
               <button
                 type="button"
                 className="agent-btn-secondary"
-                style={{ background: "#fee2e2", color: "#b91c1c", border: "1px solid #fecaca", fontWeight: 700 }}
+                style={{ background: "#fee2e2", color: "#b91c1c", border: "1px solid #fecaca" }}
                 onClick={handleRejectQuote}
                 disabled={busy}
               >
@@ -857,7 +868,7 @@ export default function AgentQuoteDesk() {
               <button
                 type="button"
                 className="agent-btn-secondary"
-                style={{ background: "#ede9fe", color: "#6d28d9", border: "1px solid #ddd6fe", display: "inline-flex", alignItems: "center", gap: "6px", fontWeight: "700" }}
+                style={{ background: "#ede9fe", color: "#6d28d9", border: "1px solid #ddd6fe" }}
                 onClick={handleApproveOnly}
                 disabled={busy}
               >
@@ -866,7 +877,6 @@ export default function AgentQuoteDesk() {
               <button
                 type="button"
                 className="agent-btn-primary"
-                style={{ background: "#0284c7", display: "inline-flex", alignItems: "center", gap: "6px", fontWeight: "700" }}
                 onClick={handleSaveQuote}
                 disabled={busy}
               >
