@@ -270,6 +270,12 @@ export function mapApiQuote(apiQuote) {
     })),
 
     analysis,
+    // The resolved customs state, from the full analysis when present and the
+    // compact summary otherwise. Screens that read `analysis.customs` directly
+    // saw null on every listed quote, because list responses omit the analysis,
+    // and so treated cleared consignments as still pending.
+    customs: customsAnalysis,
+    customsStatus: customsAnalysis?.status || "",
     createdAt: apiQuote.created_at,
     created: apiQuote.created_at
       ? new Date(apiQuote.created_at).toLocaleDateString("en-IN", {

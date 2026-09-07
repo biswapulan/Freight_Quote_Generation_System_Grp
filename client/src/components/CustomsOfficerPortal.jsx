@@ -129,7 +129,7 @@ export default function CustomsOfficerPortal({ initialTab = "pending-reviews" })
     () =>
       quotes.map((q) => {
         const dutyRate = 0.075;
-        const customsAnalysis = q.analysis?.customs;
+        const customsAnalysis = q.customs || q.analysis?.customs;
         const outstanding = q.missingDocuments || [];
 
         return {
