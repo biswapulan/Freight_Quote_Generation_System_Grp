@@ -579,6 +579,49 @@ class DocumentVerifyView(APIView):
             context={"document_id": str(doc.id), "document_type": doc.document_type},
         )
 
+        # Tell the customer. A rejection was previously silent: their document
+        # was refused and nothing in their portal ever said so, let alone why.
+        from notifications import service as notify
+        from quotes.models import Shipment
+
+        shipment = Shipment.objects.filter(id=doc.shipment_id).first()
+        if shipment and shipment.customer_id and decision in ("VERIFIED", "REJECTED"):
+            if decision == "REJECTED":
+                title = f"Document rejected: {doc.document_type}"
+                body = (
+                    f'"{doc.file_name}" was not accepted by customs. Reason: {remarks} '
+                    f"Please upload a corrected document for shipment {doc.shipment_id}."
+                )
+                severity = "WARNING"
+            else:
+                title = f"Document verified: {doc.document_type}"
+                body = f'"{doc.file_name}" passed customs verification for shipment {doc.shipment_id}.'
+                severity = "INFO"
+
+            notify.notify_user(
+                shipment.customer_id,
+                title,
+                body,
+                category="CUSTOMS",
+                severity=severity,
+                entity_type="SHIPMENT",
+                entity_id=doc.shipment_id,
+                link="/dashboard/documents",
+            )
+
+            # And once every required paper is cleared, say so plainly.
+            if check and check.status == "APPROVED" and decision == "VERIFIED":
+                notify.notify_user(
+                    shipment.customer_id,
+                    "All documents verified",
+                    f"Customs has cleared every required document for shipment {doc.shipment_id}.",
+                    category="CUSTOMS",
+                    severity="SUCCESS",
+                    entity_type="SHIPMENT",
+                    entity_id=doc.shipment_id,
+                    link="/dashboard/documents",
+                )
+
         return Response(
             {
                 "message": f"Document marked {decision}.",

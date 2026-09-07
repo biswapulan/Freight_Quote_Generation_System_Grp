@@ -672,3 +672,130 @@
   border-radius: 6px;
   border: 1px solid #e0f2fe;
 }
+
+/* ---------------------------------------------------------------------------
+   DOCUMENT VERIFICATION — GROUPED BY CONSIGNMENT
+   A flat list of every paper on the platform gave no sense of whose documents
+   were whose. One row per quote, opened to reveal its own papers.
+   --------------------------------------------------------------------------- */
+
+.cop-doc-notice {
+  margin: 0 0 14px;
+  padding: 11px 14px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+}
+.cop-doc-notice.success { background: #ecfdf5; border: 1px solid #a7f3d0; color: #047857; }
+.cop-doc-notice.warning { background: #fffbeb; border: 1px solid #fde68a; color: #b45309; }
+.cop-doc-notice.error   { background: #fef2f2; border: 1px solid #fecaca; color: #b91c1c; }
+
+.cop-doc-empty {
+  padding: 34px;
+  text-align: center;
+  color: #94a3b8;
+  font-size: 13.5px;
+}
+
+.cop-doc-groups { display: flex; flex-direction: column; gap: 10px; }
+
+.cop-doc-group {
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  overflow: hidden;
+  background: #fff;
+}
+.cop-doc-group.open { border-color: #bfdbfe; box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06); }
+.cop-doc-group.done { border-color: #a7f3d0; }
+
+.cop-doc-group-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  padding: 14px 16px;
+  background: #f8fafc;
+  border: 0;
+  cursor: pointer;
+  text-align: left;
+}
+.cop-doc-group-head:hover { background: #f1f5f9; }
+.cop-doc-group.done .cop-doc-group-head { background: #f0fdf4; }
+
+.cop-doc-group-caret { color: #64748b; font-size: 12px; width: 12px; flex-shrink: 0; }
+
+.cop-doc-group-id { display: flex; flex-direction: column; min-width: 190px; }
+.cop-doc-group-id strong { font-size: 13.5px; color: #0f172a; font-weight: 800; }
+.cop-doc-group-cust { font-size: 12px; color: #64748b; }
+
+.cop-doc-group-route { flex: 1; min-width: 0; font-size: 12.5px; color: #475569; }
+
+.cop-doc-group-progress { display: flex; align-items: center; gap: 9px; flex-shrink: 0; }
+.cop-doc-progress-bar {
+  width: 92px; height: 6px; border-radius: 3px;
+  background: #e2e8f0; overflow: hidden; display: block;
+}
+.cop-doc-progress-fill { display: block; height: 100%; background: #16a34a; }
+.cop-doc-progress-label { font-size: 11.5px; font-weight: 600; color: #64748b; white-space: nowrap; }
+
+.cop-doc-group-pill {
+  flex-shrink: 0;
+  padding: 4px 10px; border-radius: 6px;
+  font-size: 11px; font-weight: 800; letter-spacing: 0.03em; text-transform: uppercase;
+}
+.cop-doc-group-pill.ok      { background: #dcfce7; color: #15803d; }
+.cop-doc-group-pill.pending { background: #fef3c7; color: #b45309; }
+.cop-doc-group-pill.bad     { background: #fee2e2; color: #b91c1c; }
+
+.cop-doc-group-body { padding: 4px 14px 14px; border-top: 1px solid #e2e8f0; }
+
+.cop-doc-name-btn {
+  background: none; border: 0; padding: 0;
+  font-size: 13px; font-weight: 700; color: #0284c7;
+  cursor: pointer; text-align: left;
+}
+.cop-doc-name-btn:hover { text-decoration: underline; }
+.cop-doc-file { font-size: 11.5px; color: #94a3b8; margin-top: 2px; }
+.cop-doc-ocr { font-size: 12px; color: #475569; max-width: 320px; }
+
+.cop-doc-status {
+  display: inline-block; padding: 3px 9px; border-radius: 6px;
+  font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.03em;
+}
+.cop-doc-status.ok      { background: #dcfce7; color: #15803d; }
+.cop-doc-status.pending { background: #fef3c7; color: #b45309; }
+.cop-doc-status.bad     { background: #fee2e2; color: #b91c1c; }
+.cop-doc-reason { margin-top: 4px; font-size: 11.5px; color: #b91c1c; max-width: 220px; }
+
+.cop-doc-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+
+.cop-btn-verify, .cop-btn-reject, .cop-btn-verify-all {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 6px 11px; border-radius: 6px;
+  font-size: 12px; font-weight: 700; cursor: pointer;
+}
+.cop-btn-verify { background: #0284c7; border: 1px solid #0284c7; color: #fff; }
+.cop-btn-verify:hover:not(:disabled) { background: #0369a1; }
+.cop-btn-reject { background: #fff; border: 1px solid #fecaca; color: #dc2626; }
+.cop-btn-reject:hover:not(:disabled) { background: #fef2f2; }
+.cop-btn-verify:disabled, .cop-btn-reject:disabled, .cop-btn-verify-all:disabled {
+  opacity: 0.5; cursor: not-allowed;
+}
+
+.cop-doc-group-foot {
+  display: flex; align-items: center; justify-content: space-between;
+  flex-wrap: wrap; gap: 10px;
+  margin-top: 12px; padding-top: 12px; border-top: 1px dashed #e2e8f0;
+}
+.cop-doc-group-hint { font-size: 12.5px; color: #64748b; }
+.cop-doc-group-done {
+  display: inline-flex; align-items: center; gap: 7px;
+  font-size: 13px; font-weight: 700; color: #15803d;
+}
+.cop-btn-verify-all { background: #16a34a; border: 1px solid #16a34a; color: #fff; padding: 8px 14px; }
+.cop-btn-verify-all:hover:not(:disabled) { background: #15803d; }
+
+@media (max-width: 780px) {
+  .cop-doc-group-head { flex-wrap: wrap; }
+  .cop-doc-group-route, .cop-doc-group-progress { width: 100%; }
+}

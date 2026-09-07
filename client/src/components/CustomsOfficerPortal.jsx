@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useCallback, useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   ShieldCheck,
@@ -15,6 +15,7 @@ import {
   AlertTriangle,
   Ship,
   FileCheck,
+  XCircle,
   Shield,
   Eye,
   Stamp,
@@ -213,26 +214,29 @@ export default function CustomsOfficerPortal({ initialTab = "pending-reviews" })
   // gives each one the id the verify endpoint needs.
   const [uploadedDocs, setUploadedDocs] = useState({});
 
+  // Extracted so a verify/reject decision can refresh the real document state
+  // immediately instead of waiting for the next quote reload.
+  const shipmentIdKey = shipments.map((s) => s.shipmentId).filter(Boolean).join(",");
+
+  const loadUploadedDocs = useCallback(async () => {
+    const ids = shipmentIdKey ? shipmentIdKey.split(",") : [];
+    if (!token || !ids.length) {
+      setUploadedDocs({});
+      return;
+    }
+    const entries = await Promise.all(
+      ids.map((id) =>
+        listShipmentDocuments(token, id)
+          .then((data) => [id, data.results || []])
+          .catch(() => [id, []]),
+      ),
+    );
+    setUploadedDocs(Object.fromEntries(entries));
+  }, [token, shipmentIdKey]);
+
   useEffect(() => {
-    if (!token || !shipments.length) return undefined;
-    let cancelled = false;
-
-    Promise.all(
-      shipments
-        .filter((s) => s.shipmentId)
-        .map((s) =>
-          listShipmentDocuments(token, s.shipmentId)
-            .then((data) => [s.shipmentId, data.results || []])
-            .catch(() => [s.shipmentId, []]),
-        ),
-    ).then((entries) => {
-      if (!cancelled) setUploadedDocs(Object.fromEntries(entries));
-    });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [token, shipments]);
+    loadUploadedDocs();
+  }, [loadUploadedDocs]);
 
   /** Match a checklist item name to an uploaded document, ignoring formatting. */
   const normalizeDocName = (name) =>
@@ -274,6 +278,7 @@ export default function CustomsOfficerPortal({ initialTab = "pending-reviews" })
   }
 
   const missingDocCount = shipments.filter((s) => !docStatusFor(s).allOnFile).length;
+
 
   // Flattened documents list for Document Verification desk
   const allDocumentsToVerify = useMemo(() => {
@@ -364,6 +369,7 @@ export default function CustomsOfficerPortal({ initialTab = "pending-reviews" })
           fileDataUrl: fileUrl,
           fileType: d.fileType || vaultMatch?.fileType || uploaded?.mime_type || "application/pdf",
           status: vaultMatch?.status === "VERIFIED" ? "VERIFIED" : (uploaded?.verification_status || d.status || "PENDING"),
+          rejectionReason: uploaded?.rejection_reason || "",
           ocrSummary: getOcrComplianceNote(d.name, s.hsCode),
         });
       });
@@ -408,6 +414,55 @@ export default function CustomsOfficerPortal({ initialTab = "pending-reviews" })
     return list;
   }, [shipments, uploadedDocs]);
 
+  /**
+   * Documents grouped by the quote they belong to.
+   *
+   * A flat list of every paper on the platform gave the officer no way to tell
+   * whose documents they were looking at, so a consignment had to be verified
+   * by hunting rows. One row per quote, opened to reveal its own papers, keeps
+   * each customer's file together.
+   */
+  const documentGroups = useMemo(() => {
+    const byQuote = new Map();
+
+    allDocumentsToVerify.forEach((doc) => {
+      const key = doc.quoteNo || doc.shipmentId || "UNASSIGNED";
+      if (!byQuote.has(key)) {
+        byQuote.set(key, {
+          key,
+          quoteNo: doc.quoteNo || key,
+          shipmentId: doc.shipmentId,
+          customer: doc.customer,
+          route: doc.route,
+          hsCode: doc.hsCode,
+          cargoType: doc.cargoType,
+          docs: [],
+        });
+      }
+      byQuote.get(key).docs.push(doc);
+    });
+
+    return [...byQuote.values()]
+      .map((g) => {
+        const verified = g.docs.filter((d) => d.status === "VERIFIED").length;
+        const rejected = g.docs.filter((d) => d.status === "REJECTED").length;
+        const pending = g.docs.length - verified - rejected;
+        return {
+          ...g,
+          total: g.docs.length,
+          verified,
+          rejected,
+          pending,
+          allVerified: g.docs.length > 0 && verified === g.docs.length,
+        };
+      })
+      .sort((a, b) => b.pending - a.pending);
+  }, [allDocumentsToVerify]);
+
+  const [openGroup, setOpenGroup] = useState(null);
+  const [docBusy, setDocBusy] = useState(null);
+  const [docNotice, setDocNotice] = useState(null);
+
   const handleOpenDocInspection = (doc) => {
     setPreviewDoc(doc);
     // If the user actually uploaded a file or if raw file is present, default to 'pdf' so officer immediately sees the uploaded document!
@@ -425,59 +480,84 @@ export default function CustomsOfficerPortal({ initialTab = "pending-reviews" })
    * Records decision against backend API (if connected) and synchronizes with
    * local platform store and Document Vault so status is consistently updated.
    */
-  const handleVerifySingleDoc = async (shipmentId, docName, documentId) => {
-    // 1. If backend token & documentId exist, notify backend
-    if (token && documentId && !String(documentId).startsWith("doc-")) {
-      try {
-        await verifyShipmentDocument(token, documentId, {
-          decision: "VERIFIED",
-          officerName: user?.full_name || "Customs Officer Sharma",
-          remarks: `Verified "${docName}" against declared tariff heading.`,
-        });
-      } catch (err) {
-        console.warn("Backend document verification notice:", err);
-      }
-    }
+  const handleVerifySingleDoc = async (shipmentId, docName, documentId, decision = "VERIFIED", remarks = "") => {
+    if (docBusy) return;
 
-    // 2. Update local platform quote store and localStorage
-    try {
-      updateQuoteStatusInStore(shipmentId, "APPROVED", {
-        customsRemarks: `Customs Officer ${user?.full_name || "Sharma"} verified "${docName}". Regulatory clearance stamp applied.`,
+    // A real document id is required: without one the decision cannot reach the
+    // server, and the officer would be told the paper was stamped when nothing
+    // had happened. Failures used to be swallowed by a console warning.
+    if (!token || !documentId || String(documentId).startsWith("doc-")) {
+      setDocNotice({
+        type: "error",
+        text: `"${docName}" has no uploaded file on record, so it cannot be ${decision === "VERIFIED" ? "verified" : "rejected"}.`,
       });
-    } catch {}
-
-    // 3. Update vault documents if present
-    try {
-      const rawVault = localStorage.getItem("freightai_vault_docs_v2");
-      if (rawVault) {
-        const vaultList = JSON.parse(rawVault);
-        const updatedVault = vaultList.map((v) => {
-          const matchShipment = v.shipmentRef === shipmentId;
-          const matchDoc =
-            normalizeDocName(v.name) === normalizeDocName(docName) ||
-            normalizeDocName(v.type) === normalizeDocName(docName) ||
-            v.id === documentId;
-          if (matchShipment || matchDoc) {
-            return {
-              ...v,
-              status: "VERIFIED",
-              verifiedBy: `Customs Officer ${user?.full_name || "Sharma"}`,
-            };
-          }
-          return v;
-        });
-        localStorage.setItem("freightai_vault_docs_v2", JSON.stringify(updatedVault));
-      }
-    } catch {}
-
-    // 4. Update previewDoc state if open
-    if (previewDoc) {
-      setPreviewDoc((prev) => (prev ? { ...prev, status: "VERIFIED" } : null));
+      return;
     }
 
-    await reload();
-    setActionStatus(`"${docName}" officially verified and stamped with Customs Seal.`);
-    setTimeout(() => setActionStatus(null), 4000);
+    setDocBusy(documentId);
+    setDocNotice(null);
+    try {
+      await verifyShipmentDocument(token, documentId, {
+        decision,
+        officerName: user?.full_name || "Customs Officer",
+        remarks:
+          remarks ||
+          (decision === "VERIFIED"
+            ? `Verified "${docName}" against declared tariff heading.`
+            : `Rejected "${docName}".`),
+      });
+
+      await Promise.all([reload(), loadUploadedDocs()]);
+
+      if (previewDoc) {
+        setPreviewDoc((prev) => (prev ? { ...prev, status: decision } : null));
+      }
+
+      setDocNotice({
+        type: decision === "VERIFIED" ? "success" : "warning",
+        text:
+          decision === "VERIFIED"
+            ? `"${docName}" verified and stamped. The customer has been notified.`
+            : `"${docName}" rejected. The customer has been notified with your reason.`,
+      });
+      setTimeout(() => setDocNotice(null), 5000);
+    } catch (err) {
+      setDocNotice({
+        type: "error",
+        text: err.message || `Could not record the decision on "${docName}".`,
+      });
+    } finally {
+      setDocBusy(null);
+    }
+  };
+
+  /** Reject one document. A reason is mandatory and reaches the customer. */
+  const handleRejectSingleDoc = async (doc) => {
+    const reason = window.prompt(
+      `Reject "${doc.fileName}" (${doc.docType})?\n\nGive the customer a reason. This is sent to them and recorded against the shipment.`,
+    );
+    if (reason === null) return;
+    if (!reason.trim()) {
+      setDocNotice({ type: "error", text: "A reason is required to reject a document." });
+      return;
+    }
+    await handleVerifySingleDoc(doc.shipmentId, doc.docType, doc.documentId, "REJECTED", reason.trim());
+  };
+
+  /** Verify every outstanding document on one quote, in order. */
+  const handleVerifyGroup = async (group) => {
+    const outstanding = group.docs.filter((d) => d.status !== "VERIFIED" && d.documentId);
+    if (!outstanding.length) return;
+    for (const doc of outstanding) {
+      // Sequential: each decision recomputes customs readiness server-side.
+      // eslint-disable-next-line no-await-in-loop
+      await handleVerifySingleDoc(doc.shipmentId, doc.docType, doc.documentId, "VERIFIED");
+    }
+    setDocNotice({
+      type: "success",
+      text: `All documents on ${group.quoteNo} verified. The customer has been notified.`,
+    });
+    setTimeout(() => setDocNotice(null), 6000);
   };
 
   function openSignoffModal(shipment) {
@@ -732,137 +812,181 @@ export default function CustomsOfficerPortal({ initialTab = "pending-reviews" })
           <div className="cop-view-header">
             <div className="cop-view-title">
               <FileCheck size={20} color="#0284c7" />
-              Itemized Document Audit &amp; Official Stamp Station
-              <span className="cop-view-badge-count">{allDocumentsToVerify.length} Total Papers</span>
+              Document Audit &amp; Official Stamp Station
+              <span className="cop-view-badge-count">
+                {documentGroups.length} consignment{documentGroups.length === 1 ? "" : "s"}
+              </span>
             </div>
             <div style={{ fontSize: "12.5px", color: "#64748b" }}>
-              Click <strong>Verify &amp; Stamp</strong> to approve individual documents. Updates sync to Customer &amp; Vault instantly.
+              Open a consignment to inspect its papers. Every decision is sent to the customer.
             </div>
           </div>
 
-          <div className="cop-table-wrap">
-            <table className="cop-table">
-              <thead>
-                <tr>
-                  <th>Document Type &amp; Uploaded File</th>
-                  <th>Shipment Ref &amp; Shipper</th>
-                  <th>Trade Route</th>
-                  <th>Automated OCR &amp; Compliance Check</th>
-                  <th>Status</th>
-                  <th>Officer Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {allDocumentsToVerify.map((doc) => (
-                  <tr key={doc.id}>
-                    <td>
-                      <div style={{ display: "flex", alignItems: "flex-start", gap: "10px" }}>
-                        <div
-                          style={{
-                            padding: "8px",
-                            background: "#f0f9ff",
-                            borderRadius: "8px",
-                            color: "#0284c7",
-                            cursor: "pointer",
-                          }}
-                          onClick={() => handleOpenDocInspection(doc)}
-                          title="Inspect Document"
-                        >
-                          <FileText size={18} />
-                        </div>
-                        <div>
-                          <div
-                            style={{
-                              fontWeight: 700,
-                              color: "#0284c7",
-                              cursor: "pointer",
-                              textDecoration: "underline",
-                              textDecorationColor: "#bae6fd",
-                            }}
-                            onClick={() => handleOpenDocInspection(doc)}
-                            title="Click to preview & audit document"
-                          >
-                            {doc.docType}
-                          </div>
-                          <div style={{ fontSize: "12px", color: "#64748b", display: "flex", alignItems: "center", gap: "6px", marginTop: "2px" }}>
-                            <span style={{ color: "#0369a1", fontWeight: 500 }}>{doc.fileName}</span>
-                            <span style={{ color: "#94a3b8" }}>&bull; {doc.fileSize}</span>
-                            {doc.uploaded && (
-                              <span style={{ background: "#dcfce7", color: "#166534", fontSize: "10px", padding: "1px 6px", borderRadius: "4px", fontWeight: 700 }}>
-                                Uploaded
+          {docNotice && (
+            <div className={`cop-doc-notice ${docNotice.type}`}>{docNotice.text}</div>
+          )}
+
+          {documentGroups.length === 0 ? (
+            <div className="cop-doc-empty">No documents have been uploaded yet.</div>
+          ) : (
+            <div className="cop-doc-groups">
+              {documentGroups.map((group) => {
+                const isOpen = openGroup === group.key;
+                return (
+                  <div
+                    key={group.key}
+                    className={`cop-doc-group${isOpen ? " open" : ""}${group.allVerified ? " done" : ""}`}
+                  >
+                    <button
+                      type="button"
+                      className="cop-doc-group-head"
+                      onClick={() => setOpenGroup(isOpen ? null : group.key)}
+                      aria-expanded={isOpen}
+                    >
+                      <span className="cop-doc-group-caret">{isOpen ? "\u25be" : "\u25b8"}</span>
+
+                      <span className="cop-doc-group-id">
+                        <strong>{group.quoteNo}</strong>
+                        <span className="cop-doc-group-cust">{group.customer}</span>
+                      </span>
+
+                      <span className="cop-doc-group-route">{group.route}</span>
+
+                      <span className="cop-doc-group-progress">
+                        <span className="cop-doc-progress-bar">
+                          <span
+                            className="cop-doc-progress-fill"
+                            style={{ width: `${group.total ? (group.verified / group.total) * 100 : 0}%` }}
+                          />
+                        </span>
+                        <span className="cop-doc-progress-label">
+                          {group.verified} of {group.total} verified
+                        </span>
+                      </span>
+
+                      <span
+                        className={`cop-doc-group-pill ${
+                          group.allVerified ? "ok" : group.rejected ? "bad" : "pending"
+                        }`}
+                      >
+                        {group.allVerified
+                          ? "All verified"
+                          : group.rejected
+                          ? `${group.rejected} rejected`
+                          : `${group.pending} pending`}
+                      </span>
+                    </button>
+
+                    {isOpen && (
+                      <div className="cop-doc-group-body">
+                        <table className="cop-table">
+                          <thead>
+                            <tr>
+                              <th>Document &amp; File</th>
+                              <th>Automated OCR &amp; Compliance Check</th>
+                              <th>Status</th>
+                              <th>Officer Action</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {group.docs.map((doc) => (
+                              <tr key={doc.id}>
+                                <td>
+                                  <button
+                                    type="button"
+                                    className="cop-doc-name-btn"
+                                    onClick={() => handleOpenDocInspection(doc)}
+                                    title="Inspect document"
+                                  >
+                                    {doc.docType}
+                                  </button>
+                                  <div className="cop-doc-file">
+                                    {doc.fileName} &middot; {doc.fileSize}
+                                  </div>
+                                </td>
+                                <td className="cop-doc-ocr">{doc.ocrSummary}</td>
+                                <td>
+                                  <span
+                                    className={`cop-doc-status ${
+                                      doc.status === "VERIFIED"
+                                        ? "ok"
+                                        : doc.status === "REJECTED"
+                                        ? "bad"
+                                        : "pending"
+                                    }`}
+                                  >
+                                    {doc.status === "VERIFIED"
+                                      ? "Verified"
+                                      : doc.status === "REJECTED"
+                                      ? "Rejected"
+                                      : "Awaiting check"}
+                                  </span>
+                                  {doc.status === "REJECTED" && doc.rejectionReason && (
+                                    <div className="cop-doc-reason">{doc.rejectionReason}</div>
+                                  )}
+                                </td>
+                                <td>
+                                  <div className="cop-doc-actions">
+                                    <button
+                                      type="button"
+                                      className="cop-btn-verify"
+                                      disabled={docBusy === doc.documentId || doc.status === "VERIFIED"}
+                                      onClick={() =>
+                                        handleVerifySingleDoc(
+                                          doc.shipmentId,
+                                          doc.docType,
+                                          doc.documentId,
+                                          "VERIFIED",
+                                        )
+                                      }
+                                    >
+                                      <ShieldCheck size={13} />
+                                      {doc.status === "VERIFIED" ? "Stamped" : "Verify & Stamp"}
+                                    </button>
+                                    <button
+                                      type="button"
+                                      className="cop-btn-reject"
+                                      disabled={docBusy === doc.documentId}
+                                      onClick={() => handleRejectSingleDoc(doc)}
+                                    >
+                                      <XCircle size={13} /> Reject
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+
+                        <div className="cop-doc-group-foot">
+                          {group.allVerified ? (
+                            <span className="cop-doc-group-done">
+                              <CheckCircle2 size={15} /> All documents verified for {group.quoteNo}.
+                              The customer has been notified.
+                            </span>
+                          ) : (
+                            <>
+                              <span className="cop-doc-group-hint">
+                                {group.pending} document{group.pending === 1 ? "" : "s"} still awaiting your check.
                               </span>
-                            )}
-                          </div>
+                              <button
+                                type="button"
+                                className="cop-btn-verify-all"
+                                disabled={Boolean(docBusy) || group.pending === 0}
+                                onClick={() => handleVerifyGroup(group)}
+                              >
+                                <ShieldCheck size={14} /> Verify all remaining
+                              </button>
+                            </>
+                          )}
                         </div>
                       </div>
-                    </td>
-                    <td>
-                      <strong style={{ color: "#0f172a" }}>{doc.shipmentId}</strong>
-                      <div style={{ fontSize: "11.5px", color: "#64748b", marginTop: "2px" }}>{doc.customer}</div>
-                    </td>
-                    <td>
-                      <span style={{ fontSize: "12.5px", color: "#334155" }}>{doc.route}</span>
-                    </td>
-                    <td>
-                      <div className="cop-ocr-indicator">
-                        {doc.ocrSummary}
-                      </div>
-                    </td>
-                    <td>
-                      {doc.status === "VERIFIED" ? (
-                        <span className="cop-badge approved">
-                          <CheckCircle2 size={12} /> Verified
-                        </span>
-                      ) : (
-                        <span className="cop-badge pendingreview">
-                          <Clock size={12} /> Under Review
-                        </span>
-                      )}
-                    </td>
-                    <td>
-                      <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
-                        <button
-                          type="button"
-                          className="cop-btn-view"
-                          style={{
-                            display: "inline-flex",
-                            alignItems: "center",
-                            gap: "5px",
-                            padding: "6px 12px",
-                            background: "#f0f9ff",
-                            color: "#0284c7",
-                            border: "1px solid #bae6fd",
-                            borderRadius: "6px",
-                            fontSize: "12px",
-                            fontWeight: 600,
-                            cursor: "pointer",
-                          }}
-                          onClick={() => handleOpenDocInspection(doc)}
-                          title="Open Document for Inspection"
-                        >
-                          <Eye size={13} /> View Document
-                        </button>
-                        {doc.status === "VERIFIED" ? (
-                          <span className="cop-stamp-badge">
-                            <ShieldCheck size={14} /> Stamped by Officer
-                          </span>
-                        ) : (
-                          <button
-                            type="button"
-                            className="cop-btn-action"
-                            style={{ background: "#059669", padding: "6px 14px", fontSize: "12px" }}
-                            onClick={() => handleVerifySingleDoc(doc.shipmentId, doc.docType, doc.documentId)}
-                          >
-                            <ShieldCheck size={13} /> Verify &amp; Stamp
-                          </button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       )}
 
