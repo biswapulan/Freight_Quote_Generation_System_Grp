@@ -1046,3 +1046,89 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* ---------------------------------------------------------------------------
+   NEXT-STEP GUIDANCE BANNER
+   Tells the customer what happens after they lock a carrier, so the screen
+   does not end on two buttons that belong to the agent and customs desks.
+   --------------------------------------------------------------------------- */
+
+.qdv-next-step {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  margin: 0 0 18px;
+  padding: 14px 16px;
+  border-radius: 10px;
+  border: 1px solid transparent;
+}
+
+.qdv-next-step.is-pending {
+  background: #fff7ed;
+  border-color: #fed7aa;
+}
+
+.qdv-next-step.is-done {
+  background: #ecfdf5;
+  border-color: #a7f3d0;
+}
+
+.qdv-next-step-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+}
+
+.qdv-next-step.is-pending .qdv-next-step-icon {
+  background: #ffedd5;
+  color: #ea580c;
+}
+
+.qdv-next-step.is-done .qdv-next-step-icon {
+  background: #d1fae5;
+  color: #059669;
+}
+
+.qdv-next-step-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.qdv-next-step-title {
+  display: block;
+  font-size: 14px;
+  font-weight: 700;
+  color: #0f172a;
+  margin-bottom: 4px;
+}
+
+.qdv-next-step-text {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.55;
+  color: #475569;
+}
+
+.qdv-next-step-text a {
+  color: #ea580c;
+  font-weight: 600;
+  text-decoration: underline;
+}
+
+.qdv-next-step-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+@media (max-width: 580px) {
+  .qdv-next-step-actions .qdv-btn-secondary {
+    flex: 1 1 100%;
+    justify-content: center;
+  }
+}

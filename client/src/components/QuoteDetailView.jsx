@@ -45,15 +45,23 @@ import "./QuoteDetailView.css";
 
 // Mirrors RETAIL_SECTIONS in DashboardShell — same labels, same order, and the
 // canonical "request-quote" slug so the link actually opens Request Quote.
+// No `active` flag here: until the customer confirms a carrier this screen is
+// still part of the Request Quote flow, and only afterwards is it a My Quotes
+// record. buildRetailNav below picks the highlighted item accordingly.
 const RETAIL_NAV = [
   { label: "Dashboard", slug: "dashboard" },
   { label: "Request Quote", slug: "request-quote" },
   { label: "My Shipments", slug: "my-shipments" },
-  { label: "My Quotes", slug: "my-quotes", active: true },
+  { label: "My Quotes", slug: "my-quotes" },
   { label: "Documents", slug: "documents" },
   { label: "Notifications", slug: "notifications" },
   { label: "Profile", slug: "profile" },
 ];
+
+function buildRetailNav(routeConfirmed) {
+  const activeSlug = routeConfirmed ? "my-quotes" : "request-quote";
+  return RETAIL_NAV.map((item) => ({ ...item, active: item.slug === activeSlug }));
+}
 
 const AGENT_NAV = [
   { label: "Dashboard", slug: "dashboard" },
@@ -172,6 +180,24 @@ export default function QuoteDetailView({ quoteId: propQuoteId, embeddedQuote = 
       ? "business"
       : "retail";
 
+  const isStaff = ["agent", "admin", "customs"].includes(role);
+  const isCustomer = !isStaff;
+
+  // Until a carrier is locked in, this screen is the tail end of Request Quote
+  // and the quote is not yet listed under My Quotes, so sending the customer
+  // there would show them a list their quote is missing from.
+  const routeConfirmed = Boolean(routeState?.routeConfirmed);
+  const inRequestFlow = isCustomer && !routeConfirmed;
+  const parentCrumb = inRequestFlow
+    ? { label: "Request Quote", to: "/dashboard/request-quote" }
+    : { label: "My Quotes", to: "/dashboard/my-quotes" };
+
+  // Each approval stage belongs to one role. Everyone can watch the sequence,
+  // but only the role that owns a stage gets its button.
+  const canActAsAgent = role === "agent" || role === "admin";
+  const canActAsCustoms = role === "customs" || role === "admin";
+  const canDecideAsCustomer = isCustomer;
+
   const navItems =
     role === "customs"
       ? CUSTOMS_NAV
@@ -179,9 +205,7 @@ export default function QuoteDetailView({ quoteId: propQuoteId, embeddedQuote = 
       ? ADMIN_NAV
       : role === "agent"
       ? AGENT_NAV
-      : RETAIL_NAV;
-
-  const isStaff = ["agent", "admin", "customs"].includes(role);
+      : buildRetailNav(routeConfirmed);
 
   function notifyUser(text, type = "success") {
     setFeedbackMsg({ text, type });
@@ -196,14 +220,20 @@ export default function QuoteDetailView({ quoteId: propQuoteId, embeddedQuote = 
   // Handle route carrier selection
   function handleSelectCarrier(option) {
     if (!activeQuote) return;
+    const firstConfirmation = !routeState?.routeConfirmed;
     selectQuoteRoute(activeQuote.id, option);
     setRouteState((prev) => ({
       ...prev,
       selectedRouteOption: option,
       selectedCarrier: option.carrier,
       indicativeTotal: option.price,
+      routeConfirmed: true,
     }));
-    notifyUser(`Carrier route "${option.carrier}" selected and locked.`);
+    notifyUser(
+      firstConfirmation
+        ? `${option.carrier} confirmed. Your quote is now with our freight team — no further action needed from you yet.`
+        : `Carrier changed to ${option.carrier}.`
+    );
     if (reload) reload();
   }
 
@@ -375,13 +405,17 @@ export default function QuoteDetailView({ quoteId: propQuoteId, embeddedQuote = 
             <div className="qdv-breadcrumb-trail">
               <Link to="/dashboard" className="qdv-bc-link">Dashboard</Link>
               <span className="qdv-bc-sep">/</span>
-              <Link to="/dashboard/my-quotes" className="qdv-bc-link">My Quotes</Link>
+              <Link to={parentCrumb.to} className="qdv-bc-link">{parentCrumb.label}</Link>
               <span className="qdv-bc-sep">/</span>
-              <span className="qdv-bc-current">Carrier Route Selection</span>
+              <span className="qdv-bc-current">
+                {inRequestFlow ? "Step 2 · Choose Your Carrier" : "Carrier Route Selection"}
+              </span>
             </div>
             <h1 className="qdv-header-title">Carrier Route Recommendations &amp; Approval Desk</h1>
             <p className="qdv-header-sub">
-              Live multi-agent maritime rate comparisons, predictive transit telemetry &amp; 3-stage validation workflow.
+              {inRequestFlow
+                ? "Your quote is ready. Pick the carrier you want, and we'll send it for freight agent and customs approval."
+                : "Live multi-agent maritime rate comparisons, predictive transit telemetry & 3-stage validation workflow."}
             </p>
           </div>
 
@@ -389,9 +423,9 @@ export default function QuoteDetailView({ quoteId: propQuoteId, embeddedQuote = 
             <button
               type="button"
               className="qdv-btn-secondary"
-              onClick={() => navigate("/dashboard/my-quotes")}
+              onClick={() => navigate(parentCrumb.to)}
             >
-              <ArrowLeft size={15} /> Back to My Quotes
+              <ArrowLeft size={15} /> Back to {parentCrumb.label}
             </button>
             <div className="qdv-quote-tag">
               Quote Ref: <strong>{activeQuote?.id || quoteId || "QT-H964URBF"}</strong>
@@ -452,6 +486,58 @@ export default function QuoteDetailView({ quoteId: propQuoteId, embeddedQuote = 
                   </div>
                 </div>
               </div>
+
+              {/* WHAT HAPPENS NEXT — the customer's own action is done once a
+                  carrier is locked, so say so instead of leaving them guessing
+                  in front of two buttons that belong to other roles. */}
+              {isCustomer && (
+                <div className={`qdv-next-step ${routeConfirmed ? "is-done" : "is-pending"}`}>
+                  <div className="qdv-next-step-icon">
+                    {routeConfirmed ? <CheckCircle2 size={18} /> : <Info size={18} />}
+                  </div>
+                  <div className="qdv-next-step-body">
+                    <strong className="qdv-next-step-title">
+                      {routeConfirmed
+                        ? `${selectedOption?.carrier || "Your carrier"} is confirmed. Nothing more to do right now.`
+                        : "Next step: choose a carrier below"}
+                    </strong>
+                    <p className="qdv-next-step-text">
+                      {routeConfirmed ? (
+                        <>
+                          We&apos;ve sent your quote to our freight team. They check the commercial
+                          tariff, then customs verifies your documents. You&apos;ll get a
+                          notification when it&apos;s ready for you to accept, and it will be
+                          waiting under <Link to="/dashboard/my-quotes">My Quotes</Link>. You can
+                          safely close this page.
+                        </>
+                      ) : (
+                        <>
+                          Pick the carrier that suits you and we&apos;ll take it from there. You
+                          can change your mind until the freight agent approves the tariff.
+                        </>
+                      )}
+                    </p>
+                    {routeConfirmed && (
+                      <div className="qdv-next-step-actions">
+                        <button
+                          type="button"
+                          className="qdv-btn-secondary"
+                          onClick={() => navigate("/dashboard/my-quotes")}
+                        >
+                          View in My Quotes
+                        </button>
+                        <button
+                          type="button"
+                          className="qdv-btn-secondary"
+                          onClick={() => navigate("/dashboard/request-quote")}
+                        >
+                          Start another enquiry
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
 
               <div className="qdv-cards-stack">
                 {routeOptions.map((opt) => {
@@ -736,7 +822,7 @@ export default function QuoteDetailView({ quoteId: propQuoteId, embeddedQuote = 
                       : "Awaiting commercial tariff validation by Freight Agent."}
                   </p>
 
-                  {approvalSeq.agentReview !== "APPROVED" && (
+                  {approvalSeq.agentReview !== "APPROVED" && canActAsAgent && (
                     <button
                       type="button"
                       className="qdv-btn-workflow agent-action-btn"
@@ -770,7 +856,7 @@ export default function QuoteDetailView({ quoteId: propQuoteId, embeddedQuote = 
                       : "Requires Freight Agent approval first."}
                   </p>
 
-                  {approvalSeq.customsCheck !== "APPROVED" && (
+                  {approvalSeq.customsCheck !== "APPROVED" && canActAsCustoms && (
                     <button
                       type="button"
                       className="qdv-btn-workflow customs-action-btn"
@@ -804,7 +890,7 @@ export default function QuoteDetailView({ quoteId: propQuoteId, embeddedQuote = 
                       : "Requires Agent & Customs approvals before customer decision."}
                   </p>
 
-                  {approvalSeq.customerAcceptance !== "ACCEPTED" && (
+                  {approvalSeq.customerAcceptance !== "ACCEPTED" && canDecideAsCustomer && (
                     <div className="qdv-customer-action-buttons">
                       <button
                         type="button"

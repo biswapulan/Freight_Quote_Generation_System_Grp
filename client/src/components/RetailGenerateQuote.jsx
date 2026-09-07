@@ -1223,15 +1223,15 @@ export default function RetailGenerateQuote() {
   }
 
   /**
-   * The quote already exists server-side and is queued for freight-agent review,
-   * so "save as draft" is simply closing the modal — the record is already in
-   * My Quotes. There is no DRAFT transition backwards from PENDING_REVIEW.
+   * The quote already exists server-side, so "save as draft" is simply closing
+   * the modal. It does not reach My Quotes yet: that happens once the customer
+   * picks a carrier on the recommendations screen.
    */
   function handleSaveAsDraftInModal() {
     if (!generatedQuote) return;
     setShowQuoteModal(false);
     window.alert(
-      `Quotation ${generatedQuote.id} is saved in My Quotes and is with our freight team for review.`,
+      `Quotation ${generatedQuote.id} is saved. Choose a carrier route to send it for review — it will then appear under My Quotes.`,
     );
     if (reloadQuotes) reloadQuotes();
   }
@@ -2129,11 +2129,12 @@ export default function RetailGenerateQuote() {
                 <Ship size={20} /> Would you like to proceed with this quote request?
               </div>
               <p style={{ fontSize: 13, color: "#475569" }}>
-                Lock in this rate now. Clicking proceed will save this quotation to your Quotations Dashboard.
+                Next you&apos;ll pick your carrier from our recommended routes. The quote moves to
+                My Quotes once that choice is locked in.
               </p>
               <div className="modal-prompt-actions">
                 <button type="button" className="btn-confirm-booking" onClick={handleConfirmShipment} disabled={confirming}>
-                  <CheckCircle size={16} /> {confirming ? "Submitting request..." : "Yes, Proceed to Request the Quote"}
+                  <CheckCircle size={16} /> {confirming ? "Submitting request..." : "Continue to Carrier Selection"}
                 </button>
                 <button type="button" className="btn-secondary-light" onClick={handleSaveAsDraftInModal}>
                   Save as Draft
@@ -2156,7 +2157,8 @@ export default function RetailGenerateQuote() {
             </div>
             <h2 style={{ fontSize: 24, fontWeight: 800, color: "#0f172a" }}>Quote Request Submitted &amp; Saved!</h2>
             <p style={{ color: "#64748b", fontSize: 14, margin: "8px 0 20px" }}>
-              Your quotation request has been saved with status <strong>Requested / In Review</strong>.
+              One step left: choose your carrier from the recommended routes. Your quote moves to
+              <strong> My Quotes</strong> once that choice is locked in.
             </p>
 
             <div style={{ background: "#f8fafc", border: "1px dashed #cbd5e1", borderRadius: 12, padding: 16, marginBottom: 20 }}>
@@ -2174,7 +2176,7 @@ export default function RetailGenerateQuote() {
                   navigate(`/quotes/${bookingRef}`);
                 }}
               >
-                View Recommended Carrier Routes &amp; Approval Sequence &rarr;
+                Continue to Carrier Selection &rarr;
               </button>
               <button
                 type="button"
@@ -2182,10 +2184,10 @@ export default function RetailGenerateQuote() {
                 style={{ width: "100%", justifyContent: "center" }}
                 onClick={() => {
                   setShowSuccessModal(false);
-                  navigate("/dashboard/my-quotes");
+                  navigate("/dashboard/request-quote");
                 }}
               >
-                Go to Quotations Dashboard
+                Back to Request Quote
               </button>
             </div>
           </div>

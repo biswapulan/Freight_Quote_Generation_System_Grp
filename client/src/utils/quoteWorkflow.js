@@ -358,6 +358,11 @@ export function getQuoteRouteData(quoteId, fallbackQuote = {}) {
     const raw = localStorage.getItem(`freightai_carrier_selection_${quoteId}`);
     if (raw) {
       const data = JSON.parse(raw);
+      // Records written before routeConfirmed existed carry no flag. A record
+      // is only ever written by selectQuoteRoute or an approval step, so its
+      // presence means the customer already got past carrier selection.
+      // Without this, every pre-existing quote would drop out of My Quotes.
+      if (data.routeConfirmed === undefined) data.routeConfirmed = true;
       // Synchronize sequence with workflow status
       const norm = normalizeWorkflowStatus(fallbackQuote.status || data.status);
       if (norm === "APPROVED") {
