@@ -234,7 +234,7 @@ export default function RetailRoutes() {
           <h1 className="rt-page-title">Routes</h1>
           <span className="rt-page-sub">Lanes you can quote today, and what's changing on them</span>
         </div>
-        <Link to="/dashboard/generate-quote" className="rt-btn-orange">
+        <Link to="/dashboard/request-quote" className="rt-btn-orange">
           + New enquiry
         </Link>
       </div>
@@ -361,7 +361,7 @@ export default function RetailRoutes() {
                         <span className="rt-btn-quote disabled">Unavailable</span>
                       ) : (
                         <Link
-                          to={`/dashboard/generate-quote?origin=${lane.originId}&dest=${lane.destId}`}
+                          to={`/dashboard/request-quote?origin=${lane.originId}&dest=${lane.destId}`}
                           className="rt-btn-quote"
                         >
                           Get a quote

@@ -33,10 +33,12 @@ import "./Logo.css";
 import "./DashboardShell.css";
 
 // 6. Dashboard Architecture Navigation Specifications per Role
+// Ordered to follow the customer journey: raise an enquiry, watch the cargo
+// move, review the resulting quotes, then the supporting record sections.
 const RETAIL_SECTIONS = [
   "Dashboard",
-  "My Shipments",
   "Request Quote",
+  "My Shipments",
   "My Quotes",
   "Documents",
   "Notifications",
@@ -45,8 +47,8 @@ const RETAIL_SECTIONS = [
 
 const BUSINESS_SECTIONS = [
   "Dashboard",
-  "My Shipments",
   "Request Quote",
+  "My Shipments",
   "My Quotes",
   "Documents",
   "Notifications",
@@ -111,6 +113,15 @@ const ROLE_LABELS = {
   admin: "Administrator",
 };
 
+/**
+ * Legacy slugs that still appear in older links and bookmarks. Without this
+ * they fail the section check below and silently redirect to the Dashboard,
+ * which looked like "Request Quote does nothing".
+ */
+const SECTION_ALIASES = {
+  "generate-quote": "request-quote",
+};
+
 function slugify(label) {
   return label
     .toLowerCase()
@@ -168,12 +179,13 @@ export default function DashboardShell() {
       : RETAIL_SECTIONS;
 
   const items = sections.map((label) => ({ label, slug: slugify(label) }));
+  const resolvedSection = SECTION_ALIASES[section] || section;
 
-  if (!section || !items.some((i) => i.slug === section)) {
+  if (!resolvedSection || !items.some((i) => i.slug === resolvedSection)) {
     return <Navigate to={`/dashboard/${items[0].slug}`} replace />;
   }
 
-  const activeItem = items.find((i) => i.slug === section);
+  const activeItem = items.find((i) => i.slug === resolvedSection);
 
   function handleLogout() {
     logout();

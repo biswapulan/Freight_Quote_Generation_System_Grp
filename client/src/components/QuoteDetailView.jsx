@@ -43,10 +43,12 @@ import "./Logo.css";
 import "./DashboardShell.css";
 import "./QuoteDetailView.css";
 
+// Mirrors RETAIL_SECTIONS in DashboardShell — same labels, same order, and the
+// canonical "request-quote" slug so the link actually opens Request Quote.
 const RETAIL_NAV = [
   { label: "Dashboard", slug: "dashboard" },
+  { label: "Request Quote", slug: "request-quote" },
   { label: "My Shipments", slug: "my-shipments" },
-  { label: "Request Quote", slug: "generate-quote" },
   { label: "My Quotes", slug: "my-quotes", active: true },
   { label: "Documents", slug: "documents" },
   { label: "Notifications", slug: "notifications" },

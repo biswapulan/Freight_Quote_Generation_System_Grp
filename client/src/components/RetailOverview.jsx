@@ -153,7 +153,7 @@ const QUICK_ACTIONS = [
     label: "Generate quote",
     sub: "Start a new freight enquiry",
     icon: PlusCircle,
-    to: "/dashboard/generate-quote",
+    to: "/dashboard/request-quote",
   },
   {
     label: "Saved addresses",
@@ -326,7 +326,7 @@ export default function RetailOverview() {
               <h3>{offer.title}</h3>
               <p>{offer.desc}</p>
               <div className="ov-offer-stat">{offer.stat}</div>
-              <Link to={`/dashboard/generate-quote?promo=${offer.slug}`} className="ov-offer-cta">
+              <Link to={`/dashboard/request-quote?promo=${offer.slug}`} className="ov-offer-cta">
                 Apply to next quote <ArrowRight size={13} />
               </Link>
             </div>

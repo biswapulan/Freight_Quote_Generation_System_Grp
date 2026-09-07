@@ -96,7 +96,7 @@ export default function ShipmentsHistory() {
           <button type="button" className="shp-btn-ghost" onClick={load} disabled={loading}>
             <FaSyncAlt className={loading ? "shp-spin" : ""} /> Refresh
           </button>
-          <Link to="/dashboard/generate-quote" className="shp-btn-primary">
+          <Link to="/dashboard/request-quote" className="shp-btn-primary">
             + New quote
           </Link>
         </div>
@@ -171,7 +171,7 @@ export default function ShipmentsHistory() {
               ) : filtered.length === 0 ? (
                 <tr>
                   <td colSpan={8} className="shp-empty-row">
-                    No shipments yet. <Link to="/dashboard/generate-quote">Generate your first quote</Link>.
+                    No shipments yet. <Link to="/dashboard/request-quote">Generate your first quote</Link>.
                   </td>
                 </tr>
               ) : (
