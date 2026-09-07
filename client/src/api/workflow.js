@@ -256,6 +256,14 @@ export async function uploadShipmentDocument(token, { shipmentId, documentType, 
   return data;
 }
 
+/** Remove an uploaded document from the vault. Audited server-side. */
+export function deleteShipmentDocument(token, documentId, { force = false } = {}) {
+  return apiRequest(
+    `/v1/customs/documents/${encodeURIComponent(documentId)}${force ? "?force=1" : ""}`,
+    { method: "DELETE", token, timeoutMs: 15000 },
+  );
+}
+
 export function verifyShipmentDocument(token, documentId, { decision, officerName, remarks }) {
   return apiRequest(`/v1/customs/documents/${encodeURIComponent(documentId)}/verify/`, {
     method: "POST",

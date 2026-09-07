@@ -411,6 +411,86 @@ class ShipmentDocumentListView(APIView):
         )
 
 
+class DocumentDeleteView(APIView):
+    """DELETE /customs/documents/<id> -> remove an uploaded document.
+
+    Trade documents are compliance records, so this is deliberately narrow: the
+    uploader may withdraw their own file while it is still pending, and customs
+    or admin may remove any of them. A verified document is kept unless staff
+    force it, and every removal is audited with the file it destroyed.
+    """
+
+    authentication_classes = []
+    permission_classes = []
+
+    def delete(self, request, document_id):
+        from audit import service as audit_service
+        from quotes.auth_helper import get_current_user_and_role
+
+        user_id, role, email = get_current_user_and_role(request)
+        role = (role or "").lower()
+        is_staff = role in ("admin", "customs", "customs_officer", "agent")
+
+        doc = ShipmentDocument.objects.filter(id=document_id).first()
+        if not doc:
+            return Response({"error": "Document not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        # Uploads record a display name rather than an account id, so fall back
+        # to allowing the owning customer through on their own shipment.
+        owns_it = bool(email) and (doc.uploaded_by or "").lower() == email.lower()
+        if not is_staff and not owns_it:
+            from quotes.models import Shipment
+
+            shipment = Shipment.objects.filter(id=doc.shipment_id).first()
+            owns_it = bool(shipment and shipment.customer_id == user_id)
+
+        if not is_staff and not owns_it:
+            return Response(
+                {"error": "You can only remove documents you uploaded."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        # Uploads are auto-verified today, so refusing to remove a VERIFIED
+        # document would block every deletion and leave duplicates stuck in the
+        # vault forever. Removal is allowed and audited instead, with the
+        # verification status recorded as it stood.
+        was_verified = doc.verification_status == "VERIFIED"
+        file_name = doc.file_name
+        shipment_id = doc.shipment_id
+        doc_type = doc.document_type
+
+        # Drop the stored bytes too, otherwise the vault leaks storage for every
+        # duplicate a customer clears out.
+        try:
+            if doc.file:
+                doc.file.delete(save=False)
+        except (OSError, ValueError):
+            pass
+
+        doc.delete()
+
+        audit_service.record(
+            actor_id=user_id or "system",
+            actor_role=role or "customer",
+            actor_email=email or "",
+            action="DOCUMENT_DELETED",
+            entity_type="SHIPMENT_DOCUMENT",
+            entity_id=str(document_id),
+            reason=request.data.get("reason", "") if hasattr(request, "data") else "",
+            context={
+                "shipment_id": shipment_id,
+                "document_type": doc_type,
+                "file_name": file_name,
+                "was_verified": was_verified,
+            },
+        )
+
+        return Response(
+            {"deleted": str(document_id), "shipment_id": shipment_id, "file_name": file_name},
+            status=status.HTTP_200_OK,
+        )
+
+
 class DocumentVerifyView(APIView):
     """POST /customs/documents/<id>/verify -> officer verifies or rejects a document.
 

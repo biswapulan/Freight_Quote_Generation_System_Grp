@@ -3,6 +3,7 @@ from django.urls import path
 from .views import (
     CustomsSignOffView,
     CustomsValidateView,
+    DocumentDeleteView,
     DocumentUploadView,
     DocumentVerifyView,
     HSCodeListView,
@@ -14,6 +15,16 @@ urlpatterns = [
     path("customs/validate/", CustomsValidateView.as_view(), name="customs-validate"),
     path("customs/documents/upload/", DocumentUploadView.as_view(), name="customs-document-upload"),
     path("customs/documents/", ShipmentDocumentListView.as_view(), name="customs-documents-list"),
+    path(
+        "customs/documents/<uuid:document_id>",
+        DocumentDeleteView.as_view(),
+        name="customs-document-delete",
+    ),
+    path(
+        "customs/documents/<uuid:document_id>/",
+        DocumentDeleteView.as_view(),
+        name="customs-document-delete-slash",
+    ),
     path(
         "customs/documents/<uuid:document_id>/verify/",
         DocumentVerifyView.as_view(),

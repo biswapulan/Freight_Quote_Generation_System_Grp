@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   Search,
@@ -35,7 +35,7 @@ import {
   decideQuoteInStore,
   isRouteConfirmed,
 } from "../utils/quoteWorkflow";
-import { uploadShipmentDocument } from "../api/workflow";
+import { listShipmentDocuments, uploadShipmentDocument } from "../api/workflow";
 import { useAuth } from "../context/AuthContext";
 import QuoteWorkflowStepper from "./QuoteWorkflowStepper";
 import "./RetailShipmentsHistory.css";
@@ -145,6 +145,47 @@ export default function RetailShipmentsHistory({ viewMode = "quotes" }) {
   }
 
   /**
+   * Documents actually on file for the open quote.
+   *
+   * The clearance checklist takes its status from the customs analysis, which
+   * is a snapshot taken when the quote was generated and never changes. So an
+   * uploaded file was stored server-side and shown in the vault while this
+   * panel still said "Required for Clearance" and offered Upload File again.
+   */
+  const [shipmentDocs, setShipmentDocs] = useState([]);
+
+  const loadShipmentDocs = useCallback(async () => {
+    const shipmentId = selectedQuote?.shipmentId;
+    if (!token || !shipmentId) {
+      setShipmentDocs([]);
+      return;
+    }
+    try {
+      const data = await listShipmentDocuments(token, shipmentId);
+      setShipmentDocs(data.results || []);
+    } catch {
+      setShipmentDocs([]);
+    }
+  }, [token, selectedQuote?.shipmentId]);
+
+  useEffect(() => {
+    loadShipmentDocs();
+  }, [loadShipmentDocs]);
+
+  const normalizeDocName = (name) => (name || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+
+  /** Effective status of one checklist item, from real uploads. */
+  function checklistStatus(doc) {
+    const match = shipmentDocs.find(
+      (u) => normalizeDocName(u.document_type) === normalizeDocName(doc.name),
+    );
+    if (!match) return doc.status === "VERIFIED" ? "VERIFIED" : "PENDING";
+    if (match.verification_status === "VERIFIED") return "VERIFIED";
+    if (match.verification_status === "REJECTED") return "REJECTED";
+    return "UPLOADED";
+  }
+
+  /**
    * Customer decision (PDF section 3, step 12).
    *
    * Goes through the platform API, which validates that the quote actually
@@ -192,7 +233,9 @@ export default function RetailShipmentsHistory({ viewMode = "quotes" }) {
         file,
         uploadedBy: user?.full_name || "Customer",
       });
-      await reloadQuotes();
+      // Refresh the real document list, not just the quotes: the checklist
+      // status comes from what is actually on file now.
+      await Promise.all([reloadQuotes(), loadShipmentDocs()]);
       setWorkflowNotice(`"${file.name}" uploaded for ${docName}. Queued for customs verification.`);
       setTimeout(() => setWorkflowNotice(""), 5000);
     } catch (err) {
@@ -885,8 +928,9 @@ export default function RetailShipmentsHistory({ viewMode = "quotes" }) {
                       { name: "Bill of Lading Draft", status: "PENDING" },
                       { name: "Certificate of Origin", status: "PENDING" },
                     ]).map((doc, idx) => {
-                      const isVerified = doc.status === "VERIFIED";
-                      const isUploaded = doc.status === "UPLOADED";
+                      const effective = checklistStatus(doc);
+                      const isVerified = effective === "VERIFIED";
+                      const isUploaded = effective === "UPLOADED";
                       return (
                         <div
                           key={idx}

@@ -16,7 +16,7 @@ import {
   Upload,
   FileUp,
 } from "lucide-react";
-import { listShipmentDocuments, uploadShipmentDocument } from "../api/workflow";
+import { deleteShipmentDocument, listShipmentDocuments, uploadShipmentDocument } from "../api/workflow";
 import { usePlatformQuotes } from "../hooks/usePlatformQuotes";
 import { useAuth } from "../context/AuthContext";
 import "./DocumentsCenter.css";
@@ -133,16 +133,40 @@ export default function DocumentsCenter() {
     }
   };
 
+  const [deletingDoc, setDeletingDoc] = useState(null);
+
   /**
-   * Documents are compliance records the customs officer relies on, so the vault
-   * does not delete them client-side. Removal has to be a server-side decision
-   * with an audit trail, which the platform does not currently expose.
+   * Remove a document from the vault.
+   *
+   * This used to be a no-op alert because removal needs an audit trail the
+   * platform did not expose. It does now, so the button actually works: the
+   * server checks ownership, refuses to drop a customs-verified record, and
+   * logs what was destroyed.
    */
-  const handleDeleteDoc = () => {
-    window.alert(
-      "Trade documents are compliance records and cannot be removed from the vault. " +
-        "Ask a customs officer to reject the document instead.",
+  const handleDeleteDoc = async (docId) => {
+    const doc = documents.find((d) => d.id === docId);
+    if (!doc || deletingDoc) return;
+
+    const confirmed = window.confirm(
+      `Remove "${doc.fileName}" from the vault?\n\n` +
+        `Type: ${doc.type}\nShipment: ${doc.shipmentRef}\n\nThis cannot be undone.`,
     );
+    if (!confirmed) return;
+
+    setDeletingDoc(docId);
+    setLoadError("");
+    try {
+      await deleteShipmentDocument(token, docId);
+      setDocuments((prev) => prev.filter((d) => d.id !== docId));
+    } catch (err) {
+      setLoadError(
+        err?.status === 403
+          ? `You can only remove documents on your own shipments.`
+          : err.message || `Could not remove "${doc.fileName}".`,
+      );
+    } finally {
+      setDeletingDoc(null);
+    }
   };
 
   /** Upload a real file against a shipment. */
