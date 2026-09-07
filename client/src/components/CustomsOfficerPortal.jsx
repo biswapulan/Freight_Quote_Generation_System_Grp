@@ -243,6 +243,24 @@ export default function CustomsOfficerPortal({ initialTab = "pending-reviews" })
     (name || "").toLowerCase().replace(/[^a-z0-9]/g, "");
 
   /**
+   * Live status of one checklist item for one shipment.
+   *
+   * The quote's checklist carries the status the customs analysis wrote when
+   * the quote was generated and never updates, so the sign-off desk showed
+   * every document as PENDING even after the officer had stamped all of them.
+   * Resolve against the documents actually on file instead.
+   */
+  function docItemStatus(shipmentId, docName) {
+    const match = (uploadedDocs[shipmentId] || []).find(
+      (u) => normalizeDocName(u.document_type) === normalizeDocName(docName),
+    );
+    if (!match) return "PENDING";
+    if (match.verification_status === "VERIFIED") return "VERIFIED";
+    if (match.verification_status === "REJECTED") return "REJECTED";
+    return "UPLOADED";
+  }
+
+  /**
    * Paperwork state for one consignment, from what has actually been uploaded.
    *
    * This used to be a sentence built in the shipments memo and then colour-coded
@@ -462,6 +480,8 @@ export default function CustomsOfficerPortal({ initialTab = "pending-reviews" })
   const [openGroup, setOpenGroup] = useState(null);
   const [docBusy, setDocBusy] = useState(null);
   const [docNotice, setDocNotice] = useState(null);
+  /** Consignment whose papers have just all been verified, for the popup. */
+  const [allVerifiedFor, setAllVerifiedFor] = useState(null);
 
   const handleOpenDocInspection = (doc) => {
     setPreviewDoc(doc);
@@ -572,12 +592,11 @@ export default function CustomsOfficerPortal({ initialTab = "pending-reviews" })
       // eslint-disable-next-line no-await-in-loop
       await handleVerifySingleDoc(doc.shipmentId, doc.docType, doc.documentId, "VERIFIED");
     }
-    setDocNotice({
-      type: "success",
-      text: `All documents on ${group.quoteNo} verified. The customer has been notified.`,
-    });
-    setTimeout(() => setDocNotice(null), 6000);
+    // Confirm the milestone explicitly, then point the officer at sign-off,
+    // which is the step that actually clears the consignment.
+    setAllVerifiedFor(group);
   };
+
 
   function openSignoffModal(shipment) {
     setSelectedShipment(shipment);
@@ -1471,7 +1490,8 @@ export default function CustomsOfficerPortal({ initialTab = "pending-reviews" })
               <div className="cop-checklist">
                 <div className="cop-checklist-title">Mandatory Regulatory Documents Checklist</div>
                 {selectedShipment.documents.map((doc, idx) => {
-                  const statusClass = (doc.status || "").toLowerCase();
+                  const liveStatus = docItemStatus(selectedShipment.shipmentId, doc.name);
+                  const statusClass = liveStatus.toLowerCase();
                   return (
                     <div
                       key={idx}
@@ -1551,7 +1571,7 @@ export default function CustomsOfficerPortal({ initialTab = "pending-reviews" })
                           <Eye size={12} /> View Document
                         </button>
                         <span className={`cop-doc-badge ${statusClass}`}>
-                          {doc.status}
+                          {liveStatus === "UPLOADED" ? "AWAITING CHECK" : liveStatus}
                         </span>
                       </div>
                     </div>
@@ -1601,6 +1621,51 @@ export default function CustomsOfficerPortal({ initialTab = "pending-reviews" })
       )}
 
       {/* ── Document Inspection & Preview Modal ── */}
+      {/* All papers on one consignment cleared. Say so, then send the officer
+          to sign-off, which is the step that actually clears the shipment. */}
+      {allVerifiedFor && (
+        <div className="cop-modal-overlay" onClick={() => setAllVerifiedFor(null)}>
+          <div className="cop-allverified-card" onClick={(e) => e.stopPropagation()}>
+            <div className="cop-allverified-icon">
+              <CheckCircle2 size={34} />
+            </div>
+            <h3 className="cop-allverified-title">All documents verified</h3>
+            <p className="cop-allverified-text">
+              Every required document on <strong>{allVerifiedFor.quoteNo}</strong> has been
+              stamped and cleared. {allVerifiedFor.customer} has been notified.
+            </p>
+            <p className="cop-allverified-next">
+              Next: complete the customs sign-off to clear this consignment.
+            </p>
+            <div className="cop-allverified-actions">
+              <button
+                type="button"
+                className="cop-btn-ghost"
+                onClick={() => setAllVerifiedFor(null)}
+              >
+                Stay here
+              </button>
+              <button
+                type="button"
+                className="cop-btn-verify-all"
+                onClick={() => {
+                  const shipment = shipments.find(
+                    (s) => (s.quoteNo || s.id) === allVerifiedFor.key,
+                  );
+                  setAllVerifiedFor(null);
+                  if (shipment) {
+                    handleTabSwitch("pending-reviews");
+                    setTimeout(() => openSignoffModal(shipment), 120);
+                  }
+                }}
+              >
+                <ShieldCheck size={15} /> Go to Inspect &amp; Sign-off
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {previewDocModalOpen && previewDoc && (
         <div className="cop-modal-overlay" onClick={() => setPreviewDocModalOpen(false)}>
           <div
@@ -2032,22 +2097,52 @@ export default function CustomsOfficerPortal({ initialTab = "pending-reviews" })
                 Close Preview
               </button>
 
-              <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
+              <div style={{ display: "flex", gap: "10px", alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" }}>
+                {/* The decision notice used to render only behind this modal,
+                    so a refusal (no file on record) looked like a dead button. */}
+                {docNotice && (
+                  <span className={`cop-preview-notice ${docNotice.type}`}>{docNotice.text}</span>
+                )}
+
                 {previewDoc.status === "VERIFIED" ? (
                   <span style={{ color: "#059669", fontWeight: 700, display: "inline-flex", alignItems: "center", gap: "6px", fontSize: "13px" }}>
-                    <CheckCircle2 size={18} /> Stamped &amp; Cleared by Officer Sharma
+                    <CheckCircle2 size={18} /> Stamped &amp; cleared by {user?.full_name || "the customs officer"}
+                  </span>
+                ) : !previewDoc.documentId || String(previewDoc.documentId).startsWith("doc-") ? (
+                  <span className="cop-preview-notice error">
+                    No file has been uploaded for this document yet, so there is nothing to stamp.
                   </span>
                 ) : (
-                  <button
-                    type="button"
-                    className="cop-btn-action"
-                    style={{ background: "#059669", padding: "10px 20px", fontSize: "13px" }}
-                    onClick={() => {
-                      handleVerifySingleDoc(previewDoc.shipmentId, previewDoc.docType, previewDoc.documentId);
-                    }}
-                  >
-                    <ShieldCheck size={16} /> Verify &amp; Apply Official Customs Stamp
-                  </button>
+                  <>
+                    <button
+                      type="button"
+                      className="cop-btn-reject"
+                      style={{ padding: "10px 16px", fontSize: "13px" }}
+                      disabled={docBusy === previewDoc.documentId}
+                      onClick={() => handleRejectSingleDoc(previewDoc)}
+                    >
+                      <XCircle size={15} /> Reject
+                    </button>
+                    <button
+                      type="button"
+                      className="cop-btn-action"
+                      style={{ background: "#059669", padding: "10px 20px", fontSize: "13px" }}
+                      disabled={docBusy === previewDoc.documentId}
+                      onClick={() =>
+                        handleVerifySingleDoc(
+                          previewDoc.shipmentId,
+                          previewDoc.docType,
+                          previewDoc.documentId,
+                          "VERIFIED",
+                        )
+                      }
+                    >
+                      <ShieldCheck size={16} />
+                      {docBusy === previewDoc.documentId
+                        ? "Stamping..."
+                        : "Verify & Apply Official Customs Stamp"}
+                    </button>
+                  </>
                 )}
               </div>
             </div>
