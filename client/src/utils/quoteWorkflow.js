@@ -290,6 +290,12 @@ export function mapApiQuote(apiQuote) {
     // above reads this browser's localStorage, which holds only a preview
     // default for anyone who did not make the choice on this machine — that
     // is how the agent desk ended up showing "Maersk" for every quote.
+    // Re-assert after the spread above. Records written before the fix still
+    // carry a stale status in localStorage, and it must never win over the
+    // server's.
+    status: normalizeWorkflowStatus(apiQuote.status),
+    rawStatus: apiQuote.status,
+
     ...(apiQuote.assignedAgentEmail || apiQuote.selectedCarrier
       ? {
           selectedCarrier: apiQuote.selectedCarrier || apiQuote.carrier,
@@ -465,7 +471,10 @@ export function selectQuoteRoute(quoteId, routeOption) {
     assignedAgentName: routeOption.agentName || `${routeOption.carrier} Operations Desk`,
     assignedAgentEmail: routeOption.agentEmail || "agent@freightai.com",
     indicativeTotal: routeOption.price,
-    status: "PENDING_REVIEW",
+    // No workflow status here. This cache once stored PENDING_REVIEW, and
+    // because mapApiQuote spreads it over the mapped quote, that stale value
+    // overwrote the real server status: the customer's quote showed
+    // PENDING_REVIEW forever, however far the agent and customs had taken it.
     // Marks the quote -> route recommendation step as finished. Only once
     // this is true should the quote surface in the customer's My Quotes list.
     routeConfirmed: true,
