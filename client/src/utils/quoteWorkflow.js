@@ -607,14 +607,19 @@ export async function refreshPlatformQuotes() {
       cache = records.map(mapApiQuote);
       return cache;
     } catch (err) {
-      // A rejected token means the session is over. Clear it so AuthContext
-      // sends the user to the login page instead of showing an empty dashboard.
+      // A rejected token means the session is over. Clearing localStorage is
+      // not enough on its own: AuthContext holds the token in React state, so
+      // the UI kept looking signed in while every list came back empty. The
+      // event below lets it drop the session and bounce to the login page.
       if (err?.isAuthError) {
         lastError = "Your session has expired. Please sign in again.";
         cache = [];
         try {
           localStorage.removeItem("freightai_token");
           localStorage.removeItem("freightai_user");
+        } catch {}
+        try {
+          window.dispatchEvent(new CustomEvent("freightai_session_expired"));
         } catch {}
       } else {
         lastError = err.message || "Unable to load quotes";

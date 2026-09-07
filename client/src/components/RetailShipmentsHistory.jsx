@@ -435,10 +435,15 @@ export default function RetailShipmentsHistory({ viewMode = "quotes" }) {
               ) : filtered.length === 0 ? (
                 <tr>
                   <td colSpan={10} style={{ textAlign: "center", padding: 30, color: "#94a3b8" }}>
-                    {isShipmentMode
+                    {/* An empty list after a failed request is not an empty
+                        account. Saying "none found" there sent people looking
+                        for a missing quote instead of signing back in. */}
+                    {error
+                      ? "We couldn't load your quotes. Please resolve the message above and try again."
+                      : isShipmentMode
                       ? "No matching active shipments found."
                       : quotations.some((q) => !isRouteConfirmed(q.id || q.quoteNo, q))
-                      ? "No confirmed quotes yet. Finish selecting a carrier route on your open enquiry to see it here."
+                      ? "No quotes sent for review yet. Finish an enquiry and send it to the freight agent to see it here."
                       : "No matching quotations found."}
                   </td>
                 </tr>

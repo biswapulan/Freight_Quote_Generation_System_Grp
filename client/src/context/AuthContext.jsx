@@ -78,6 +78,21 @@ export function AuthProvider({ children }) {
     };
   }, [token]);
 
+  // Any API layer that gets a 401/403 announces it here. Without this the
+  // token was removed from localStorage while this state still held it, so
+  // the app looked signed in but every request failed.
+  useEffect(() => {
+    function handleSessionExpired() {
+      localStorage.removeItem(TOKEN_KEY);
+      localStorage.removeItem("freightai_user");
+      setToken(null);
+      setUser(null);
+      setLoading(false);
+    }
+    window.addEventListener("freightai_session_expired", handleSessionExpired);
+    return () => window.removeEventListener("freightai_session_expired", handleSessionExpired);
+  }, []);
+
   function login({ token: newToken, ...profile }) {
     localStorage.setItem(TOKEN_KEY, newToken);
     localStorage.setItem("freightai_user", JSON.stringify(profile));

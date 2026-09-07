@@ -6,7 +6,7 @@ import "leaflet/dist/leaflet.css";
 import { Ship, Plane, Truck, Zap, Plus, Trash2, X, CheckCircle, FileText, Check, Bot, Cpu, Sparkles, Eye, ArrowRight, Clock, Anchor, MapPin, AlertTriangle, CheckCircle2, ShieldAlert, Navigation, RefreshCw } from "lucide-react";
 import { PORTS_MASTER, useRetailQuotes } from "../context/RetailQuotesContext";
 import { createSavedAddress, getSavedAddresses } from "../api/auth";
-import { createShipment, generateQuote } from "../api/workflow";
+import { createShipment, generateQuote, getQuoteDetail } from "../api/workflow";
 import {
   addOrUpdatePlatformQuote,
   getQuoteRouteData,
@@ -1287,17 +1287,28 @@ export default function RetailGenerateQuote() {
    * Locks the chosen carrier and hands the quote to the freight agent. This is
    * the moment the quote becomes a My Quotes record.
    */
-  function handleSendForReview() {
+  async function handleSendForReview() {
     if (!chosenRoute || !bookingRef || sendingForReview) return;
     setSendingForReview(true);
+    setQuoteError("");
     try {
+      // The carrier choice is stored client-side, which cannot fail and so
+      // cannot tell us anything. Confirm the quote is really on the server
+      // first, otherwise an expired session would produce a cheerful "sent
+      // for review" for a quote the freight agent will never see.
+      await getQuoteDetail(token, bookingRef);
+
       selectQuoteRoute(bookingRef, chosenRoute);
       setShowRouteModal(false);
       setShowSentModal(true);
       if (reloadQuotes) reloadQuotes();
     } catch (err) {
       console.error("Failed to send quote for review:", err);
-      setQuoteError(err.message || "Could not send this quote for review. Please try again.");
+      setQuoteError(
+        err?.isAuthError
+          ? "Your session has expired. Please sign in again, then resend this quote for review."
+          : err.message || "Could not send this quote for review. Please try again.",
+      );
     } finally {
       setSendingForReview(false);
     }
