@@ -183,7 +183,11 @@ export function mapApiQuote(apiQuote) {
   const mode = shipment.transportMode || shipment.transport_mode || "ocean";
   const total = Number(apiQuote.totalPrice ?? apiQuote.total_price ?? 0);
 
-  const customsAnalysis = analysis?.customs;
+  // List endpoints omit the full orchestrator output and send `customsSummary`
+  // instead. Reading only `analysis.customs` made every listed quote look like
+  // it had no missing paperwork, so the customs queue showed "All documents on
+  // file" for consignments with nothing uploaded at all.
+  const customsAnalysis = analysis?.customs || apiQuote.customsSummary || null;
   const missingDocs = customsAnalysis?.missing_documents || [];
   const checklist = customsAnalysis?.checklist_items || [];
 

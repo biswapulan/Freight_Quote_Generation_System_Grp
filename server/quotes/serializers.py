@@ -69,9 +69,29 @@ class QuoteSerializer(serializers.ModelSerializer):
     overallRisk = serializers.CharField(source="overall_risk_level", read_only=True)
     requiresHumanReview = serializers.BooleanField(source="requires_human_review", read_only=True)
 
+    # ---- Customs summary ----
+    # The full orchestrator output lives on QuoteDetailSerializer only, because
+    # it is large. The customs desk lists many quotes at once and needs to know
+    # which are missing paperwork, so the compact summary below rides along on
+    # every quote. Without it the officer queue could not tell a consignment
+    # with no documents from a fully documented one.
+    customsSummary = serializers.SerializerMethodField()
+
+    def get_customsSummary(self, obj):
+        customs = (obj.analysis or {}).get("customs") or {}
+        return {
+            "status": customs.get("status"),
+            "check_id": customs.get("check_id"),
+            "hs_code": customs.get("hs_code"),
+            "advisory": customs.get("advisory"),
+            "missing_documents": customs.get("missing_documents") or [],
+            "checklist_items": customs.get("checklist_items") or [],
+        }
+
     class Meta:
         model = Quote
         fields = [
+            "customsSummary",
             "id",
             "shipmentId",
             "shipment_id",

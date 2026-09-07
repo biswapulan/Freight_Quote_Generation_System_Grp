@@ -201,11 +201,6 @@ export default function CustomsOfficerPortal({ initialTab = "pending-reviews" })
   const pendingCount = shipments.filter(
     (s) => s.status === "PENDING_REVIEW" || s.status === "AI_ANALYZED"
   ).length;
-  const missingDocCount = shipments.filter(
-    (s) =>
-      s.documentsStatus.toLowerCase().includes("missing") ||
-      s.documentsStatus.toLowerCase().includes("pending")
-  ).length;
   const highRiskCount = shipments.filter(
     (s) => s.riskLevel === "HIGH" || s.riskLevel === "CRITICAL" || s.status === "FLAGGED"
   ).length;
@@ -242,6 +237,43 @@ export default function CustomsOfficerPortal({ initialTab = "pending-reviews" })
   /** Match a checklist item name to an uploaded document, ignoring formatting. */
   const normalizeDocName = (name) =>
     (name || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+
+  /**
+   * Paperwork state for one consignment, from what has actually been uploaded.
+   *
+   * This used to be a sentence built in the shipments memo and then colour-coded
+   * by searching it for the word "Missing" — which the sentence never contained,
+   * so every row rendered green even with nothing on file. Comparing the
+   * required checklist against real uploads is the only honest signal.
+   */
+  function docStatusFor(s) {
+    const checklist = (s.documents || []).map((d) => d.name).filter(Boolean);
+    const required = checklist.length ? checklist : s.missingDocuments || [];
+
+    if (!required.length) {
+      return { tone: "neutral", allOnFile: false, label: "No checklist issued" };
+    }
+
+    const arrived = new Set(
+      (uploadedDocs[s.shipmentId] || []).map((u) => normalizeDocName(u.document_type)),
+    );
+    const outstanding = required.filter((name) => !arrived.has(normalizeDocName(name)));
+
+    if (outstanding.length) {
+      return {
+        tone: "bad",
+        allOnFile: false,
+        label: `${outstanding.length} of ${required.length} documents missing`,
+      };
+    }
+    return {
+      tone: "good",
+      allOnFile: true,
+      label: `All ${required.length} documents on file`,
+    };
+  }
+
+  const missingDocCount = shipments.filter((s) => !docStatusFor(s).allOnFile).length;
 
   // Flattened documents list for Document Verification desk
   const allDocumentsToVerify = useMemo(() => {
@@ -979,15 +1011,20 @@ export default function CustomsOfficerPortal({ initialTab = "pending-reviews" })
                         </div>
                       </td>
                       <td>
-                        <span
-                          style={{
-                            fontSize: "12px",
-                            fontWeight: 600,
-                            color: s.documentsStatus.includes("Missing") ? "#dc2626" : "#059669",
-                          }}
-                        >
-                          {s.documentsStatus}
-                        </span>
+                        {(() => {
+                          const ds = docStatusFor(s);
+                          const tone =
+                            ds.tone === "good"
+                              ? "#059669"
+                              : ds.tone === "bad"
+                              ? "#dc2626"
+                              : "#64748b";
+                          return (
+                            <span style={{ fontSize: "12px", fontWeight: 600, color: tone }}>
+                              {ds.label}
+                            </span>
+                          );
+                        })()}
                       </td>
                       <td>
                         <span className={`cop-badge ${s.riskLevel.toLowerCase()}`}>
