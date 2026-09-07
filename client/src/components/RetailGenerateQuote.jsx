@@ -7,7 +7,12 @@ import { Ship, Plane, Truck, Zap, Plus, Trash2, X, CheckCircle, FileText, Check,
 import { PORTS_MASTER, useRetailQuotes } from "../context/RetailQuotesContext";
 import { createSavedAddress, getSavedAddresses } from "../api/auth";
 import { createShipment, generateQuote } from "../api/workflow";
-import { addOrUpdatePlatformQuote, getQuoteRouteData } from "../utils/quoteWorkflow";
+import {
+  addOrUpdatePlatformQuote,
+  getQuoteRouteData,
+  generateRouteOptions,
+  selectQuoteRoute,
+} from "../utils/quoteWorkflow";
 import { useAuth } from "../context/AuthContext";
 import {
   validateAddressProximity,
@@ -409,6 +414,12 @@ export default function RetailGenerateQuote() {
   const [confirming, setConfirming] = useState(false);
   const [showQuoteModal, setShowQuoteModal] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
+  // Final step of the enquiry: pick a carrier, then send the quote for review.
+  const [showRouteModal, setShowRouteModal] = useState(false);
+  const [routeOptions, setRouteOptions] = useState([]);
+  const [chosenRoute, setChosenRoute] = useState(null);
+  const [sendingForReview, setSendingForReview] = useState(false);
+  const [showSentModal, setShowSentModal] = useState(false);
   const [bookingRef, setBookingRef] = useState("");
   const [addressModalType, setAddressModalType] = useState("");
   const [addressForm, setAddressForm] = useState(EMPTY_ADDRESS);
@@ -1253,23 +1264,42 @@ export default function RetailGenerateQuote() {
       const refId = generatedQuote.id || generatedQuote.quoteNo || generatedQuote.shipmentId;
       setBookingRef(refId);
 
-      // Cache for instant retrieval on the recommendation page
       try {
         localStorage.setItem("freightai_current_quote", JSON.stringify(generatedQuote));
-        if (typeof getQuoteRouteData === "function") {
-          getQuoteRouteData(refId, generatedQuote);
-        }
       } catch {}
 
-      if (reloadQuotes) reloadQuotes();
-
-      // Directly navigate to the Recommended Route Options & Approval Sequence screen!
-      navigate(`/quotes/${refId}`);
+      // Final step of the enquiry: choose a carrier here, in a modal, rather
+      // than on a separate page. The quote is not sent for review, and does
+      // not reach My Quotes, until the customer confirms a route below.
+      const options = generateRouteOptions(generatedQuote);
+      setRouteOptions(options);
+      setChosenRoute(options.find((o) => o.recommended) || options[0] || null);
+      setShowRouteModal(true);
     } catch (err) {
-      console.error("Failed to navigate to quote details:", err);
+      console.error("Failed to open carrier selection:", err);
       setShowSuccessModal(true);
     } finally {
       setConfirming(false);
+    }
+  }
+
+  /**
+   * Locks the chosen carrier and hands the quote to the freight agent. This is
+   * the moment the quote becomes a My Quotes record.
+   */
+  function handleSendForReview() {
+    if (!chosenRoute || !bookingRef || sendingForReview) return;
+    setSendingForReview(true);
+    try {
+      selectQuoteRoute(bookingRef, chosenRoute);
+      setShowRouteModal(false);
+      setShowSentModal(true);
+      if (reloadQuotes) reloadQuotes();
+    } catch (err) {
+      console.error("Failed to send quote for review:", err);
+      setQuoteError(err.message || "Could not send this quote for review. Please try again.");
+    } finally {
+      setSendingForReview(false);
     }
   }
 
@@ -2173,7 +2203,10 @@ export default function RetailGenerateQuote() {
                 style={{ width: "100%", justifyContent: "center" }}
                 onClick={() => {
                   setShowSuccessModal(false);
-                  navigate(`/quotes/${bookingRef}`);
+                  const options = generateRouteOptions(generatedQuote);
+                  setRouteOptions(options);
+                  setChosenRoute(options.find((o) => o.recommended) || options[0] || null);
+                  setShowRouteModal(true);
                 }}
               >
                 Continue to Carrier Selection &rarr;
@@ -2188,6 +2221,137 @@ export default function RetailGenerateQuote() {
                 }}
               >
                 Back to Request Quote
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── FINAL STEP: CARRIER ROUTE SELECTION MODAL ──────────────────────
+          The last screen of the enquiry. Choosing a carrier here and sending
+          the quote for review is what moves it into My Quotes. */}
+      {showRouteModal && (
+        <div className="modal-overlay">
+          <div className="modal-content rq-route-modal">
+            <div className="rq-route-modal-head">
+              <div>
+                <span className="rq-route-step">Final step</span>
+                <h2 className="rq-route-title">Select Your Carrier Route</h2>
+                <p className="rq-route-sub">
+                  Choose the carrier you&apos;d like for quote <strong>{bookingRef}</strong>, then send
+                  it to our freight agent for review.
+                </p>
+              </div>
+              <button
+                type="button"
+                className="rq-route-close"
+                aria-label="Close carrier selection"
+                onClick={() => setShowRouteModal(false)}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="rq-route-list">
+              {routeOptions.map((opt) => {
+                const picked = chosenRoute?.id === opt.id;
+                return (
+                  <button
+                    type="button"
+                    key={opt.id}
+                    className={`rq-route-card${picked ? " picked" : ""}`}
+                    onClick={() => setChosenRoute(opt)}
+                    aria-pressed={picked}
+                  >
+                    <span className="rq-route-radio">{picked && <Check size={13} />}</span>
+
+                    <span className="rq-route-main">
+                      <span className="rq-route-name-row">
+                        <strong className="rq-route-carrier">{opt.carrier}</strong>
+                        {opt.recommended && <span className="rq-route-tag">RECOMMENDED</span>}
+                      </span>
+                      <span className="rq-route-service">{opt.service}</span>
+                    </span>
+
+                    <span className="rq-route-figures">
+                      <strong className="rq-route-price">
+                        ₹ {Number(opt.price).toLocaleString("en-IN")}
+                      </strong>
+                      <span className="rq-route-transit">{opt.transitDays} days transit</span>
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+
+            {quoteError && <p className="rq-route-error">{quoteError}</p>}
+
+            <div className="rq-route-footer">
+              <span className="rq-route-footer-note">
+                {chosenRoute
+                  ? `${chosenRoute.carrier} · ₹ ${Number(chosenRoute.price).toLocaleString("en-IN")}`
+                  : "Select a carrier to continue"}
+              </span>
+              <button
+                type="button"
+                className="btn-orange-primary rq-route-submit"
+                onClick={handleSendForReview}
+                disabled={!chosenRoute || sendingForReview}
+              >
+                {sendingForReview ? "Sending..." : "Send this Quote to Freight Agent For Review"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── QUOTE SENT FOR REVIEW CONFIRMATION ─────────────────────────── */}
+      {showSentModal && (
+        <div className="modal-overlay">
+          <div className="modal-content text-center" style={{ maxWidth: 520, textAlign: "center" }}>
+            <div
+              style={{
+                width: 64,
+                height: 64,
+                background: "#dcfce7",
+                color: "#16a34a",
+                borderRadius: "50%",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                margin: "0 auto 16px",
+              }}
+            >
+              <Check size={36} />
+            </div>
+            <h2 style={{ fontSize: 23, fontWeight: 800, color: "#0f172a" }}>
+              Your quote has been sent for review
+            </h2>
+            <p style={{ color: "#64748b", fontSize: 14, margin: "10px 0 20px", lineHeight: 1.6 }}>
+              Quote <strong>{bookingRef}</strong> is locked with{" "}
+              <strong>{chosenRoute?.carrier}</strong> and is now with our freight agent. You can
+              check its status any time under <strong>My Quotes</strong> in the sidebar.
+            </p>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+              <button
+                type="button"
+                className="btn-orange-primary"
+                style={{ width: "100%", justifyContent: "center" }}
+                onClick={() => {
+                  setShowSentModal(false);
+                  navigate("/dashboard/my-quotes");
+                }}
+              >
+                Go to My Quotes
+              </button>
+              <button
+                type="button"
+                className="btn-secondary-light"
+                style={{ width: "100%", justifyContent: "center" }}
+                onClick={() => setShowSentModal(false)}
+              >
+                Start another enquiry
               </button>
             </div>
           </div>

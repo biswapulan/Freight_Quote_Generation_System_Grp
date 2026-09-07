@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 import {
   Search,
   Download,
@@ -44,7 +44,6 @@ const MODE_CLASS = { ocean_fcl: "ocean-fcl", air: "air-freight", ocean_lcl: "oce
 const STATUS_CLASS = { Draft: "draft", Issued: "issued", Booked: "booked", "No routing": "norouting" };
 
 export default function RetailShipmentsHistory({ viewMode = "quotes" }) {
-  const navigate = useNavigate();
   const { quotations, loading, error, reloadQuotes } = useRetailQuotes();
   const { token, user } = useAuth();
   const [workflowBusy, setWorkflowBusy] = useState(false);
@@ -81,9 +80,9 @@ export default function RetailShipmentsHistory({ viewMode = "quotes" }) {
     ...Array.from(new Set(quotations.map((quote) => quote.laneCode).filter(Boolean))).map((lane) => ({ value: lane, label: lane })),
   ], [quotations]);
 
-  // My Quotes is the finished-article view: a quote only belongs here once the
-  // customer has picked a carrier on the Recommendations screen. Before that
-  // it's still mid-flow inside Request Quote, not a record to browse back to.
+  // My Quotes lists quotes that have been sent for review. A quote gets here
+  // only when the customer picks a carrier in the Request Quote flow's final
+  // modal; before that it is still an unfinished enquiry.
   const confirmedQuotations = useMemo(
     () => quotations.filter((q) => isRouteConfirmed(q.id || q.quoteNo, q)),
     [quotations]
@@ -552,30 +551,16 @@ export default function RetailShipmentsHistory({ viewMode = "quotes" }) {
                     </td>
                     <td style={{ color: "#64748b", fontSize: 12 }}>{q.created}</td>
                     <td style={{ display: "flex", gap: "6px", alignItems: "center", paddingTop: "14px" }}>
+                      {/* Carrier selection belongs to the Request Quote flow,
+                          so My Quotes shows status only and never reopens the
+                          route picker. */}
                       <button
                         type="button"
                         className="btn-open-quote"
-                        onClick={() => navigate(`/quotes/${q.quoteNo || q.id}`)}
-                        title="Track Freight Agent, Customs & Acceptance Approval Progress"
-                      >
-                        Track Approval
-                      </button>
-                      <button
-                        type="button"
-                        style={{
-                          background: "#f1f5f9",
-                          border: "1px solid #cbd5e1",
-                          color: "#475569",
-                          padding: "4px 8px",
-                          borderRadius: "4px",
-                          fontSize: "11px",
-                          fontWeight: 600,
-                          cursor: "pointer",
-                        }}
                         onClick={() => openQuoteDetail(q.quoteNo)}
-                        title="Open Quick Summary Modal"
+                        title="View quote status and approval progress"
                       >
-                        Summary
+                        View Status
                       </button>
                     </td>
                   </tr>
@@ -688,27 +673,6 @@ export default function RetailShipmentsHistory({ viewMode = "quotes" }) {
                 </div>
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                <button
-                  type="button"
-                  style={{
-                    fontSize: "12px",
-                    fontWeight: 700,
-                    color: "#ffffff",
-                    backgroundColor: "#ea580c",
-                    border: "none",
-                    padding: "6px 14px",
-                    borderRadius: "6px",
-                    cursor: "pointer",
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: "6px",
-                  }}
-                  onClick={() => {
-                    navigate(`/quotes/${selectedQuote.quoteNo || selectedQuote.id}`);
-                  }}
-                >
-                  <Ship size={13} /> Track Approval Status &rarr;
-                </button>
                 <button
                   type="button"
                   className="rsh-modal-close"
