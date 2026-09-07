@@ -240,6 +240,44 @@ class CustomsSignOffView(APIView):
         # officer's pending queue forever.
         _sync_quote_customs_analysis(check.shipment_id, check)
 
+        # Tell the customer. Sign-off notified the agent only, so the customer
+        # never learned that their shipment had cleared customs, or been held.
+        from notifications import service as notify_customer
+        from quotes.models import Shipment as _Shipment
+
+        shipment = _Shipment.objects.filter(id=check.shipment_id).first()
+        if shipment and shipment.customer_id:
+            comments = data.get("comments") or ""
+            if check.status == "APPROVED":
+                notify_customer.notify_user(
+                    shipment.customer_id,
+                    f"Customs cleared shipment {check.shipment_id}",
+                    (
+                        "All documents were verified and customs has signed off. "
+                        "Your freight agent will send you the final quote to accept or decline."
+                        + (f" Officer note: {comments}" if comments else "")
+                    ),
+                    category="CUSTOMS",
+                    severity="SUCCESS",
+                    entity_type="SHIPMENT",
+                    entity_id=check.shipment_id,
+                    link="/dashboard/my-quotes",
+                )
+            elif check.status == "REJECTED":
+                notify_customer.notify_user(
+                    shipment.customer_id,
+                    f"Customs placed a hold on shipment {check.shipment_id}",
+                    (
+                        "Customs could not clear this consignment."
+                        + (f" Reason: {comments}" if comments else "")
+                    ),
+                    category="CUSTOMS",
+                    severity="WARNING",
+                    entity_type="SHIPMENT",
+                    entity_id=check.shipment_id,
+                    link="/dashboard/my-quotes",
+                )
+
         return Response({
             "message": f"Customs sign-off decision '{check.status}' recorded successfully.",
             "compliance_check": CustomsComplianceCheckSerializer(check).data,

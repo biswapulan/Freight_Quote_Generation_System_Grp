@@ -1057,6 +1057,41 @@ export default function RetailShipmentsHistory({ viewMode = "quotes" }) {
                     })}
                   </div>
 
+                  {/* Customs clearance, from the live compliance state. The
+                      customer could see their documents but never whether
+                      customs had actually cleared the consignment. */}
+                  {(() => {
+                    const cs = selectedQuote.customs?.status || selectedQuote.customsStatus;
+                    if (!cs) return null;
+                    const cleared = cs === "APPROVED";
+                    const held = cs === "REJECTED";
+                    return (
+                      <div className={`rsh-customs-state ${cleared ? "ok" : held ? "bad" : "wait"}`}>
+                        <ShieldCheck size={16} />
+                        <div>
+                          <strong>
+                            {cleared
+                              ? "Customs cleared"
+                              : held
+                              ? "Customs hold"
+                              : cs === "NEEDS_REVIEW"
+                              ? "Documents verified, awaiting officer sign-off"
+                              : "Awaiting customs documents"}
+                          </strong>
+                          <div className="rsh-customs-sub">
+                            {cleared
+                              ? "Your freight agent will send the final quote for you to accept or decline."
+                              : held
+                              ? "Customs could not clear this consignment. See the officer note below."
+                              : cs === "NEEDS_REVIEW"
+                              ? "Every required document has passed verification. The customs officer is completing sign-off."
+                              : "Upload the documents listed above so customs can begin verification."}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })()}
+
                   {selectedQuote.customsRemarks && (
                     <div style={{ fontSize: "12px", color: "#334155", background: "#f8fafc", padding: "10px 14px", borderRadius: "8px", border: "1px solid #e2e8f0", display: "flex", alignItems: "center", gap: "8px", marginTop: "8px" }}>
                       <ShieldCheck size={16} color="#0284c7" />
