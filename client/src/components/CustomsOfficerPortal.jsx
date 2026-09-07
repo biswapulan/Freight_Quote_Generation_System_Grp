@@ -531,6 +531,25 @@ export default function CustomsOfficerPortal({ initialTab = "pending-reviews" })
     }
   };
 
+  /**
+   * Jump from the sign-off queue straight to one consignment's papers.
+   *
+   * The officer had to switch tabs and find the right consignment by eye,
+   * which is what made a shared document desk hard to work from.
+   */
+  const openDocsForConsignment = (shipment) => {
+    const key = shipment.quoteNo || shipment.id;
+    setOpenGroup(key);
+    setDocNotice(null);
+    handleTabSwitch("document-verification");
+    // The tab renders on the next paint; scroll once the group exists.
+    setTimeout(() => {
+      document
+        .querySelector(".cop-doc-group.open")
+        ?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 120);
+  };
+
   /** Reject one document. A reason is mandatory and reaches the customer. */
   const handleRejectSingleDoc = async (doc) => {
     const reason = window.prompt(
@@ -1144,9 +1163,19 @@ export default function CustomsOfficerPortal({ initialTab = "pending-reviews" })
                               ? "#dc2626"
                               : "#64748b";
                           return (
-                            <span style={{ fontSize: "12px", fontWeight: 600, color: tone }}>
-                              {ds.label}
-                            </span>
+                            <>
+                              <span style={{ fontSize: "12px", fontWeight: 600, color: tone }}>
+                                {ds.label}
+                              </span>
+                              <button
+                                type="button"
+                                className="cop-view-docs-btn"
+                                onClick={() => openDocsForConsignment(s)}
+                                title={`Open the documents uploaded for ${s.quoteNo || s.id}`}
+                              >
+                                <FileCheck size={12} /> View docs
+                              </button>
+                            </>
                           );
                         })()}
                       </td>

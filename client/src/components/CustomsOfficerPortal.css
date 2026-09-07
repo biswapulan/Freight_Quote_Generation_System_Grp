@@ -799,3 +799,24 @@
   .cop-doc-group-head { flex-wrap: wrap; }
   .cop-doc-group-route, .cop-doc-group-progress { width: 100%; }
 }
+
+/* Jump from the sign-off queue to that consignment's papers. */
+.cop-view-docs-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 6px;
+  padding: 3px 9px;
+  border: 1px solid #bfdbfe;
+  border-radius: 5px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.cop-view-docs-btn:hover {
+  background: #dbeafe;
+  border-color: #93c5fd;
+}
