@@ -65,13 +65,27 @@ class CustomsComplianceEngine:
         checklist_items_data = []
 
         # (a) Standard Mandatory Core Documents
+        # The commercial invoice and the packing list are separate documents,
+        # issued for different purposes and uploaded as separate files. Asking
+        # for them as one line meant a customer with both had one checklist
+        # item, and an officer verifying it stamped two papers with one click.
         checklist_items_data.append({
-            "item_name": "Commercial Invoice & Packing List",
-            "description": f"Itemized commercial invoice with currency values and gross/net weights for export from {origin_country} to {destination_country}.",
+            "item_name": "Commercial Invoice",
+            "description": f"Itemized commercial invoice stating currency values and terms of sale for export from {origin_country} to {destination_country}.",
             "mandatory": True,
             "document_required": True,
             "citation": f"WCO Revised Kyoto Convention Annex B / {destination_country} Customs Code",
-            "evidence": "Standard commercial documentation required for customs valuation and tariff assessment.",
+            "evidence": "Basis for customs valuation and tariff assessment.",
+            "status": "PENDING",
+        })
+
+        checklist_items_data.append({
+            "item_name": "Packing List",
+            "description": "Itemized packing list stating package counts, marks and numbers, and gross and net weights per package.",
+            "mandatory": True,
+            "document_required": True,
+            "citation": f"WCO Revised Kyoto Convention Annex B / {destination_country} Customs Code",
+            "evidence": "Used to reconcile declared cargo against the physical consignment at inspection.",
             "status": "PENDING",
         })
 
