@@ -29,6 +29,68 @@ from .validator import CustomsComplianceEngine
 from .rag_engine import CustomsRAGEngine
 
 
+def _normalize_doc_name(name):
+    return "".join(ch for ch in (name or "").lower() if ch.isalnum())
+
+
+def _match_checklist_item(check, document_type):
+    """Find the checklist requirement a document satisfies, by name.
+
+    Uploads only carried a checklist item when the client happened to send its
+    id, which nothing did, so every document arrived unlinked. Verifying one
+    then never marked the requirement satisfied: the checklist stayed PENDING,
+    readiness never reached 100, and a fully stamped consignment still reported
+    all of its documents as missing.
+    """
+    if not check:
+        return None
+    target = _normalize_doc_name(document_type)
+    if not target:
+        return None
+    for item in check.checklist_items.all():
+        if _normalize_doc_name(item.item_name) == target:
+            return item
+    return None
+
+
+def _sync_quote_customs_analysis(shipment_id, check):
+    """Write the live compliance state back onto the quote's stored analysis.
+
+    The quote keeps a snapshot of the customs evaluation taken when it was
+    generated. Verifying documents and signing off updated the compliance check
+    row but never that snapshot, and every dashboard reads the snapshot. So a
+    consignment with all papers stamped and cleared still reported itself as
+    needing documents, and never left the officer's pending queue.
+    """
+    if not check:
+        return
+
+    from quotes.models import Quote
+
+    items = list(check.checklist_items.all())
+    outstanding = [i.item_name for i in items if i.status != "VERIFIED"]
+
+    for quote in Quote.objects.filter(shipment_id=shipment_id):
+        analysis = quote.analysis or {}
+        customs = analysis.get("customs")
+        if not isinstance(customs, dict):
+            continue
+
+        customs["status"] = check.status
+        customs["readiness_score"] = check.readiness_score
+        customs["missing_documents"] = outstanding
+
+        by_name = {i.item_name: i.status for i in items}
+        for entry in customs.get("checklist_items") or []:
+            name = entry.get("item_name")
+            if name in by_name:
+                entry["status"] = by_name[name]
+
+        analysis["customs"] = customs
+        quote.analysis = analysis
+        quote.save(update_fields=["analysis", "updated_at"])
+
+
 class CustomsValidateView(APIView):
     """Validate customs compliance, HS code, Incoterm, and generate legal-cited checklists."""
 
@@ -172,6 +234,11 @@ class CustomsSignOffView(APIView):
         # The officer's decision changes the customs risk input, so the composite
         # risk is recomputed and any affected quote is updated in place.
         reassessment = self._return_to_risk_workflow(check, data)
+
+        # Push the decision onto the quote's stored analysis, which is what the
+        # dashboards read. Without this a signed-off consignment stayed in the
+        # officer's pending queue forever.
+        _sync_quote_customs_analysis(check.shipment_id, check)
 
         return Response({
             "message": f"Customs sign-off decision '{check.status}' recorded successfully.",
@@ -339,6 +406,8 @@ class DocumentUploadView(APIView):
         checklist_item = None
         if checklist_item_id:
             checklist_item = CustomsChecklistItem.objects.filter(id=checklist_item_id).first()
+        if checklist_item is None:
+            checklist_item = _match_checklist_item(check, document_type)
 
         doc = ShipmentDocument.objects.create(
             shipment_id=shipment_id,
@@ -546,6 +615,15 @@ class DocumentVerifyView(APIView):
         )
 
         # Keep the checklist item in step with the officer's decision.
+        if doc.checklist_item is None:
+            doc.checklist_item = _match_checklist_item(
+                doc.customs_check
+                or CustomsComplianceCheck.objects.filter(shipment_id=doc.shipment_id).first(),
+                doc.document_type,
+            )
+            if doc.checklist_item:
+                doc.save(update_fields=["checklist_item"])
+
         if doc.checklist_item:
             doc.checklist_item.status = (
                 "VERIFIED" if decision == "VERIFIED" else "PENDING"
@@ -565,8 +643,14 @@ class DocumentVerifyView(APIView):
             if total:
                 check.readiness_score = round(70.0 + (verified / total) * 30.0, 1)
                 if verified == total:
-                    check.status = "APPROVED"
+                    # Every paper is stamped, but clearance is the officer's
+                    # sign-off, not a side effect of the last verification.
+                    # Marking it APPROVED here retired the consignment from the
+                    # review queue without anyone signing for it.
+                    check.status = "NEEDS_REVIEW"
                 check.save(update_fields=["readiness_score", "status"])
+
+            _sync_quote_customs_analysis(doc.shipment_id, check)
 
         audit_service.record(
             actor_id=officer,
@@ -610,11 +694,12 @@ class DocumentVerifyView(APIView):
             )
 
             # And once every required paper is cleared, say so plainly.
-            if check and check.status == "APPROVED" and decision == "VERIFIED":
+            if check and check.status == "NEEDS_REVIEW" and decision == "VERIFIED":
                 notify.notify_user(
                     shipment.customer_id,
                     "All documents verified",
-                    f"Customs has cleared every required document for shipment {doc.shipment_id}.",
+                    f"Customs has checked every required document for shipment {doc.shipment_id}. "
+                    "It is now with the officer for final sign-off.",
                     category="CUSTOMS",
                     severity="SUCCESS",
                     entity_type="SHIPMENT",
