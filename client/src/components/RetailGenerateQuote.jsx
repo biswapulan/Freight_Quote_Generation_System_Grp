@@ -6,7 +6,8 @@ import "leaflet/dist/leaflet.css";
 import { Ship, Plane, Truck, Zap, Plus, Trash2, X, CheckCircle, FileText, Check, Bot, Cpu, Sparkles, Eye, ArrowRight, Clock, Anchor, MapPin, AlertTriangle, CheckCircle2, ShieldAlert, Navigation, RefreshCw } from "lucide-react";
 import { PORTS_MASTER, useRetailQuotes } from "../context/RetailQuotesContext";
 import { createSavedAddress, getSavedAddresses } from "../api/auth";
-import { confirmQuote, estimateQuote } from "../api/quotes";
+import { createShipment, generateQuote } from "../api/workflow";
+import { addOrUpdatePlatformQuote, getQuoteRouteData } from "../utils/quoteWorkflow";
 import { useAuth } from "../context/AuthContext";
 import {
   validateAddressProximity,
@@ -996,200 +997,156 @@ export default function RetailGenerateQuote() {
     const apiMode = form.mode === "ground" ? "road" : form.mode === "express" ? "air" : form.mode;
     const cargoType = form.chkHazardous ? "hazardous" : form.chkTemp ? "cold_chain" : form.mode === "express" ? "express" : "general";
 
+    const startedAt = Date.now();
+    const stamp = () => {
+      const elapsed = (Date.now() - startedAt) / 1000;
+      return `[${String(Math.floor(elapsed / 60)).padStart(2, "0")}:${elapsed.toFixed(1).padStart(4, "0")}]`;
+    };
+    const log = (line) => setAgentLogs((prev) => [...prev, `${stamp()} ${line}`]);
+
     setAgentLogs([
-      `[00:00.1] [DISPATCH] Retailer submitted shipment enquiry for lane: ${originName} → ${destName}`,
-      `[00:00.3] [INGEST] Ingesting specifications & dispatching to AI Quote Generation Agent...`,
+      `[00:00.0] [DISPATCH] Retailer submitted shipment enquiry for lane: ${originName} → ${destName}`,
+      `[00:00.0] [INGEST] Registering shipment with the platform...`,
     ]);
 
+    // Detailed commercial line items for the printable quotation document. The
+    // authoritative price and risk come from the server pipeline below; this
+    // supplies the invoice presentation (THC, documentation, insurance, margin).
+    const calcResult = calculateAuthoritativeFreightQuote({
+      originPort: oPort,
+      destPort: dPort,
+      mode: form.mode,
+      loadType: form.loadType,
+      incoterm: form.incoterm,
+      items,
+      chkHazardous: form.chkHazardous,
+      chkTemp: form.chkTemp,
+      chkInsurance: form.chkInsurance,
+      declaredVal: form.declaredVal,
+      currency: form.currency || "INR",
+    });
+
     try {
-      // Step 1: Ingest & Dispatch (1.4s)
-      await new Promise((r) => setTimeout(r, 1400));
-      setAgentStage(2);
-      setAgentLogs((prev) => [
-        ...prev,
-        `[00:01.4] [AGENT] Agent evaluating carrier tariffs, port handling fees & congestion indices...`,
-        `[00:01.9] [SPECS] Cargo specs: ${summaryStats.totalWeight.toLocaleString()} kg gross, ${summaryStats.containerSummaryStr}, ${cargoType.toUpperCase()} classification...`,
-        `[00:02.5] [ROUTE] Resolving waypoint coordinates for route: ${oPort?.code || originKey} → ${dPort?.code || destKey}...`,
-      ]);
-
-      // Step 2: Agent evaluates request & route (1.8s)
-      await new Promise((r) => setTimeout(r, 1800));
-      setAgentStage(3);
-      setAgentLogs((prev) => [
-        ...prev,
-        `[00:03.3] [TARIFF] Applying Admin Rate Configuration matrix & BAF fuel indexation...`,
-        `[00:03.9] [COMPUTE] Calculating linehaul distance tariff, handling, and guaranteed pricing...`,
-      ]);
-
-      // Calculate dynamic authoritative rate based on Admin config & route parameters
-      const calcResult = calculateAuthoritativeFreightQuote({
-        originPort: oPort,
-        destPort: dPort,
-        mode: form.mode,
-        loadType: form.loadType,
-        incoterm: form.incoterm,
-        items,
-        chkHazardous: form.chkHazardous,
-        chkTemp: form.chkTemp,
-        chkInsurance: form.chkInsurance,
-        declaredVal: form.declaredVal,
-        currency: form.currency || "INR",
+      // ---- Step 1: create the shipment (PDF section 3, steps 2-3) ----
+      const shipment = await createShipment(token, {
+        origin: originCity,
+        destination: destCity,
+        cargoType: items[0]?.desc || cargoType,
+        weightKg: Math.max(summaryStats.totalWeight, 1),
+        volumeCbm: Math.max(summaryStats.totalContainers * 20, 1),
+        transportMode: apiMode,
+        containerType: items[0]?.containerType || "40FT",
+        hsCode: form.hsCode || "",
       });
 
-      const isValidMongoId = (id) => typeof id === "string" && /^[a-fA-F0-9]{24}$/.test(id);
-      let result = null;
+      setAgentStage(2);
+      log(`[SHIPMENT] Created ${shipment.id} with status ${shipment.status}.`);
+      log(`[ORCHESTRATOR] Dispatching to Route, Pricing, Weather, Customs and Risk agents...`);
 
-      try {
-        const apiRes = await estimateQuote(token, {
-          origin: originCity,
-          destination: destCity,
-          weightKg: Math.max(summaryStats.totalWeight, 1),
-          volumeM3: Math.max(summaryStats.totalContainers * 20, 1),
-          cargoType,
-          mode: apiMode,
-          pickupAddressId: isValidMongoId(form.pickupAddr) ? form.pickupAddr : undefined,
-          deliveryAddressId: isValidMongoId(form.deliveryAddr) ? form.deliveryAddr : undefined,
-        });
-        if (apiRes && apiRes.breakdown) {
-          result = apiRes;
+      // ---- Steps 4-9: the whole AI pipeline runs server-side ----
+      const apiQuote = await generateQuote(token, shipment.id);
+      const analysis = apiQuote.analysis || {};
+
+      setAgentStage(3);
+
+      // Replay the real agent telemetry rather than invented timings.
+      ["route", "pricing", "weather", "customs", "risk"].forEach((agent) => {
+        const detail = analysis[agent];
+        if (detail?.summary) {
+          log(`[${agent.toUpperCase()}] ${detail.summary} (${detail.agent_duration_ms ?? 0}ms)`);
         }
-      } catch (err) {
-        console.info("Using authoritative client Quote Agent calculation engine.");
+      });
+      if (analysis.degraded_agents?.length) {
+        log(`[DEGRADED] Operating without: ${analysis.degraded_agents.join(", ")}. Rule pricing applied.`);
+      }
+      if (analysis.recommendation?.rationale) {
+        log(`[RECOMMENDATION] ${analysis.recommendation.rationale}`);
       }
 
-      if (!result) {
-        result = {
-          id: "qt_" + Math.random().toString(36).slice(2, 10),
-          origin: originName,
-          destination: destName,
-          mode: form.mode,
-          distance_km: calcResult.distance_km,
-          chargeable_weight_kg: calcResult.chargeable_weight_kg,
-          transit_days: calcResult.transit_days,
-          currency: form.currency || "INR",
-          breakdown: calcResult.breakdown,
-          status: "issued",
-          created_at: new Date().toISOString(),
-        };
-      }
+      // Merge the server quote (authoritative) with the presentation breakdown.
+      const result = {
+        id: apiQuote.id,
+        shipmentId: shipment.id,
+        origin: originName,
+        destination: destName,
+        mode: form.mode,
+        distance_km: apiQuote.distanceKm,
+        chargeable_weight_kg: calcResult.chargeable_weight_kg,
+        transit_days: apiQuote.estimatedTransitDays,
+        currency: form.currency || "INR",
+        breakdown: calcResult.breakdown,
+        serverQuote: apiQuote,
+        status: apiQuote.status,
+        created_at: apiQuote.created_at,
+      };
 
       setGeneratedQuote(result);
-      const quoteCode = result.id ? `QT-${result.id.slice(-8).toUpperCase()}` : "QT-NEW";
+      addOrUpdatePlatformQuote(apiQuote);
 
-      // Step 3: Determining Estimation (1.8s)
-      await new Promise((r) => setTimeout(r, 1800));
-      setAgentStage(3);
-      setAgentLogs((prev) => [
-        ...prev,
-        `[00:04.9] [RATE] Authoritative dynamic rate computed: ₹${Math.round(result.breakdown?.total || 0).toLocaleString("en-IN")}`,
-        `[00:05.4] [SECURITY] Applying security checksum and locking guaranteed tariff...`,
-      ]);
-
-      if (addQuotation) {
-        addQuotation({
-          id: result.id,
-          quoteNo: quoteCode,
-          customerName: user?.full_name || form.custName || "Retail Customer",
-          customerCity: originCity,
-          laneCode: `${originName} → ${destName}`,
-          laneSub: `${oPort?.code || form.originId} → ${dPort?.code || form.destId}`,
-          origin: originName,
-          destination: destName,
-          mode: form.mode,
-          modeLabel: form.mode === "ocean" ? "Ocean Freight" : form.mode === "air" ? "Air Freight" : form.mode === "express" ? "Express Air" : "Road Freight",
-          basis: `${summaryStats.totalWeight.toLocaleString()} kg / ${summaryStats.containerSummaryStr}`,
-          transit: `${result.transit_days || 14} d`,
-          totalFormatted: `₹ ${Math.round(result.breakdown?.total || 0).toLocaleString("en-IN")}`,
-          totalNum: Number(result.breakdown?.total || 0),
-          breakdown: result.breakdown || {},
-          status: "GENERATED",
-          shipmentStatus: "PROCESSING",
-          agentRemarks: "AI Services generated route, tariff breakdown, and dynamic pricing.",
-          customsRemarks: "AI analysis complete. Awaiting customer request and document submission.",
-          created: "Today",
-          createdAt: new Date().toISOString(),
-        });
-      }
-
-      // Step 4: Quote verified and returned (1.4s)
-      await new Promise((r) => setTimeout(r, 1400));
       setAgentStage(4);
-      setAgentLogs((prev) => [
-        ...prev,
-        `[00:06.1] [VERIFIED] Quotation verified & certified by Agent: ${quoteCode}`,
-        `[00:06.6] [READY] Presenting official quotation to retailer...`,
-      ]);
+      log(`[VERIFIED] Quotation ${apiQuote.id} issued, status ${apiQuote.status}.`);
+      log(`[READY] Presenting official quotation...`);
 
-      // Reveal quote to retailer (~0.8s)
-      await new Promise((r) => setTimeout(r, 800));
       setAgentEvaluating(false);
       setShowQuoteModal(true);
-      if (reloadQuotes) {
-        reloadQuotes();
-      }
+      if (reloadQuotes) reloadQuotes();
     } catch (error) {
       setAgentEvaluating(false);
-      setQuoteError(error.message || "Quote Generation Agent encountered an issue evaluating this request.");
+      setQuoteError(
+        error.message ||
+          "The quote pipeline could not be reached. Please check your connection and try again.",
+      );
     } finally {
       setGenerating(false);
     }
   }
 
+  /**
+   * The quote already exists server-side and is queued for freight-agent review,
+   * so "save as draft" is simply closing the modal — the record is already in
+   * My Quotes. There is no DRAFT transition backwards from PENDING_REVIEW.
+   */
   function handleSaveAsDraftInModal() {
     if (!generatedQuote) return;
-    if (updateQuotationStatus) {
-      updateQuotationStatus(generatedQuote.id, "DRAFT", {
-        shipmentStatus: "DRAFT",
-        agentRemarks: "Quote offer saved as DRAFT by customer. Awaiting customer request.",
-        customsRemarks: "Draft enquiry saved.",
-      });
-    }
     setShowQuoteModal(false);
-    window.alert("Quotation saved as DRAFT in My Quotes.");
+    window.alert(
+      `Quotation ${generatedQuote.id} is saved in My Quotes and is with our freight team for review.`,
+    );
     if (reloadQuotes) reloadQuotes();
   }
 
+  /**
+   * Customer confirms they want to proceed. The shipment and quote were already
+   * created by the pipeline, so this acknowledges and shows the booking
+   * reference; the freight agent still has to approve and send the final quote
+   * before the customer can accept it (PDF section 3, steps 10-12).
+   */
   async function handleConfirmShipment() {
     if (!generatedQuote) return;
 
     setConfirming(true);
     setQuoteError("");
-    const refCode = `BK-${(generatedQuote.id || Date.now().toString()).slice(-8).toUpperCase()}`;
 
     try {
-      const confirmedQuote = await confirmQuote(token, generatedQuote.id).catch(() => null);
-      if (confirmedQuote) {
-        setGeneratedQuote(confirmedQuote);
-      }
       setShowQuoteModal(false);
-      setBookingRef(refCode);
-      if (updateQuotationStatus) {
-        updateQuotationStatus(generatedQuote.id, "REQUESTED", {
-          shipmentStatus: "SUBMITTED",
-          requiresCustomsReview: true,
-          agentRemarks: "Customer requested quote. Dispatched to Freight Agent and Customs review queue.",
-          customsRemarks: "Shipment requested. Awaiting document verification by Customs Officer.",
-        });
-      }
+      const refId = generatedQuote.id || generatedQuote.quoteNo || generatedQuote.shipmentId;
+      setBookingRef(refId);
+
+      // Cache for instant retrieval on the recommendation page
+      try {
+        localStorage.setItem("freightai_current_quote", JSON.stringify(generatedQuote));
+        if (typeof getQuoteRouteData === "function") {
+          getQuoteRouteData(refId, generatedQuote);
+        }
+      } catch {}
+
+      if (reloadQuotes) reloadQuotes();
+
+      // Directly navigate to the Recommended Route Options & Approval Sequence screen!
+      navigate(`/quotes/${refId}`);
+    } catch (err) {
+      console.error("Failed to navigate to quote details:", err);
       setShowSuccessModal(true);
-      if (reloadQuotes) {
-        reloadQuotes();
-      }
-    } catch {
-      setShowQuoteModal(false);
-      setBookingRef(refCode);
-      if (updateQuotationStatus) {
-        updateQuotationStatus(generatedQuote.id, "REQUESTED", {
-          shipmentStatus: "SUBMITTED",
-          requiresCustomsReview: true,
-          agentRemarks: "Customer requested quote. Dispatched to Freight Agent and Customs review queue.",
-          customsRemarks: "Shipment requested. Awaiting document verification by Customs Officer.",
-        });
-      }
-      setShowSuccessModal(true);
-      if (reloadQuotes) {
-        reloadQuotes();
-      }
     } finally {
       setConfirming(false);
     }
@@ -1198,7 +1155,7 @@ export default function RetailGenerateQuote() {
   function exportPDF() {
     const el = printablePdfRef.current || modalContentRef.current;
     if (!el) return;
-    const exportId = generatedQuote ? `QT-${generatedQuote.id.slice(-8).toUpperCase()}` : "QT-OFFICIAL";
+    const exportId = generatedQuote?.id ? `QT-${String(generatedQuote.id).slice(-8).toUpperCase()}` : "QT-OFFICIAL";
     const opt = {
       margin: [6, 6, 6, 6],
       filename: `FreightAI_Official_Quotation_${exportId}.pdf`,
@@ -1901,7 +1858,7 @@ export default function RetailGenerateQuote() {
               </div>
               <div style={{ textAlign: "right" }}>
                 <span style={{ fontSize: 18, fontWeight: 800, color: "#ff9800", display: "block" }}>
-                  {generatedQuote ? `QT-${generatedQuote.id.slice(-8).toUpperCase()}` : quote.id}
+                  {generatedQuote?.id ? `QT-${String(generatedQuote.id).slice(-8).toUpperCase()}` : (quote?.id || "QT-OFFICIAL")}
                 </span>
                 <span style={{ fontSize: 12, color: "#64748b" }}>Date: {new Date().toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}</span>
               </div>
@@ -2080,17 +2037,30 @@ export default function RetailGenerateQuote() {
               <h3 style={{ fontSize: 26, color: "#ff9800", fontWeight: 800, marginTop: 2 }}>{bookingRef}</h3>
             </div>
 
-            <button
-              type="button"
-              className="btn-orange-primary"
-              style={{ width: "100%", justifyContent: "center" }}
-              onClick={() => {
-                setShowSuccessModal(false);
-                navigate("/dashboard/my-quotes");
-              }}
-            >
-              Go to Quotations Dashboard &rarr;
-            </button>
+            <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+              <button
+                type="button"
+                className="btn-orange-primary"
+                style={{ width: "100%", justifyContent: "center" }}
+                onClick={() => {
+                  setShowSuccessModal(false);
+                  navigate(`/quotes/${bookingRef}`);
+                }}
+              >
+                View Recommended Carrier Routes &amp; Approval Sequence &rarr;
+              </button>
+              <button
+                type="button"
+                className="btn-secondary-light"
+                style={{ width: "100%", justifyContent: "center" }}
+                onClick={() => {
+                  setShowSuccessModal(false);
+                  navigate("/dashboard/my-quotes");
+                }}
+              >
+                Go to Quotations Dashboard
+              </button>
+            </div>
           </div>
         </div>
       )}

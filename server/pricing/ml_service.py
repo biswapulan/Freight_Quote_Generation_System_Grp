@@ -5,12 +5,13 @@ Predicts market spot freight rates in INR and USD, evaluates rule-based baseline
 computes variance (Δ%), 95% confidence intervals, and issues strategic commercial recommendations.
 """
 
-import os
 import json
-import joblib
-import pandas as pd
-import numpy as np
-from typing import Dict, Any
+import logging
+import os
+import threading
+from typing import Any, Dict
+
+logger = logging.getLogger(__name__)
 
 # Path to serialized model
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
@@ -22,19 +23,56 @@ INR_TO_USD = 1.0 / 83.5
 
 
 class MLPricingService:
+    # joblib/pandas/scikit-learn are heavy optional dependencies. They are
+    # imported on first use rather than at module import so that a deployment
+    # without them still boots and serves every non-ML endpoint; the pricing
+    # agent then degrades to the rule price (core test scenario 5).
     _model = None
+    _model_load_attempted = False
+    _load_lock = threading.Lock()
     _benchmarks = None
 
     @classmethod
     def get_model(cls):
-        if cls._model is None:
-            if os.path.exists(MODEL_PATH):
-                try:
-                    cls._model = joblib.load(MODEL_PATH)
-                except Exception as e:
-                    print(f"Warning: Failed to load ML model artifact: {e}")
-                    cls._model = None
+        """Return the trained pipeline, or None if it cannot be loaded."""
+        # Fast path only once the model is actually present. Checking the
+        # "attempted" flag here would be wrong: the warm-up thread sets it before
+        # the load finishes, so a concurrent caller would see None and wrongly
+        # conclude the model is unavailable.
+        if cls._model is not None:
+            return cls._model
+
+        # Blocks until an in-flight load completes, then the re-check below picks
+        # up its result rather than starting a second load.
+        with cls._load_lock:
+            if cls._model is not None or cls._model_load_attempted:
+                return cls._model
+            cls._model_load_attempted = True
+
+            if not os.path.exists(MODEL_PATH):
+                logger.warning("ML model artifact not found at %s", MODEL_PATH)
+                return None
+            try:
+                import joblib
+
+                cls._model = joblib.load(MODEL_PATH)
+                logger.info("Loaded ML pricing model from %s", MODEL_PATH)
+            except Exception as exc:
+                logger.warning("Failed to load ML model artifact: %s", exc)
+                cls._model = None
         return cls._model
+
+    @classmethod
+    def warm_up(cls):
+        """Preload the model so the first customer request does not pay for it.
+
+        Importing scikit-learn and deserialising the pipeline takes seconds;
+        called from AppConfig.ready() on a background thread.
+        """
+        try:
+            cls.get_model()
+        except Exception:
+            logger.exception("ML model warm-up failed")
 
     @classmethod
     def get_benchmarks(cls) -> Dict[str, Any]:
@@ -130,6 +168,8 @@ class MLPricingService:
         **kwargs,
     ) -> Dict[str, Any]:
         """Predicts spot market rate using the model trained on mentor dataset."""
+        import pandas as pd
+
         model = cls.get_model()
 
         # Handle container aliases

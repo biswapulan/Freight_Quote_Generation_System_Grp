@@ -18,6 +18,7 @@ import AgentQuoteDesk from "./AgentQuoteDesk";
 import AgentShipmentDispatch from "./AgentShipmentDispatch";
 import AgentSpotRates from "./AgentSpotRates";
 import AgentPerformance from "./AgentPerformance";
+import AdminAuditLogs from "./AdminAuditLogs";
 import AdminOverview from "./AdminOverview";
 import AdminRateConfig from "./AdminRateConfig";
 import AdminUsers from "./AdminUsers";
@@ -138,16 +139,20 @@ export default function DashboardShell() {
 
   if (!user) return null;
 
+  // Role comes from the authenticated account only.
+  //
+  // This used to fall back to substring-matching the email address, so anyone
+  // registering as "admin.something@..." was shown the Admin portal. The email
+  // is not an authorisation claim.
   const rawRole = (user.role || "").toLowerCase();
-  const userEmail = (user.email || "").toLowerCase();
   const role =
-    rawRole === "customs" || rawRole === "customs_officer" || userEmail.includes("customs") || userEmail.includes("officer")
+    rawRole === "customs" || rawRole === "customs_officer"
       ? "customs"
-      : rawRole === "admin" || userEmail.includes("admin")
+      : rawRole === "admin"
       ? "admin"
-      : rawRole === "agent" || userEmail.includes("agent")
+      : rawRole === "agent"
       ? "agent"
-      : rawRole === "business" || userEmail.includes("business")
+      : rawRole === "business"
       ? "business"
       : "retail";
 
@@ -223,33 +228,9 @@ export default function DashboardShell() {
             <span className="dash-role">{ROLE_LABELS[role] || "Account"}</span>
           </div>
 
-          <div style={{ margin: "8px 0 10px", padding: "6px 8px", background: "rgba(255, 255, 255, 0.08)", borderRadius: "8px" }}>
-            <label style={{ fontSize: "10px", textTransform: "uppercase", letterSpacing: "0.5px", color: "rgba(255, 255, 255, 0.6)", display: "block", marginBottom: "4px", fontWeight: 700 }}>
-              Switch Dashboard Role:
-            </label>
-            <select
-              style={{ width: "100%", padding: "6px 8px", background: "#0f172a", border: "1px solid rgba(255, 255, 255, 0.25)", borderRadius: "6px", color: "#f8fafc", fontSize: "11.5px", fontWeight: 600, cursor: "pointer" }}
-              value={role}
-              onChange={(e) => {
-                const target = e.target.value;
-                const profiles = {
-                  retail: { token: "freight_jwt_retail_demo", role: "retail", full_name: "Anand Verma (Customer)", email: "retail@freightai.com" },
-                  agent: { token: "freight_jwt_agent_demo", role: "agent", full_name: "Rajesh K. (Freight Agent)", email: "agent@freightai.com" },
-                  customs: { token: "freight_jwt_customs_demo", role: "customs", full_name: "Officer Sharma (Customs)", email: "customs@freightai.com" },
-                  admin: { token: "freight_jwt_admin_demo", role: "admin", full_name: "Platform Admin", email: "admin@freightai.com" },
-                };
-                if (profiles[target]) {
-                  login(profiles[target]);
-                  navigate("/dashboard");
-                }
-              }}
-            >
-              <option value="retail">👤 Customer Dashboard</option>
-              <option value="customs">🛡️ Customs Officer</option>
-              <option value="agent">🧑‍💼 Freight Agent Desk</option>
-              <option value="admin">⚙️ Admin Dashboard</option>
-            </select>
-          </div>
+          {/* The role switcher that used to live here handed out fabricated
+              admin tokens on request, so any visitor could open the Admin
+              portal. Roles now come only from the signed-in account. */}
 
           <div className="dash-clock">
             <span className="dash-clock-date">{dateLabel}</span>
@@ -297,8 +278,10 @@ export default function DashboardShell() {
             )
           ) : /* Admin Portal Views */
           role === "admin" ? (
-            activeItem.slug === "dashboard" || activeItem.slug === "analytics" || activeItem.slug === "reports" || activeItem.slug === "audit-logs" || activeItem.slug === "settings" ? (
+            activeItem.slug === "dashboard" || activeItem.slug === "analytics" || activeItem.slug === "reports" || activeItem.slug === "settings" ? (
               <AdminOverview />
+            ) : activeItem.slug === "audit-logs" ? (
+              <AdminAuditLogs />
             ) : activeItem.slug === "rate-config" || activeItem.slug === "pricing-rules" ? (
               <AdminRateConfig />
             ) : activeItem.slug === "customs-portal" ? (
@@ -307,7 +290,9 @@ export default function DashboardShell() {
               <AdminUsers />
             ) : activeItem.slug === "master-data" || activeItem.slug === "locations" || activeItem.slug === "container-types" || activeItem.slug === "cargo-categories" ? (
               <AdminMasterData />
-            ) : activeItem.slug === "all-shipments" || activeItem.slug === "all-quotes" ? (
+            ) : activeItem.slug === "all-shipments" ? (
+              <AgentShipmentDispatch />
+            ) : activeItem.slug === "all-quotes" ? (
               <AgentQuoteDesk />
             ) : activeItem.slug === "routes" ? (
               <RetailRoutes />

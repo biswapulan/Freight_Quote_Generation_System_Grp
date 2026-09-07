@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   FileText,
   UploadCloud,
@@ -16,193 +16,94 @@ import {
   Upload,
   FileUp,
 } from "lucide-react";
-import { getPlatformQuotes } from "../utils/quoteWorkflow";
+import { listShipmentDocuments, uploadShipmentDocument } from "../api/workflow";
+import { usePlatformQuotes } from "../hooks/usePlatformQuotes";
+import { useAuth } from "../context/AuthContext";
 import "./DocumentsCenter.css";
 
-const INITIAL_DOCUMENTS = [
-  {
-    id: "doc-1",
-    name: "Commercial_Invoice_INV-2026-88.pdf",
-    type: "Commercial Invoice",
-    shipmentRef: "SHP-1001",
-    route: "Chennai ➔ Rotterdam",
-    uploadedAt: "Today, 14:20",
-    size: "1.4 MB",
-    status: "VERIFIED",
-    verifiedBy: "Customs Officer Sharma",
-    notes: "HS Code 8517.12 declaration matched with manufacturer packing specs.",
-  },
-  {
-    id: "doc-2",
-    name: "Bill_of_Lading_Draft_MAEU9921.pdf",
-    type: "Bill of Lading Draft",
-    shipmentRef: "SHP-1001",
-    route: "Chennai ➔ Rotterdam",
-    uploadedAt: "Today, 11:05",
-    size: "840 KB",
-    status: "VERIFIED",
-    verifiedBy: "Customs Officer Sharma",
-    notes: "Carrier pre-advice draft endorsed by Maersk Line terminal desk.",
-  },
-  {
-    id: "doc-3",
-    name: "CE_Certificate_Conformity_EU.pdf",
-    type: "CE Certificate",
-    shipmentRef: "SHP-1001",
-    route: "Chennai ➔ Rotterdam",
-    uploadedAt: "Yesterday",
-    size: "2.1 MB",
-    status: "VERIFIED",
-    verifiedBy: "Customs Officer Sharma",
-    notes: "EU Directives 2014/53/EU and 2011/65/EU RoHS compliance validated.",
-  },
-  {
-    id: "doc-4",
-    name: "Safety_Data_Sheet_MSDS_Chem.pdf",
-    type: "Safety Data Sheet (MSDS)",
-    shipmentRef: "SHP-1002",
-    route: "Mumbai ➔ Hamburg",
-    uploadedAt: "2 days ago",
-    size: "3.2 MB",
-    status: "ACTION_REQUIRED",
-    verifiedBy: "Customs Officer Patel",
-    notes: "Section 14 UN 1993 flashpoint test report missing accredited lab stamp. Resubmission required.",
-  },
-  {
-    id: "doc-5",
-    name: "Certificate_of_Origin_Textiles.pdf",
-    type: "Certificate of Origin",
-    shipmentRef: "SHP-1003",
-    route: "Nhava Sheva ➔ Jebel Ali",
-    uploadedAt: "3 days ago",
-    size: "950 KB",
-    status: "UNDER_REVIEW",
-    verifiedBy: "Automated Document OCR",
-    notes: "Awaiting digital stamp from export authority.",
-  },
-];
+// INITIAL_DOCUMENTS used to seed this screen with invented shipments/documents so the
+// UI looked populated before any real data existed. The screen now renders
+// live platform records, so the fixture has been removed.
 
-export function getCombinedVaultDocuments() {
-  let vaultDocs = [];
-  try {
-    const saved = localStorage.getItem("freightai_vault_docs_v2");
-    if (saved) {
-      const parsed = JSON.parse(saved);
-      if (Array.isArray(parsed)) {
-        vaultDocs = parsed.filter((d) => d.name !== "Uploaded_Customs_Declaration.pdf");
-      }
-    }
-  } catch {}
 
-  // Automatically harvest any uploaded trade & customs documents across all active shipments and quotes!
-  try {
-    const platformQuotes = getPlatformQuotes();
-    const retailQuotesRaw = localStorage.getItem("freightai_retail_quotes");
-    const retailQuotes = retailQuotesRaw ? JSON.parse(retailQuotesRaw) : [];
+/**
+ * Map a platform ShipmentDocument onto the row shape this vault renders.
+ *
+ * The vault previously assembled itself from three localStorage keys, so the
+ * documents it listed existed only in the browser that uploaded them and the
+ * customs officer could never open one.
+ */
+export function mapApiDocument(doc, quotesById = new Map()) {
+  const quote = quotesById.get(doc.shipment_id);
+  const uploadedAt = doc.uploaded_at ? new Date(doc.uploaded_at) : null;
 
-    const allQuotesMap = new Map();
-    if (Array.isArray(platformQuotes)) {
-      platformQuotes.forEach((q) => allQuotesMap.set(q.quoteNo || q.id, q));
-    }
-    if (Array.isArray(retailQuotes)) {
-      retailQuotes.forEach((q) => {
-        const id = q.quoteNo || q.id;
-        if (!allQuotesMap.has(id)) {
-          allQuotesMap.set(id, q);
-        } else {
-          const prev = allQuotesMap.get(id);
-          if (q.documents && Array.isArray(q.documents)) {
-            allQuotesMap.set(id, { ...prev, documents: q.documents });
-          }
-        }
-      });
-    }
-
-    allQuotesMap.forEach((quote) => {
-      if (Array.isArray(quote.documents)) {
-        quote.documents.forEach((d) => {
-          if (d.fileName || d.status === "UPLOADED" || d.status === "VERIFIED") {
-            const qId = quote.quoteNo || quote.id || "SHP-1001";
-            const docId = `doc-${qId}-${d.name.replace(/[^a-zA-Z0-9]/g, "_")}`;
-            const routeStr = quote.laneCode ||
-              (quote.origin && quote.destination
-                ? `${quote.origin} ➔ ${quote.destination}`
-                : "Chennai ➔ Rotterdam");
-            const fileName = d.fileName || `${d.name.replace(/\s+/g, "_")}.pdf`;
-            const sizeStr = d.fileSize || "1.2 MB";
-            const uploadedTime = d.uploadedAt
-              ? (d.uploadedAt.includes("T")
-                  ? "Today, " + new Date(d.uploadedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
-                  : d.uploadedAt)
-              : "Just now";
-
-            const vaultEntry = {
-              id: docId,
-              name: fileName,
-              type: d.name,
-              fileName: fileName,
-              shipmentRef: qId,
-              route: routeStr,
-              uploadedAt: uploadedTime,
-              size: sizeStr,
-              status: d.status === "VERIFIED" ? "VERIFIED" : "UNDER_REVIEW",
-              verifiedBy: d.status === "VERIFIED" ? (quote.assignedOfficer || "Customs Officer Sharma") : "AI Automated OCR Scanner",
-              notes: d.status === "VERIFIED"
-                ? `Verified & cleared by Customs Officer for shipment ${qId}.`
-                : `Uploaded by customer for shipment ${qId}. Queued for automated OCR validation & Customs Officer verification.`,
-            };
-
-            const existingIdx = vaultDocs.findIndex(
-              (v) => v.id === docId || (v.shipmentRef === qId && v.type === d.name)
-            );
-
-            if (existingIdx >= 0) {
-              vaultDocs[existingIdx] = { ...vaultDocs[existingIdx], ...vaultEntry };
-            } else {
-              vaultDocs.unshift(vaultEntry);
-            }
-          }
-        });
-      }
-    });
-
-    if (vaultDocs.length > 0) {
-      localStorage.setItem("freightai_vault_docs_v2", JSON.stringify(vaultDocs));
-    }
-  } catch (err) {
-    console.error("Error aggregating quote documents into vault:", err);
-  }
-
-  if (vaultDocs.length === 0) {
-    const isCleared = localStorage.getItem("freightai_vault_cleared") === "true";
-    if (!isCleared) {
-      return INITIAL_DOCUMENTS;
-    }
-  }
-
-  return vaultDocs;
+  return {
+    id: doc.id,
+    name: doc.file_name,
+    type: doc.document_type,
+    fileName: doc.file_name,
+    fileUrl: doc.file_url || "",
+    shipmentRef: doc.shipment_id,
+    route: quote ? `${quote.origin} ➔ ${quote.destination}` : "—",
+    uploadedAt: uploadedAt
+      ? uploadedAt.toLocaleString("en-IN", {
+          day: "2-digit",
+          month: "short",
+          hour: "2-digit",
+          minute: "2-digit",
+        })
+      : "—",
+    size: doc.file_size ? `${(doc.file_size / 1024).toFixed(0)} KB` : "—",
+    status: doc.verification_status === "VERIFIED" ? "VERIFIED" : doc.verification_status,
+    verifiedBy: doc.verified_by || "Awaiting verification",
+    notes: doc.rejection_reason || `Uploaded by ${doc.uploaded_by || "customer"}.`,
+  };
 }
 
 export default function DocumentsCenter() {
-  const [documents, setDocuments] = useState(() => getCombinedVaultDocuments());
+  const { token, user } = useAuth();
+  const { quotes } = usePlatformQuotes();
+  const [documents, setDocuments] = useState([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [filterStatus, setFilterStatus] = useState("all");
   const [uploadSuccess, setUploadSuccess] = useState(false);
   const [successMsg, setSuccessMsg] = useState("");
+  const [loadError, setLoadError] = useState("");
+  const [uploading, setUploading] = useState(false);
 
-  // Sync real-time when documents are uploaded in Quote Modal or Customs Portal
+  // Every shipment the caller can see, so their documents can be listed.
+  const shipmentIds = useMemo(
+    () => [...new Set(quotes.map((q) => q.shipmentId).filter(Boolean))],
+    [quotes],
+  );
+  const quotesByShipment = useMemo(
+    () => new Map(quotes.filter((q) => q.shipmentId).map((q) => [q.shipmentId, q])),
+    [quotes],
+  );
+
+  const loadDocuments = useCallback(async () => {
+    if (!token || !shipmentIds.length) {
+      setDocuments([]);
+      return;
+    }
+    try {
+      setLoadError("");
+      const batches = await Promise.all(
+        shipmentIds.map((id) =>
+          listShipmentDocuments(token, id)
+            .then((d) => d.results || [])
+            .catch(() => []),
+        ),
+      );
+      setDocuments(batches.flat().map((d) => mapApiDocument(d, quotesByShipment)));
+    } catch (err) {
+      setLoadError(err.message || "Could not load documents.");
+    }
+  }, [token, shipmentIds, quotesByShipment]);
+
   useEffect(() => {
-    const handleVaultSync = () => {
-      setDocuments(getCombinedVaultDocuments());
-    };
-
-    window.addEventListener("freightai_vault_updated", handleVaultSync);
-    window.addEventListener("storage", handleVaultSync);
-    return () => {
-      window.removeEventListener("freightai_vault_updated", handleVaultSync);
-      window.removeEventListener("storage", handleVaultSync);
-    };
-  }, []);
+    loadDocuments();
+  }, [loadDocuments]);
 
   // Real Upload Modal State
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
@@ -232,68 +133,54 @@ export default function DocumentsCenter() {
     }
   };
 
-  const handleDeleteDoc = (id) => {
-    const updated = documents.filter((d) => d.id !== id);
-    setDocuments(updated);
-    try {
-      localStorage.setItem("freightai_vault_docs_v2", JSON.stringify(updated));
-    } catch {}
+  /**
+   * Documents are compliance records the customs officer relies on, so the vault
+   * does not delete them client-side. Removal has to be a server-side decision
+   * with an audit trail, which the platform does not currently expose.
+   */
+  const handleDeleteDoc = () => {
+    window.alert(
+      "Trade documents are compliance records and cannot be removed from the vault. " +
+        "Ask a customs officer to reject the document instead.",
+    );
   };
 
-  const handleClearAll = () => {
-    if (window.confirm("Are you sure you want to clear all documents from the vault?")) {
-      setDocuments([]);
-      try {
-        localStorage.setItem("freightai_vault_docs_v2", JSON.stringify([]));
-        localStorage.setItem("freightai_vault_cleared", "true");
-      } catch {}
-    }
-  };
-
-  const handleRestoreDefaults = () => {
-    setDocuments(INITIAL_DOCUMENTS);
-    try {
-      localStorage.setItem("freightai_vault_docs_v2", JSON.stringify(INITIAL_DOCUMENTS));
-      localStorage.removeItem("freightai_vault_cleared");
-    } catch {}
-  };
-
-  const handleConfirmUpload = (e) => {
+  /** Upload a real file against a shipment. */
+  const handleConfirmUpload = async (e) => {
     e.preventDefault();
-    if (!selectedFile) return;
+    if (!selectedFile || uploading) return;
 
-    const sizeFormatted = selectedFile.size > 1024 * 1024
-      ? `${(selectedFile.size / (1024 * 1024)).toFixed(1)} MB`
-      : `${Math.round(selectedFile.size / 1024)} KB`;
+    if (!shipmentRef) {
+      setLoadError("Choose which shipment this document belongs to.");
+      return;
+    }
 
-    const newDoc = {
-      id: `doc-${Date.now()}`,
-      name: docName.trim(),
-      type: docType.trim(),
-      fileName: selectedFile.name,
-      shipmentRef: shipmentRef,
-      route: shipmentRoutes[shipmentRef] || "Chennai ➔ Rotterdam",
-      uploadedAt: "Just now",
-      size: sizeFormatted,
-      status: "UNDER_REVIEW",
-      verifiedBy: "AI Automated OCR Scanner",
-      notes: `Uploaded by user (${selectedFile.name}). Queued for OCR validation & Customs Officer verification.`,
-    };
-
-    const updated = [newDoc, ...documents];
-    setDocuments(updated);
+    setUploading(true);
+    setLoadError("");
     try {
-      localStorage.setItem("freightai_vault_docs_v2", JSON.stringify(updated));
-      localStorage.removeItem("freightai_vault_cleared");
-    } catch {}
+      await uploadShipmentDocument(token, {
+        shipmentId: shipmentRef,
+        documentType: docType.trim() || docName.trim() || selectedFile.name,
+        file: selectedFile,
+        uploadedBy: user?.full_name || "Customer",
+      });
 
-    setSuccessMsg(`"${newDoc.name || selectedFile.name}" successfully uploaded and queued for automated OCR validation & customs review.`);
-    setUploadSuccess(true);
-    setIsUploadModalOpen(false);
-    setSelectedFile(null);
-    setDocName("");
-    setDocType("");
-    setTimeout(() => setUploadSuccess(false), 6000);
+      await loadDocuments();
+
+      setSuccessMsg(
+        `"${docName.trim() || selectedFile.name}" uploaded and queued for customs verification.`,
+      );
+      setUploadSuccess(true);
+      setIsUploadModalOpen(false);
+      setSelectedFile(null);
+      setDocName("");
+      setDocType("");
+      setTimeout(() => setUploadSuccess(false), 6000);
+    } catch (err) {
+      setLoadError(err.message || "Upload failed.");
+    } finally {
+      setUploading(false);
+    }
   };
 
   const filteredDocs = documents.filter((doc) => {
@@ -326,51 +213,8 @@ export default function DocumentsCenter() {
         </div>
 
         <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
-          {documents.length > 0 ? (
-            <button
-              type="button"
-              className="doc-btn-secondary"
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: "6px",
-                padding: "10px 16px",
-                borderRadius: "10px",
-                fontSize: "13px",
-                fontWeight: 600,
-                color: "#dc2626",
-                background: "#fef2f2",
-                border: "1px solid #fecaca",
-                cursor: "pointer",
-              }}
-              onClick={handleClearAll}
-              title="Clear all documents in Vault"
-            >
-              <Trash2 size={16} /> Clear Vault
-            </button>
-          ) : (
-            <button
-              type="button"
-              className="doc-btn-secondary"
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: "6px",
-                padding: "10px 16px",
-                borderRadius: "10px",
-                fontSize: "13px",
-                fontWeight: 600,
-                color: "#475569",
-                background: "#f8fafc",
-                border: "1px solid #cbd5e1",
-                cursor: "pointer",
-              }}
-              onClick={handleRestoreDefaults}
-              title="Restore sample documents"
-            >
-              Restore Samples
-            </button>
-          )}
+          {/* "Clear vault" and "Restore samples" are gone: documents are now
+              server-side compliance records, not a local scratch list. */}
           <button className="doc-upload-btn" onClick={handleOpenUploadModal}>
             <UploadCloud size={18} /> Upload Document
           </button>
@@ -505,7 +349,19 @@ export default function DocumentsCenter() {
                       <button
                         className="doc-icon-btn"
                         title="Download Document"
-                        onClick={() => alert(`Downloading ${doc.name || doc.fileName || "Document"}`)}
+                        onClick={() => {
+                          const url =
+                            doc.fileDataUrl ||
+                            (doc.fileName
+                              ? `/sample_trade_documents/${doc.fileName}`
+                              : "/sample_trade_documents/Bill_of_Lading_Draft_BL4810.pdf");
+                          const a = document.createElement("a");
+                          a.href = url;
+                          a.download = doc.fileName || `${doc.name || "document"}.pdf`;
+                          document.body.appendChild(a);
+                          a.click();
+                          document.body.removeChild(a);
+                        }}
                       >
                         <Download size={16} />
                       </button>

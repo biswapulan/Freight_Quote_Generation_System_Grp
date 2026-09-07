@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import {
   Search,
   Download,
@@ -32,10 +32,10 @@ import {
   SHIPMENT_STATUS_CONFIG,
   normalizeShipmentStatus,
   getShipmentStatusFromQuoteStatus,
-  getPlatformQuotes,
-  updateQuoteStatusInStore,
-  syncQuoteDocumentsToVault,
+  decideQuoteInStore,
 } from "../utils/quoteWorkflow";
+import { uploadShipmentDocument } from "../api/workflow";
+import { useAuth } from "../context/AuthContext";
 import QuoteWorkflowStepper from "./QuoteWorkflowStepper";
 import "./RetailShipmentsHistory.css";
 
@@ -43,7 +43,13 @@ const MODE_CLASS = { ocean_fcl: "ocean-fcl", air: "air-freight", ocean_lcl: "oce
 const STATUS_CLASS = { Draft: "draft", Issued: "issued", Booked: "booked", "No routing": "norouting" };
 
 export default function RetailShipmentsHistory({ viewMode = "quotes" }) {
+  const navigate = useNavigate();
   const { quotations, loading, error, reloadQuotes } = useRetailQuotes();
+  const { token, user } = useAuth();
+  const [workflowBusy, setWorkflowBusy] = useState(false);
+  const [workflowError, setWorkflowError] = useState("");
+  const [workflowNotice, setWorkflowNotice] = useState("");
+  const [uploadingDoc, setUploadingDoc] = useState(null);
   const [search, setSearch] = useState("");
   const [laneFilter, setLaneFilter] = useState("all");
   const [modeFilter, setModeFilter] = useState("all");
@@ -130,86 +136,61 @@ export default function RetailShipmentsHistory({ viewMode = "quotes" }) {
     setCopied(false);
   }
 
-  function handleAcceptQuote(quoteNo) {
-    updateQuoteStatusInStore(quoteNo, "ACCEPTED", {
-      agentRemarks: "Customer accepted quotation. Space locked on vessel.",
-      confirmedAt: new Date().toISOString(),
-    });
-    reloadQuotes();
-    if (selectedQuote) {
-      setSelectedQuote((prev) => ({ ...prev, status: "ACCEPTED" }));
+  /**
+   * Customer decision (PDF section 3, step 12).
+   *
+   * Goes through the platform API, which validates that the quote actually
+   * reached the customer: a quote still sitting in the agent's review queue
+   * cannot be accepted.
+   */
+  async function handleDecision(quoteNo, decision) {
+    if (workflowBusy) return;
+    setWorkflowBusy(true);
+    setWorkflowError("");
+    try {
+      await decideQuoteInStore(quoteNo, decision);
+      if (selectedQuote) setSelectedQuote((prev) => ({ ...prev, status: decision }));
+    } catch (err) {
+      setWorkflowError(err.message || `Could not record your ${decision.toLowerCase()}.`);
+    } finally {
+      setWorkflowBusy(false);
     }
   }
 
-  function handleRejectQuote(quoteNo) {
-    updateQuoteStatusInStore(quoteNo, "REJECTED", {
-      agentRemarks: "Customer declined terms / cancelled request.",
-      rejectedAt: new Date().toISOString(),
-    });
-    reloadQuotes();
-    if (selectedQuote) {
-      setSelectedQuote((prev) => ({ ...prev, status: "REJECTED" }));
+  const handleAcceptQuote = (quoteNo) => handleDecision(quoteNo, "ACCEPTED");
+  const handleRejectQuote = (quoteNo) => handleDecision(quoteNo, "REJECTED");
+
+  /**
+   * Upload a trade document.
+   *
+   * The file is sent to the platform rather than being base64-encoded into
+   * localStorage, so the customs officer can actually open what was uploaded.
+   */
+  async function handleFileSelected(docName, file) {
+    if (!selectedQuote || !file || uploadingDoc) return;
+
+    const shipmentId = selectedQuote.shipmentId;
+    if (!shipmentId) {
+      setWorkflowError("This quote is not linked to a shipment, so documents cannot be attached.");
+      return;
     }
-  }
 
-  function handleCustomerRequestQuote(quoteNo) {
-    const extra = {
-      status: "REQUESTED",
-      shipmentStatus: "SUBMITTED",
-      agentRemarks: "Customer submitted official quote request. Forwarded to Operations & Customs Review queue.",
-      customsRemarks: "Shipment enquiry requested. Awaiting customs compliance verification.",
-      requiresCustomsReview: true,
-      lastWorkflowTransitionAt: new Date().toISOString(),
-    };
-    updateQuoteStatusInStore(quoteNo, "REQUESTED", extra);
-    reloadQuotes();
-    if (selectedQuote) {
-      setSelectedQuote((prev) => ({ ...prev, ...extra }));
-    }
-  }
-
-  function handleFileSelected(docName, file) {
-    if (!selectedQuote || !file) return;
-    const qId = selectedQuote.quoteNo || selectedQuote.id;
-    const currentDocs = selectedQuote.documents || [
-      { name: "Commercial Invoice", status: "PENDING" },
-      { name: "Packing List", status: "PENDING" },
-      { name: "Bill of Lading Draft", status: "PENDING" },
-      { name: "Certificate of Origin", status: "PENDING" },
-    ];
-
-    const sizeStr = file.size > 1024 * 1024
-      ? `${(file.size / (1024 * 1024)).toFixed(1)} MB`
-      : `${Math.round(file.size / 1024)} KB`;
-
-    const updatedDocs = currentDocs.map((d) =>
-      d.name.toLowerCase() === docName.toLowerCase()
-        ? {
-            ...d,
-            status: "UPLOADED",
-            fileName: file.name,
-            fileSize: sizeStr,
-            uploadedAt: new Date().toISOString(),
-          }
-        : d
-    );
-
-    const uploadedCount = updatedDocs.filter((d) => d.status === "VERIFIED" || d.status === "UPLOADED").length;
-
-    const extra = {
-      documents: updatedDocs,
-      documentsStatus: `${uploadedCount}/${updatedDocs.length} Uploaded (Pending Customs Review)`,
-      customsRemarks: `Customer uploaded "${file.name}" for ${docName}. Pending verification by Customs Officer.`,
-      status: selectedQuote.status === "DRAFT" ? "REQUESTED" : "PENDING_REVIEW",
-      shipmentStatus: "ANALYZED",
-      lastWorkflowTransitionAt: new Date().toISOString(),
-    };
-
-    updateQuoteStatusInStore(qId, extra.status, extra);
-    syncQuoteDocumentsToVault(selectedQuote, updatedDocs);
-    reloadQuotes();
-    if (selectedQuote) {
-      setSelectedQuote((prev) => ({ ...prev, ...extra }));
+    setUploadingDoc(docName);
+    setWorkflowError("");
+    try {
+      await uploadShipmentDocument(token, {
+        shipmentId,
+        documentType: docName,
+        file,
+        uploadedBy: user?.full_name || "Customer",
+      });
+      await reloadQuotes();
+      setWorkflowNotice(`"${file.name}" uploaded for ${docName}. Queued for customs verification.`);
+      setTimeout(() => setWorkflowNotice(""), 5000);
+    } catch (err) {
+      setWorkflowError(err.message || `Could not upload "${file.name}".`);
+    } finally {
+      setUploadingDoc(null);
     }
   }
 
@@ -557,9 +538,31 @@ export default function RetailShipmentsHistory({ viewMode = "quotes" }) {
                       })()}
                     </td>
                     <td style={{ color: "#64748b", fontSize: 12 }}>{q.created}</td>
-                    <td>
-                      <button type="button" className="btn-open-quote" onClick={() => openQuoteDetail(q.quoteNo)}>
-                        Open
+                    <td style={{ display: "flex", gap: "6px", alignItems: "center", paddingTop: "14px" }}>
+                      <button
+                        type="button"
+                        className="btn-open-quote"
+                        onClick={() => navigate(`/quotes/${q.quoteNo || q.id}`)}
+                        title="View Recommended Carrier Routes & Approval Sequence"
+                      >
+                        Routes &amp; Approvals
+                      </button>
+                      <button
+                        type="button"
+                        style={{
+                          background: "#f1f5f9",
+                          border: "1px solid #cbd5e1",
+                          color: "#475569",
+                          padding: "4px 8px",
+                          borderRadius: "4px",
+                          fontSize: "11px",
+                          fontWeight: 600,
+                          cursor: "pointer",
+                        }}
+                        onClick={() => openQuoteDetail(q.quoteNo)}
+                        title="Open Quick Summary Modal"
+                      >
+                        Summary
                       </button>
                     </td>
                   </tr>
@@ -584,7 +587,24 @@ export default function RetailShipmentsHistory({ viewMode = "quotes" }) {
       {selectedQuote && (
         <div className="rsh-modal-backdrop" onClick={() => setSelectedQuote(null)}>
           <div className="rsh-modal-card" onClick={(e) => e.stopPropagation()}>
-            
+
+            {(workflowError || workflowNotice) && (
+              <div
+                style={{
+                  margin: "12px 16px 0",
+                  padding: "10px 14px",
+                  borderRadius: "8px",
+                  fontSize: "13px",
+                  fontWeight: 600,
+                  background: workflowError ? "#fef2f2" : "#ecfdf5",
+                  border: `1px solid ${workflowError ? "#fecaca" : "#a7f3d0"}`,
+                  color: workflowError ? "#b91c1c" : "#047857",
+                }}
+              >
+                {workflowError || workflowNotice}
+              </div>
+            )}
+
             {/* Modal Header */}
             <div className="rsh-modal-header">
               <div className="rsh-modal-header-left">
@@ -654,14 +674,37 @@ export default function RetailShipmentsHistory({ viewMode = "quotes" }) {
                   </span>
                 </div>
               </div>
-              <button
-                type="button"
-                className="rsh-modal-close"
-                onClick={() => setSelectedQuote(null)}
-                aria-label="Close dialog"
-              >
-                <X size={18} />
-              </button>
+              <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                <button
+                  type="button"
+                  style={{
+                    fontSize: "12px",
+                    fontWeight: 700,
+                    color: "#ffffff",
+                    backgroundColor: "#ea580c",
+                    border: "none",
+                    padding: "6px 14px",
+                    borderRadius: "6px",
+                    cursor: "pointer",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "6px",
+                  }}
+                  onClick={() => {
+                    navigate(`/quotes/${selectedQuote.quoteNo || selectedQuote.id}`);
+                  }}
+                >
+                  <Ship size={13} /> Recommended Routes &amp; Approvals &rarr;
+                </button>
+                <button
+                  type="button"
+                  className="rsh-modal-close"
+                  onClick={() => setSelectedQuote(null)}
+                  aria-label="Close dialog"
+                >
+                  <X size={18} />
+                </button>
+              </div>
             </div>
 
             {/* Modal Body */}
@@ -1086,15 +1129,14 @@ export default function RetailShipmentsHistory({ viewMode = "quotes" }) {
                     );
                   }
 
-                  if (norm === "DRAFT") {
+                  // A quote in review is with the freight team; the customer can
+                  // only accept or reject once it has been approved and sent.
+                  if (["REQUESTED", "GENERATED", "PENDING_REVIEW", "CUSTOMS_FLAGGED"].includes(norm)) {
                     return (
-                      <button
-                        type="button"
-                        style={{ background: "#0284c7", color: "#ffffff", border: "none", padding: "8px 16px", borderRadius: "8px", fontWeight: "700", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: "6px", fontSize: "12.5px" }}
-                        onClick={() => handleCustomerRequestQuote(qId)}
-                      >
-                        <Send size={14} /> Submit Quote Request
-                      </button>
+                      <span style={{ fontSize: "12.5px", color: "#64748b", fontWeight: 600 }}>
+                        <Send size={14} style={{ verticalAlign: "-2px" }} /> With our freight team for
+                        review — you'll be notified when the final quote is ready.
+                      </span>
                     );
                   }
 

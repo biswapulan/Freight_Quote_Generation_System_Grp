@@ -91,7 +91,8 @@ class TestMentorFreightQuoteSystem:
         assert data["destination"] == "Rotterdam"
         assert data["weight"] == 1200.0
         assert data["volume"] == 8.5
-        assert data["status"] == "CREATED"
+        # PDF section 10 status flow: a submitted shipment starts at SUBMITTED.
+        assert data["status"] == "SUBMITTED"
         assert data["customerId"] == self.customer1_id
 
     # -------------------------------------------------------------------------
@@ -107,7 +108,7 @@ class TestMentorFreightQuoteSystem:
             weight=1500.0,
             volume=10.0,
             transport_mode="ocean",
-            status="CREATED",
+            status="SUBMITTED",
         )
 
         # 2. Call quote generation endpoint
@@ -116,7 +117,8 @@ class TestMentorFreightQuoteSystem:
         quote_data = res.json()
 
         assert quote_data["shipmentId"] == shipment.id
-        assert quote_data["status"] == "PENDING"
+        # PDF section 10 quote flow: GENERATED then PENDING_REVIEW for human review.
+        assert quote_data["status"] == "PENDING_REVIEW"
         assert quote_data["totalPrice"] > 0
         assert quote_data["distance"] > 0
 
@@ -188,7 +190,9 @@ class TestMentorFreightQuoteSystem:
         quote.refresh_from_db()
         shipment.refresh_from_db()
         assert quote.status == "APPROVED"
-        assert shipment.status == "APPROVED"
+        # A shipment has no APPROVED state in PDF section 10; an approved quote
+        # leaves the shipment QUOTED until the customer decides.
+        assert shipment.status == "QUOTED"
 
         # Admin rejects quote
         res_reject = self.client.patch(
@@ -203,7 +207,9 @@ class TestMentorFreightQuoteSystem:
         quote.refresh_from_db()
         shipment.refresh_from_db()
         assert quote.status == "REJECTED"
-        assert shipment.status == "REJECTED"
+        # PDF section 10: a shipment terminates at CLOSED or CANCELLED, so a
+        # rejected quote cancels the shipment rather than "rejecting" it.
+        assert shipment.status == "CANCELLED"
 
     # -------------------------------------------------------------------------
     # Test Case 7: Customer Cannot Access Another Customer's Quote (IDOR)

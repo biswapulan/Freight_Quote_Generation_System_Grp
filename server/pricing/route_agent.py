@@ -169,5 +169,9 @@ def evaluate_shipment_routes(
         "recommended_route": recommended,
         "alternate_routes": alternates,
         "total_candidate_routes": len(candidate_routes),
+        # False when the lane was not in ROUTE_DATASET and these routes were
+        # synthesised. Callers use this to decide whether the published transit
+        # time is a real carrier schedule or a placeholder worth recomputing.
+        "lane_matched": matched_lane is not None,
         "status": "ROUTE_READY",
     }

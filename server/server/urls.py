@@ -1,3 +1,5 @@
+from django.conf import settings
+from django.conf.urls.static import static
 from django.contrib import admin
 from django.urls import include, path
 from accounts.views import LoginView
@@ -21,7 +23,15 @@ urlpatterns = [
     path('api/v1/', include('customs.urls')),
     path('api/v1/', include('risk.urls')),
     path('api/v1/', include('integrations.urls')),
+    path('api/v1/', include('orchestrator.urls')),
+    path('api/v1/', include('audit.urls')),
+    path('api/v1/', include('notifications.urls')),
 
     # Django Admin Site
     path('admin/', admin.site.urls),
 ]
+
+# Uploaded trade documents. In production these are served by the web server or
+# object store; this keeps them reachable during local development.
+if settings.DEBUG:
+    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

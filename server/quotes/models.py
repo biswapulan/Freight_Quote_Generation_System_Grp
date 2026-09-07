@@ -44,6 +44,11 @@ class Shipment(models.Model):
     volume = models.FloatField(help_text="Volume in cubic meters (cbm)")
     transport_mode = models.CharField(max_length=32, default="ocean", help_text="ocean, air, road, rail")
     status = models.CharField(max_length=32, choices=STATUS_CHOICES, default="SUBMITTED")
+
+    # Container & tariff classification — consumed by the Customs and Risk agents (PDF section 8).
+    container_type = models.CharField(max_length=32, blank=True, default="40FT")
+    hs_code = models.CharField(max_length=16, blank=True, default="")
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -95,6 +100,41 @@ class Quote(models.Model):
     total_price = models.FloatField(help_text="Total calculated price ($)")
     status = models.CharField(max_length=32, choices=STATUS_CHOICES, default="PENDING_REVIEW")
     admin_notes = models.TextField(blank=True, default="")
+    currency = models.CharField(max_length=8, default="USD")
+
+    # ---- M1: Route Intelligence -------------------------------------------------
+    estimated_transit_days = models.IntegerField(null=True, blank=True)
+    route_id = models.CharField(max_length=64, blank=True, default="")
+    route_path = models.CharField(max_length=256, blank=True, default="")
+    carrier = models.CharField(max_length=128, blank=True, default="")
+
+    # ---- M2: AI Pricing Intelligence (PDF section 8) ----------------------------
+    ai_predicted_price = models.FloatField(null=True, blank=True)
+    recommended_price = models.FloatField(null=True, blank=True)
+    pricing_strategy = models.CharField(max_length=48, blank=True, default="")
+    ml_status = models.CharField(
+        max_length=24,
+        default="UNAVAILABLE",
+        help_text="PREDICTED when the ML model answered, FALLBACK_RULE when it did not.",
+    )
+
+    # ---- M3: Risk Intelligence (PDF section 8) ----------------------------------
+    weather_risk_score = models.FloatField(null=True, blank=True)
+    customs_risk_score = models.FloatField(null=True, blank=True)
+    route_risk_score = models.FloatField(null=True, blank=True)
+    overall_risk_score = models.FloatField(null=True, blank=True)
+    overall_risk_level = models.CharField(max_length=16, blank=True, default="")
+    policy_action = models.CharField(max_length=48, blank=True, default="")
+    requires_human_review = models.BooleanField(default=True)
+
+    # Full orchestrator output, kept verbatim so dashboards can explain every number.
+    analysis = models.JSONField(null=True, blank=True)
+
+    # ---- Human review (PDF section 3, step 10) ----------------------------------
+    reviewed_by = models.CharField(max_length=128, blank=True, default="")
+    review_reason = models.TextField(blank=True, default="")
+    original_total_price = models.FloatField(null=True, blank=True)
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -127,3 +167,8 @@ class Quote(models.Model):
     @property
     def totalPrice(self):
         return self.total_price
+
+    @property
+    def distance_km(self):
+        """Alias — the mentor spec refers to this field as distance in km."""
+        return self.distance

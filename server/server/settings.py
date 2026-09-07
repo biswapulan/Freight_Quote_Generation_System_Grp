@@ -53,6 +53,9 @@ INSTALLED_APPS = [
     'customs',
     'risk',
     'integrations',
+    'orchestrator',
+    'audit',
+    'notifications',
 ]
 
 MIDDLEWARE = [
@@ -135,12 +138,34 @@ USE_TZ = True
 STATIC_URL = 'static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 
+# Customer-uploaded trade documents (commercial invoices, packing lists, COOs).
+MEDIA_URL = 'media/'
+MEDIA_ROOT = BASE_DIR / 'media'
+
+# Trade documents are scanned paperwork; anything larger is almost certainly a
+# mistake and should be rejected before it reaches disk.
+MAX_DOCUMENT_UPLOAD_BYTES = config('MAX_DOCUMENT_UPLOAD_BYTES', default=10 * 1024 * 1024, cast=int)
+
 STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 
 # MongoDB is used directly by the accounts app for user auth data.
 MONGO_URI = config('MONGO_URI')
 MONGO_DB_NAME = config('MONGO_DB_NAME')
 TAWK_API_KEY = config('TAWK_API_KEY', default='')
+
+# --- AI Orchestrator -------------------------------------------------------
+# Quote generation runs the agent pipeline synchronously, and the Weather agent
+# is the only network-bound step. Deployments without outbound access (or that
+# want a faster quote) can switch to the deterministic simulation instead.
+ORCHESTRATOR_LIVE_WEATHER = config('ORCHESTRATOR_LIVE_WEATHER', default=True, cast=bool)
+ORCHESTRATOR_WEATHER_SAMPLES = config('ORCHESTRATOR_WEATHER_SAMPLES', default=3, cast=int)
+
+# --- Authentication ---------------------------------------------------------
+# When enabled, the M1-M3 service endpoints will accept an identity supplied via
+# X-Customer-Id / X-User-Role headers. That is a test affordance: with it on, a
+# caller can claim any role simply by setting a header. It defaults to off and
+# the test suite turns it on explicitly.
+ALLOW_HEADER_ROLE_AUTH = config('ALLOW_HEADER_ROLE_AUTH', default=False, cast=bool)
 
 # Allow the local React/Vite dev server to call this API.
 CORS_ALLOWED_ORIGINS = csv_config(

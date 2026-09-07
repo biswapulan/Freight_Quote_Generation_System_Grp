@@ -135,3 +135,72 @@ def validate_quote_transition(current_status: str, target_status: str) -> bool:
             f"Invalid Quote transition from {curr} to {tgt}. Allowed next states: {allowed or 'None (Terminal)'}"
         )
     return True
+
+
+# ---------------------------------------------------------------------------
+# Applying transitions
+#
+# The validators above were previously unused — every view assigned .status
+# directly, so the state machine was documentation rather than enforcement.
+# These helpers validate, persist and audit in one step; views should use them
+# instead of touching .status.
+# ---------------------------------------------------------------------------
+
+
+def apply_shipment_status(shipment, target_status, *, actor=None, reason=""):
+    """Validate and persist a Shipment status change, writing an audit record."""
+    from audit import service as audit_service
+
+    current = shipment.status
+    target = normalize_shipment_status(target_status)
+
+    validate_shipment_transition(current, target)
+
+    if normalize_shipment_status(current) == target and current == target:
+        return shipment
+
+    shipment.status = target
+    shipment.save(update_fields=["status", "updated_at"])
+
+    actor = actor or {}
+    audit_service.record(
+        actor_id=actor.get("id", "system"),
+        actor_role=actor.get("role", "system"),
+        actor_email=actor.get("email", ""),
+        action=audit_service.SHIPMENT_STATUS_CHANGED,
+        entity_type="SHIPMENT",
+        entity_id=shipment.id,
+        reason=reason,
+        changes={"status": {"from": current, "to": target}},
+    )
+    return shipment
+
+
+def apply_quote_status(quote, target_status, *, actor=None, reason="", action=None, extra_changes=None):
+    """Validate and persist a Quote status change, writing an audit record."""
+    from audit import service as audit_service
+
+    current = quote.status
+    target = normalize_quote_status(target_status)
+
+    validate_quote_transition(current, target)
+
+    quote.status = target
+    quote.save(update_fields=["status", "updated_at"])
+
+    changes = {"status": {"from": current, "to": target}}
+    if extra_changes:
+        changes.update(extra_changes)
+
+    actor = actor or {}
+    audit_service.record(
+        actor_id=actor.get("id", "system"),
+        actor_role=actor.get("role", "system"),
+        actor_email=actor.get("email", ""),
+        action=action or audit_service.QUOTE_STATUS_CHANGED,
+        entity_type="QUOTE",
+        entity_id=quote.id,
+        reason=reason,
+        changes=changes,
+    )
+    return quote

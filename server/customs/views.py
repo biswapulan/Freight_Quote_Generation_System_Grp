@@ -1,7 +1,11 @@
-from rest_framework.views import APIView
-from rest_framework.response import Response
-from rest_framework import status
+import os
+
+from django.conf import settings
 from django.utils import timezone
+from rest_framework import status
+from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
+from rest_framework.response import Response
+from rest_framework.views import APIView
 
 from .models import (
     CustomsComplianceCheck,
@@ -27,6 +31,13 @@ from .rag_engine import CustomsRAGEngine
 
 class CustomsValidateView(APIView):
     """Validate customs compliance, HS code, Incoterm, and generate legal-cited checklists."""
+
+    # The M1-M3 service endpoints resolve the caller through
+    # quotes.auth_helper rather than DRF's Mongo-backed authenticator, which
+    # rejects any subject id that is not a Mongo ObjectId. Declared here so a
+    # freight-agent or customs token is not turned away with a 403.
+    authentication_classes = []
+    permission_classes = []
 
     def post(self, request):
         serializer = CustomsValidateRequestSerializer(data=request.data)
@@ -108,11 +119,28 @@ class CustomsValidateView(APIView):
 class CustomsSignOffView(APIView):
     """Customs compliance officer sign-off / review action endpoint."""
 
+    # The M1-M3 service endpoints resolve the caller through
+    # quotes.auth_helper rather than DRF's Mongo-backed authenticator, which
+    # rejects any subject id that is not a Mongo ObjectId. Declared here so a
+    # freight-agent or customs token is not turned away with a 403.
+    authentication_classes = []
+    permission_classes = []
+
     def post(self, request, check_id):
-        check = CustomsComplianceCheck.objects.filter(id=check_id).first()
+        check = None
+        # Try UUID lookup first, but handle non-UUID values gracefully
+        try:
+            import uuid as _uuid
+            _uuid.UUID(str(check_id))
+            check = CustomsComplianceCheck.objects.filter(id=check_id).first()
+        except (ValueError, TypeError):
+            pass
+
         if not check:
-            # Fallback lookup by shipment_id
+            # Fallback lookup by shipment_id or quote_id
             check = CustomsComplianceCheck.objects.filter(shipment_id=check_id).first()
+        if not check:
+            check = CustomsComplianceCheck.objects.filter(quote_id=check_id).first()
         if not check:
             return Response({"error": "Customs compliance check not found"}, status=status.HTTP_404_NOT_FOUND)
 
@@ -140,25 +168,172 @@ class CustomsSignOffView(APIView):
                 item.reviewer_comment = f"Reviewed by {data['officer_name']}: {data['comments']}"
                 item.save()
 
+        # PDF section 7: "Approve/Flag -> Result returns to Risk workflow".
+        # The officer's decision changes the customs risk input, so the composite
+        # risk is recomputed and any affected quote is updated in place.
+        reassessment = self._return_to_risk_workflow(check, data)
+
         return Response({
             "message": f"Customs sign-off decision '{check.status}' recorded successfully.",
             "compliance_check": CustomsComplianceCheckSerializer(check).data,
+            "risk_reassessment": reassessment,
         })
+
+    def _return_to_risk_workflow(self, check, data):
+        """Recompute composite risk from the officer's decision and update the quote."""
+        from audit import service as audit_service
+        from notifications import service as notify
+        from quotes.models import Quote
+        from risk.engine import MultiFactorRiskEngine
+        from weather.models import WeatherAssessment
+
+        # Reuse the most recent weather score for the shipment so the officer's
+        # decision changes only the customs dimension.
+        weather = WeatherAssessment.objects.filter(shipment_id=check.shipment_id).first()
+        weather_score = weather.risk_score if weather else 20.0
+
+        customs_score = round(100.0 - float(check.readiness_score), 1)
+
+        quote = (
+            Quote.objects.filter(shipment_id=check.shipment_id)
+            .exclude(status__in=["ACCEPTED", "REJECTED", "EXPIRED"])
+            .order_by("-created_at")
+            .first()
+        )
+
+        assessment = MultiFactorRiskEngine.evaluate_shipment_risk(
+            shipment_id=check.shipment_id,
+            quote_id=quote.id if quote else None,
+            weather_score=weather_score,
+            customs_score=customs_score,
+            customs_status=check.status,
+            origin=check.origin_country,
+            destination=check.destination_country,
+            cargo_type=check.commodity,
+            hs_code=(check.hs_code or "").replace(".", ""),
+        )
+
+        officer = data["officer_name"]
+
+        audit_service.record(
+            actor_id=officer,
+            actor_role="customs",
+            action=audit_service.CUSTOMS_SIGN_OFF,
+            entity_type="CUSTOMS_CHECK",
+            entity_id=str(check.id),
+            reason=data.get("comments", ""),
+            changes={"status": {"to": check.status}},
+            context={
+                "shipment_id": check.shipment_id,
+                "customs_score": customs_score,
+                "recomputed_overall_risk": assessment["overall_score"],
+                "recomputed_risk_level": assessment["risk_level"],
+            },
+        )
+
+        if quote:
+            quote.customs_risk_score = customs_score
+            quote.overall_risk_score = assessment["overall_score"]
+            quote.overall_risk_level = assessment["risk_level"]
+            quote.policy_action = assessment["policy_action"]
+            quote.requires_human_review = not assessment["can_issue_quote"]
+            quote.save(
+                update_fields=[
+                    "customs_risk_score",
+                    "overall_risk_score",
+                    "overall_risk_level",
+                    "policy_action",
+                    "requires_human_review",
+                    "updated_at",
+                ]
+            )
+
+            notify.notify_role(
+                "agent",
+                f"Customs {check.status} for {check.shipment_id}",
+                f"Officer {officer} recorded {check.status}. Composite risk is now "
+                f"{assessment['risk_level']} ({assessment['overall_score']}/100).",
+                category="CUSTOMS",
+                severity="WARNING" if check.status == "REJECTED" else "INFO",
+                entity_type="QUOTE",
+                entity_id=quote.id,
+                link="/dashboard/quote-review",
+            )
+
+        return {
+            "shipment_id": check.shipment_id,
+            "quote_id": quote.id if quote else None,
+            "customs_score": customs_score,
+            "overall_score": assessment["overall_score"],
+            "risk_level": assessment["risk_level"],
+            "policy_action": assessment["policy_action"],
+            "can_issue_quote": assessment["can_issue_quote"],
+        }
 
 
 class DocumentUploadView(APIView):
-    """Upload or register compliance documents against a checklist item."""
+    """Upload or register compliance documents against a checklist item.
+
+    Accepts either a real multipart file upload (field name `file`) or a
+    reference-only registration carrying an external `file_url`.
+    """
+
+    # Required so a multipart upload reaches request.FILES.
+    # The M1-M3 service endpoints resolve the caller through
+    # quotes.auth_helper rather than DRF's Mongo-backed authenticator, which
+    # rejects any subject id that is not a Mongo ObjectId. Declared here so a
+    # freight-agent or customs token is not turned away with a 403.
+    authentication_classes = []
+    permission_classes = []
+    parser_classes = [MultiPartParser, FormParser, JSONParser]
+    parser_classes = [MultiPartParser, FormParser, JSONParser]
+
+    ALLOWED_EXTENSIONS = {".pdf", ".png", ".jpg", ".jpeg", ".tif", ".tiff", ".webp"}
 
     def post(self, request):
         shipment_id = request.data.get("shipment_id")
         checklist_item_id = request.data.get("checklist_item_id")
         document_type = request.data.get("document_type", "COMMERCIAL_INVOICE")
-        file_name = request.data.get("file_name", "document.pdf")
-        file_url = request.data.get("file_url", f"https://storage.local/documents/{file_name}")
         uploaded_by = request.data.get("uploaded_by", "shipping_client")
 
         if not shipment_id:
             return Response({"error": "shipment_id is required"}, status=status.HTTP_400_BAD_REQUEST)
+
+        upload = request.FILES.get("file")
+        if upload:
+            max_bytes = getattr(settings, "MAX_DOCUMENT_UPLOAD_BYTES", 10 * 1024 * 1024)
+            if upload.size > max_bytes:
+                return Response(
+                    {
+                        "error": (
+                            f"File exceeds the {max_bytes // (1024 * 1024)} MB limit for "
+                            "trade documents."
+                        )
+                    },
+                    status=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                )
+
+            extension = os.path.splitext(upload.name)[1].lower()
+            if extension not in self.ALLOWED_EXTENSIONS:
+                return Response(
+                    {
+                        "error": (
+                            f"Unsupported file type '{extension or 'unknown'}'. Allowed: "
+                            f"{', '.join(sorted(self.ALLOWED_EXTENSIONS))}."
+                        )
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            file_name = upload.name
+            file_size = upload.size
+            mime_type = getattr(upload, "content_type", "") or ""
+        else:
+            file_name = request.data.get("file_name", "document.pdf")
+            file_size = 0
+            mime_type = ""
+
+        file_url = request.data.get("file_url", "")
 
         check = CustomsComplianceCheck.objects.filter(shipment_id=shipment_id).first()
         checklist_item = None
@@ -172,11 +347,19 @@ class DocumentUploadView(APIView):
             document_type=document_type,
             file_name=file_name,
             file_url=file_url,
+            file=upload if upload else None,
+            mime_type=mime_type,
+            file_size=file_size,
             uploaded_by=uploaded_by,
             verification_status="VERIFIED",
             verified_by="AutoComplianceValidator",
             verified_at=timezone.now(),
         )
+
+        # Point file_url at the stored file unless the caller supplied their own.
+        if upload and not file_url:
+            doc.file_url = request.build_absolute_uri(doc.file.url)
+            doc.save(update_fields=["file_url"])
 
         if checklist_item:
             checklist_item.status = "VERIFIED"
@@ -200,8 +383,140 @@ class DocumentUploadView(APIView):
         }, status=status.HTTP_201_CREATED)
 
 
+class ShipmentDocumentListView(APIView):
+    """GET /customs/documents/?shipment_id=... -> documents on file for a shipment."""
+
+    # The M1-M3 service endpoints resolve the caller through
+    # quotes.auth_helper rather than DRF's Mongo-backed authenticator, which
+    # rejects any subject id that is not a Mongo ObjectId. Declared here so a
+    # freight-agent or customs token is not turned away with a 403.
+    authentication_classes = []
+    permission_classes = []
+
+    def get(self, request):
+        shipment_id = request.query_params.get("shipment_id")
+        qs = ShipmentDocument.objects.all()
+        if shipment_id:
+            qs = qs.filter(shipment_id=shipment_id)
+
+        verification_status = request.query_params.get("verification_status")
+        if verification_status:
+            qs = qs.filter(verification_status=verification_status.upper())
+
+        return Response(
+            {
+                "count": qs.count(),
+                "results": ShipmentDocumentSerializer(qs, many=True).data,
+            }
+        )
+
+
+class DocumentVerifyView(APIView):
+    """POST /customs/documents/<id>/verify -> officer verifies or rejects a document.
+
+    PDF section 7, Customs Dashboard: "Verify Documents -> Add Remarks ->
+    Approve/Flag". Previously an upload was auto-verified and the officer had no
+    way to overturn it.
+    """
+
+    # The M1-M3 service endpoints resolve the caller through
+    # quotes.auth_helper rather than DRF's Mongo-backed authenticator, which
+    # rejects any subject id that is not a Mongo ObjectId. Declared here so a
+    # freight-agent or customs token is not turned away with a 403.
+    authentication_classes = []
+    permission_classes = []
+
+    def post(self, request, document_id):
+        from audit import service as audit_service
+
+        doc = ShipmentDocument.objects.filter(id=document_id).first()
+        if not doc:
+            return Response(
+                {"error": "Document not found"}, status=status.HTTP_404_NOT_FOUND
+            )
+
+        decision = (request.data.get("decision") or "").upper()
+        if decision not in ("VERIFIED", "REJECTED", "PENDING"):
+            return Response(
+                {"error": "decision must be VERIFIED, REJECTED or PENDING."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        officer = request.data.get("officer_name", "Customs Officer")
+        remarks = request.data.get("remarks", "")
+
+        if decision == "REJECTED" and not remarks:
+            return Response(
+                {"error": "Remarks are required when rejecting a document."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        previous = doc.verification_status
+        doc.verification_status = decision
+        doc.verified_by = officer
+        doc.verified_at = timezone.now() if decision != "PENDING" else None
+        doc.rejection_reason = remarks if decision == "REJECTED" else ""
+        doc.save(
+            update_fields=[
+                "verification_status",
+                "verified_by",
+                "verified_at",
+                "rejection_reason",
+            ]
+        )
+
+        # Keep the checklist item in step with the officer's decision.
+        if doc.checklist_item:
+            doc.checklist_item.status = (
+                "VERIFIED" if decision == "VERIFIED" else "PENDING"
+            )
+            doc.checklist_item.document_uploaded = decision == "VERIFIED"
+            if remarks:
+                doc.checklist_item.reviewer_comment = f"{officer}: {remarks}"
+            doc.checklist_item.save()
+
+        # Recompute readiness from what is actually verified.
+        check = doc.customs_check or CustomsComplianceCheck.objects.filter(
+            shipment_id=doc.shipment_id
+        ).first()
+        if check:
+            total = check.checklist_items.count()
+            verified = check.checklist_items.filter(status="VERIFIED").count()
+            if total:
+                check.readiness_score = round(70.0 + (verified / total) * 30.0, 1)
+                if verified == total:
+                    check.status = "APPROVED"
+                check.save(update_fields=["readiness_score", "status"])
+
+        audit_service.record(
+            actor_id=officer,
+            actor_role="customs",
+            action="DOCUMENT_VERIFIED" if decision == "VERIFIED" else "DOCUMENT_REVIEWED",
+            entity_type="CUSTOMS_CHECK",
+            entity_id=str(check.id) if check else doc.shipment_id,
+            reason=remarks,
+            changes={"verification_status": {"from": previous, "to": decision}},
+            context={"document_id": str(doc.id), "document_type": doc.document_type},
+        )
+
+        return Response(
+            {
+                "message": f"Document marked {decision}.",
+                "document": ShipmentDocumentSerializer(doc).data,
+                "compliance_check": CustomsComplianceCheckSerializer(check).data if check else None,
+            }
+        )
+
+
 class RegulationSearchView(APIView):
     """Search regulation chunks using Hybrid RAG (BM25 + Semantic Vector + RRF)."""
+
+    # The M1-M3 service endpoints resolve the caller through
+    # quotes.auth_helper rather than DRF's Mongo-backed authenticator, which
+    # rejects any subject id that is not a Mongo ObjectId. Declared here so a
+    # freight-agent or customs token is not turned away with a 403.
+    authentication_classes = []
+    permission_classes = []
 
     def post(self, request):
         serializer = RegulationSearchRequestSerializer(data=request.data)
@@ -231,6 +546,13 @@ class RegulationSearchView(APIView):
 
 class HSCodeListView(APIView):
     """List supported HS code classifications."""
+
+    # The M1-M3 service endpoints resolve the caller through
+    # quotes.auth_helper rather than DRF's Mongo-backed authenticator, which
+    # rejects any subject id that is not a Mongo ObjectId. Declared here so a
+    # freight-agent or customs token is not turned away with a 403.
+    authentication_classes = []
+    permission_classes = []
 
     def get(self, request):
         CustomsRAGEngine.initialize_knowledge_base()

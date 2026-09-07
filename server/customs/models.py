@@ -302,6 +302,10 @@ class ShipmentDocument(models.Model):
     document_type = models.CharField(max_length=64)
     file_name = models.CharField(max_length=255)
     file_url = models.CharField(max_length=500)
+    # The uploaded bytes. Optional so records registered by reference (an
+    # external DMS link) remain valid, but a real upload now stores the file
+    # rather than only a fabricated URL.
+    file = models.FileField(upload_to="shipment_documents/%Y/%m/", null=True, blank=True)
     mime_type = models.CharField(max_length=64, blank=True)
     file_size = models.IntegerField(default=0, help_text="File size in bytes")
     

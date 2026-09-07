@@ -17,6 +17,8 @@ import {
   Sparkles,
   CheckCircle2,
 } from "lucide-react";
+import { getAgentMonitor } from "../api/workflow";
+import { useAuth } from "../context/AuthContext";
 import "./AIAgentMonitor.css";
 
 const AGENT_SPECIFICATIONS = [
@@ -94,16 +96,80 @@ const AGENT_SPECIFICATIONS = [
   },
 ];
 
+/**
+ * Merge the static agent catalogue (icons, descriptions, model versions) with
+ * measured telemetry from the orchestrator.
+ *
+ * Latency and success rate used to be hardcoded strings; they are now computed
+ * from real AgentInvocation records, so an agent that has never run reports
+ * IDLE rather than a fictional "99.9%".
+ */
+function mergeTelemetry(telemetry) {
+  if (!telemetry) return AGENT_SPECIFICATIONS.map((a) => ({ ...a, status: "UNKNOWN" }));
+
+  const measured = new Map((telemetry.agents || []).map((a) => [a.agent.toLowerCase(), a]));
+
+  return AGENT_SPECIFICATIONS.map((spec) => {
+    if (spec.id === "orchestrator") {
+      const o = telemetry.orchestrator || {};
+      const total = o.total_runs || 0;
+      const healthy = total - (o.degraded_runs || 0) - (o.failed_runs || 0);
+      return {
+        ...spec,
+        status: total === 0 ? "IDLE" : o.failed_runs ? "ERROR" : o.degraded_runs ? "DEGRADED" : "ONLINE",
+        latency: "—",
+        successRate: total ? `${((healthy / total) * 100).toFixed(1)}%` : "—",
+        invocations: total,
+        output: o.output || spec.output,
+      };
+    }
+
+    const stat = measured.get(spec.id);
+    if (!stat) return { ...spec, status: "IDLE", latency: "—", successRate: "—", invocations: 0 };
+
+    return {
+      ...spec,
+      status: stat.status === "HEALTHY" ? "ONLINE" : stat.status,
+      latency: stat.invocations ? `${Math.round(stat.avg_duration_ms)}ms` : "—",
+      successRate: stat.success_rate === null ? "—" : `${stat.success_rate}%`,
+      invocations: stat.invocations,
+      output: stat.output || spec.output,
+    };
+  });
+}
+
 export default function AIAgentMonitor() {
-  const [agents, setAgents] = useState(AGENT_SPECIFICATIONS);
+  const { token } = useAuth();
+  const [telemetry, setTelemetry] = useState(null);
+  const [error, setError] = useState("");
   const [lastRefreshed, setLastRefreshed] = useState(new Date());
 
+  const agents = mergeTelemetry(telemetry);
+
   useEffect(() => {
-    const interval = setInterval(() => {
-      setLastRefreshed(new Date());
-    }, 15000);
-    return () => clearInterval(interval);
-  }, []);
+    if (!token) return undefined;
+    let cancelled = false;
+
+    async function poll() {
+      try {
+        const data = await getAgentMonitor(token);
+        if (!cancelled) {
+          setTelemetry(data);
+          setError("");
+          setLastRefreshed(new Date());
+        }
+      } catch (err) {
+        if (!cancelled) setError(err.message || "Agent telemetry unavailable");
+      }
+    }
+
+    poll();
+    const interval = setInterval(poll, 15000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [token]);
 
   return (
     <div className="aam-container">
@@ -128,7 +194,13 @@ export default function AIAgentMonitor() {
             <RefreshCw size={16} /> Real-Time Agent Execution Pipeline (System Architecture)
           </h3>
           <span className="aam-heartbeat-text">
-            Last heartbeat: <strong>{lastRefreshed.toLocaleTimeString()}</strong>
+            {error ? (
+              <strong style={{ color: "#f43f5e" }}>Telemetry unavailable: {error}</strong>
+            ) : (
+              <>
+                Last heartbeat: <strong>{lastRefreshed.toLocaleTimeString()}</strong>
+              </>
+            )}
           </span>
         </div>
         <div className="aam-flow-steps">
@@ -335,7 +407,27 @@ export default function AIAgentMonitor() {
                   <span className="aam-agent-role">{agent.role}</span>
                 </div>
               </div>
-              <span className="aam-status-pill online">
+              <span
+                className="aam-status-pill online"
+                style={
+                  agent.status === "ONLINE"
+                    ? undefined
+                    : {
+                        background:
+                          agent.status === "ERROR"
+                            ? "rgba(244, 63, 94, 0.15)"
+                            : agent.status === "DEGRADED"
+                            ? "rgba(251, 191, 36, 0.15)"
+                            : "rgba(148, 163, 184, 0.15)",
+                        color:
+                          agent.status === "ERROR"
+                            ? "#f43f5e"
+                            : agent.status === "DEGRADED"
+                            ? "#fbbf24"
+                            : "#94a3b8",
+                      }
+                }
+              >
                 <span className="aam-status-dot" />
                 {agent.status}
               </span>
@@ -351,6 +443,10 @@ export default function AIAgentMonitor() {
               <div className="aam-telemetry-item">
                 <span className="aam-telemetry-val">{agent.successRate}</span>
                 <span className="aam-telemetry-lbl">Success Rate</span>
+              </div>
+              <div className="aam-telemetry-item">
+                <span className="aam-telemetry-val">{agent.invocations ?? 0}</span>
+                <span className="aam-telemetry-lbl">Invocations</span>
               </div>
               <div className="aam-telemetry-item">
                 <span className="aam-telemetry-val" style={{ fontSize: "11px", color: "#a855f7" }}>

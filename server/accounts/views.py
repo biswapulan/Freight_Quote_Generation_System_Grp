@@ -95,7 +95,11 @@ class SignupView(APIView):
         }
         result = users_collection.insert_one(user_doc)
         user_doc['_id'] = result.inserted_id
-        token = create_token(result.inserted_id)
+        token = create_token(
+            result.inserted_id,
+            role=user_doc.get('role'),
+            email=user_doc.get('email'),
+        )
 
         return Response(
             {'token': token, **public_profile(user_doc)},
@@ -126,7 +130,11 @@ class LoginView(APIView):
                 status=status.HTTP_403_FORBIDDEN,
             )
 
-        token = create_token(user['_id'])
+        token = create_token(
+            user['_id'],
+            role=user.get('role'),
+            email=user.get('email'),
+        )
         return Response({'token': token, **public_profile(user)})
 
 

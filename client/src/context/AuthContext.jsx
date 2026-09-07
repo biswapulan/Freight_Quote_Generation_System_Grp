@@ -31,21 +31,31 @@ export function AuthProvider({ children }) {
           localStorage.setItem("freightai_user", JSON.stringify(profile));
         }
       })
-      .catch(() => {
-        // Token is invalid or backend unreachable — check cached user
-        if (!cancelled) {
-          const cachedUser = localStorage.getItem("freightai_user");
-          if (cachedUser) {
-            try {
-              setUser(JSON.parse(cachedUser));
-              return;
-            } catch {}
-          }
+      .catch((err) => {
+        if (cancelled) return;
+
+        // A rejected token must end the session. Falling back to the cached
+        // profile here left the UI looking signed in while every API call
+        // returned 403 — the app appeared to work but nothing loaded.
+        if (err?.isAuthError || !err?.isNetworkError) {
           localStorage.removeItem(TOKEN_KEY);
           localStorage.removeItem("freightai_user");
           setToken(null);
           setUser(null);
+          return;
         }
+
+        // The server is unreachable rather than refusing us; keep the cached
+        // profile so a brief outage does not log the user out.
+        const cachedUser = localStorage.getItem("freightai_user");
+        if (cachedUser) {
+          try {
+            setUser(JSON.parse(cachedUser));
+            return;
+          } catch {}
+        }
+        setToken(null);
+        setUser(null);
       })
       .finally(() => {
         if (!cancelled) setLoading(false);

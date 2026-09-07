@@ -1,11 +1,31 @@
 /**
- * Shared Quote Workflow & Lifecycle State Definitions
- * Role Connection:
- * Customer submits data → AI services analyze it → Freight Agent performs human review 
- * → Customs Officer participates when customs review is required 
- * → Freight Agent sends final quote → Customer accepts/rejects 
- * → Admin manages and monitors the platform.
+ * Shared Quote Workflow & Lifecycle State
+ *
+ * Role Connection (PDF section 1):
+ * Customer submits data -> AI services analyze it -> Freight Agent performs human
+ * review -> Customs Officer participates when customs review is required ->
+ * Freight Agent sends final quote -> Customer accepts/rejects -> Admin monitors.
+ *
+ * This module used to be a browser-local database: every portal read and wrote
+ * `localStorage`, so a customer on one machine and a freight agent on another
+ * never saw the same shipment, and the risk scores shown on the agent and admin
+ * desks were hardcoded constants.
+ *
+ * It is now a thin cache over the platform API. The synchronous accessors are
+ * kept so existing components continue to work, backed by a cache that
+ * `refreshPlatformQuotes()` fills and that subscribers are notified about.
  */
+
+import {
+  approveQuote,
+  decideOnQuote,
+  listAllQuotes,
+  listMyQuotes,
+  modifyQuotePrice,
+  rejectQuote,
+  requestQuoteInfo,
+  sendQuote,
+} from "../api/workflow";
 
 export const WORKFLOW_STAGES = [
   { id: "REQUESTED", label: "1. Requested", actor: "Customer", desc: "Shipment enquiry submitted by customer" },
@@ -17,81 +37,21 @@ export const WORKFLOW_STAGES = [
 ];
 
 export const STATUS_CONFIG = {
-  DRAFT: {
-    label: "DRAFT",
-    badgeClass: "badge-draft",
-    stepIndex: 1,
-    color: "#64748b",
-    bg: "#f1f5f9",
-  },
-  REQUESTED: {
-    label: "REQUESTED",
-    badgeClass: "badge-requested",
-    stepIndex: 1,
-    color: "#0284c7",
-    bg: "#e0f2fe",
-  },
-  GENERATED: {
-    label: "GENERATED",
-    badgeClass: "badge-generated",
-    stepIndex: 2,
-    color: "#6366f1",
-    bg: "#e0e7ff",
-  },
-  PENDING_REVIEW: {
-    label: "PENDING_REVIEW",
-    badgeClass: "badge-pending-review",
-    stepIndex: 3,
-    color: "#d97706",
-    bg: "#fef3c7",
-  },
-  CUSTOMS_FLAGGED: {
-    label: "CUSTOMS_FLAGGED",
-    badgeClass: "badge-customs-flagged",
-    stepIndex: 3,
-    color: "#dc2626",
-    bg: "#fee2e2",
-  },
-  APPROVED: {
-    label: "APPROVED",
-    badgeClass: "badge-approved",
-    stepIndex: 4,
-    color: "#7c3aed",
-    bg: "#ede9fe",
-  },
-  SENT: {
-    label: "SENT",
-    badgeClass: "badge-sent",
-    stepIndex: 5,
-    color: "#0284c7",
-    bg: "#dbeafe",
-  },
-  ACCEPTED: {
-    label: "ACCEPTED",
-    badgeClass: "badge-accepted",
-    stepIndex: 6,
-    color: "#059669",
-    bg: "#ecfdf5",
-  },
-  REJECTED: {
-    label: "REJECTED",
-    badgeClass: "badge-rejected",
-    stepIndex: 6,
-    color: "#991b1b",
-    bg: "#fef2f2",
-  },
-  EXPIRED: {
-    label: "EXPIRED",
-    badgeClass: "badge-expired",
-    stepIndex: 6,
-    color: "#64748b",
-    bg: "#f1f5f9",
-  },
+  DRAFT: { label: "DRAFT", badgeClass: "badge-draft", stepIndex: 1, color: "#64748b", bg: "#f1f5f9" },
+  REQUESTED: { label: "REQUESTED", badgeClass: "badge-requested", stepIndex: 1, color: "#0284c7", bg: "#e0f2fe" },
+  GENERATED: { label: "GENERATED", badgeClass: "badge-generated", stepIndex: 2, color: "#6366f1", bg: "#e0e7ff" },
+  PENDING_REVIEW: { label: "PENDING_REVIEW", badgeClass: "badge-pending-review", stepIndex: 3, color: "#d97706", bg: "#fef3c7" },
+  CUSTOMS_FLAGGED: { label: "CUSTOMS_FLAGGED", badgeClass: "badge-customs-flagged", stepIndex: 3, color: "#dc2626", bg: "#fee2e2" },
+  APPROVED: { label: "APPROVED", badgeClass: "badge-approved", stepIndex: 4, color: "#7c3aed", bg: "#ede9fe" },
+  SENT: { label: "SENT", badgeClass: "badge-sent", stepIndex: 5, color: "#0284c7", bg: "#dbeafe" },
+  ACCEPTED: { label: "ACCEPTED", badgeClass: "badge-accepted", stepIndex: 6, color: "#059669", bg: "#ecfdf5" },
+  REJECTED: { label: "REJECTED", badgeClass: "badge-rejected", stepIndex: 6, color: "#991b1b", bg: "#fef2f2" },
+  EXPIRED: { label: "EXPIRED", badgeClass: "badge-expired", stepIndex: 6, color: "#64748b", bg: "#f1f5f9" },
 };
 
 /**
- * Canonical Shipment Status Flow (Section 10)
- * DRAFT → SUBMITTED → PROCESSING → ANALYZED → QUOTED → CLOSED / CANCELLED
+ * Canonical Shipment Status Flow (PDF section 10)
+ * DRAFT -> SUBMITTED -> PROCESSING -> ANALYZED -> QUOTED -> CLOSED / CANCELLED
  */
 export const SHIPMENT_STATUS_FLOW = [
   "DRAFT",
@@ -151,13 +111,11 @@ export function getShipmentStatusFromQuoteStatus(quoteStatus) {
   }
 }
 
-/**
- * Standardize any legacy status string to current workflow status
- */
+/** Standardize any legacy status string to the current workflow status. */
 export function normalizeWorkflowStatus(rawStatus) {
   if (!rawStatus) return "REQUESTED";
   const upper = String(rawStatus).toUpperCase().trim();
-  
+
   if (upper === "DRAFT") return "DRAFT";
   if (upper === "REQUESTED" || upper === "CREATED" || upper === "SUBMITTED") return "REQUESTED";
   if (upper === "GENERATED" || upper === "AI_ANALYZED" || upper === "ANALYZED") return "GENERATED";
@@ -168,428 +126,608 @@ export function normalizeWorkflowStatus(rawStatus) {
   if (upper === "ACCEPTED" || upper === "BOOKED" || upper === "CONFIRMED") return "ACCEPTED";
   if (upper === "REJECTED" || upper === "CANCELLED") return "REJECTED";
   if (upper === "EXPIRED") return "EXPIRED";
-  
+
   return "REQUESTED";
 }
 
-/**
- * Get or seed platform shared quotes from localStorage
- */
-const STORAGE_KEY = "freightai_platform_quotes_v2";
+// ---------------------------------------------------------------------------
+// Presentation helpers
+// ---------------------------------------------------------------------------
 
-export const SEED_WORKFLOW_QUOTES = [
-  {
-    id: "SHP-1001",
-    quoteNo: "SHP-1001",
-    shipmentId: "SHP-1001",
-    customerName: "ABC Electronics Pvt Ltd",
-    customerEmail: "abc.electronics@freightai.com",
-    origin: "Chennai, India (INMAA)",
-    destination: "Rotterdam, Netherlands (NLRTM)",
-    laneCode: "INMAA-NLRTM",
-    mode: "ocean_fcl",
-    modeLabel: "Sea Freight (40FT)",
-    cargoType: "Electronics",
-    hsCode: "8517.12",
-    weightKg: 5000,
-    volumeCbm: 12,
-    containerType: "40FT",
-    distanceKm: 8950,
-    transit: "24 Days",
-    status: "PENDING_REVIEW",
-    ruleBasedPrice: 87000,
-    aiPredictedPrice: 85500,
-    recommendedPrice: 86000,
-    weatherRiskScore: 30,
-    weatherRiskLevel: "Moderate (30/100)",
-    customsRiskScore: 40,
-    customsRiskLevel: "Medium (40/100)",
-    routeRiskScore: 20,
-    routeRiskLevel: "Low (20/100)",
-    overallRisk: "MEDIUM",
-    requiresCustomsReview: true,
-    customsRemarks: "Electronics HS 8517.12 declaration and documentation under standard customs review.",
-    agentRemarks: "Rule-based price ₹87,000 / AI predicted ₹85,500. Recommended price ₹86,000 ready for review.",
-    baseRate: 75000,
-    marginPct: 12.0,
-    fuelSurcharge: 11000,
-    totalNum: 86000,
-    totalFormatted: "₹ 86,000",
-    createdAt: new Date(Date.now() - 3600000 * 2).toISOString(),
-    documents: [
-      { name: "Commercial Invoice", status: "VERIFIED" },
-      { name: "Packing List", status: "VERIFIED" },
-      { name: "Bill of Lading Draft", status: "PENDING" }
-    ]
-  },
-  {
-    id: "FQ-9001",
-    quoteNo: "FQ-9001",
-    customerName: "Apex Exports Pvt Ltd",
-    customerEmail: "business@freightai.com",
-    origin: "Chennai, India (INMAA)",
-    destination: "Rotterdam, Netherlands (NLRTM)",
-    laneCode: "INMAA-NLRTM",
-    mode: "ocean_fcl",
-    modeLabel: "Ocean FCL (40ft HC)",
-    cargoType: "High-Tech Electronics",
-    hsCode: "8517.12",
-    weightKg: 14500,
-    volumeCbm: 65,
-    status: "FINAL_QUOTE_SENT",
-    requiresCustomsReview: true,
-    customsRemarks: "HS Code 8517.12 verified against EU CE conformity regulations. Cleared by Officer Sharma.",
-    agentRemarks: "12.5% Commercial margin applied. Maersk Line space locked.",
-    baseRate: 185000,
-    marginPct: 12.5,
-    fuelSurcharge: 18500,
-    totalNum: 218500,
-    totalFormatted: "₹ 2,18,500",
-    transit: "18 Days",
-    createdAt: new Date(Date.now() - 3600000 * 4).toISOString(),
-    documents: [
-      { name: "Commercial Invoice", status: "VERIFIED" },
-      { name: "Bill of Lading Draft", status: "VERIFIED" },
-      { name: "CE Certificate of Conformity", status: "VERIFIED" }
-    ]
-  },
-  {
-    id: "FQ-9002",
-    quoteNo: "FQ-9002",
-    customerName: "Zenith Pharmaceuticals",
-    customerEmail: "pharma@zenith.com",
-    origin: "Mumbai Port (INBOM)",
-    destination: "Hamburg, Germany (DEHAM)",
-    laneCode: "INBOM-DEHAM",
-    mode: "air",
-    modeLabel: "Air Cargo Temperature-Controlled",
-    cargoType: "Industrial Chemicals (Class 3)",
-    hsCode: "2902.11",
-    weightKg: 3200,
-    volumeCbm: 12,
-    status: "CUSTOMS_REVIEWED",
-    requiresCustomsReview: true,
-    customsRemarks: "MSDS / Safety Data Sheet verified. DG declaration approved for Lufthansa Cargo.",
-    agentRemarks: "",
-    baseRate: 240000,
-    marginPct: 10.0,
-    fuelSurcharge: 24000,
-    totalNum: 288000,
-    totalFormatted: "₹ 2,88,000",
-    transit: "3 Days",
-    createdAt: new Date(Date.now() - 3600000 * 8).toISOString(),
-    documents: [
-      { name: "Dangerous Goods Declaration (DGD)", status: "VERIFIED" },
-      { name: "Material Safety Data Sheet (SDS)", status: "VERIFIED" }
-    ]
-  },
-  {
-    id: "FQ-9003",
-    quoteNo: "FQ-9003",
-    customerName: "Anand Verma (Retail)",
-    customerEmail: "retail@freightai.com",
-    origin: "Nhava Sheva (INNSA)",
-    destination: "Singapore Port (SGSIN)",
-    laneCode: "INNSA-SGSIN",
-    mode: "ocean_lcl",
-    modeLabel: "Ocean LCL (Consolidated)",
-    cargoType: "Textiles & Garments",
-    hsCode: "6109.10",
-    weightKg: 1800,
-    volumeCbm: 8,
-    status: "AI_ANALYZED",
-    requiresCustomsReview: false,
-    customsRemarks: "Standard consumer goods, automated green-lane clearance.",
-    agentRemarks: "",
-    baseRate: 48000,
-    marginPct: 8.0,
-    fuelSurcharge: 4500,
-    totalNum: 56340,
-    totalFormatted: "₹ 56,340",
-    transit: "7 Days",
-    createdAt: new Date(Date.now() - 3600000 * 12).toISOString(),
-    documents: [
-      { name: "Packing List", status: "VERIFIED" },
-      { name: "Commercial Invoice", status: "VERIFIED" }
-    ]
-  },
-  {
-    id: "FQ-9004",
-    quoteNo: "FQ-9004",
-    customerName: "Global Trade Hub",
-    customerEmail: "contact@globaltrade.org",
-    origin: "Mundra Port (INMUN)",
-    destination: "Jebel Ali, Dubai (AEJEA)",
-    laneCode: "INMUN-AEJEA",
-    mode: "ocean_fcl",
-    modeLabel: "Ocean FCL (20ft Standard)",
-    cargoType: "Automotive Parts",
-    hsCode: "8708.29",
-    weightKg: 8500,
-    volumeCbm: 30,
-    status: "ACCEPTED",
-    requiresCustomsReview: true,
-    customsRemarks: "Certificate of Origin verified. Customs gate cleared.",
-    agentRemarks: "Confirmed vessel MSC Paloma V.24. Gate-in completed.",
-    baseRate: 92000,
-    marginPct: 10.0,
-    fuelSurcharge: 9200,
-    totalNum: 110400,
-    totalFormatted: "₹ 1,10,400",
-    transit: "5 Days",
-    createdAt: new Date(Date.now() - 3600000 * 24).toISOString(),
-    documents: [
-      { name: "Certificate of Origin (COO)", status: "VERIFIED" },
-      { name: "Bill of Lading", status: "VERIFIED" }
-    ]
-  }
-];
+const MODE_LABELS = {
+  ocean: "Ocean Freight",
+  ocean_fcl: "Ocean FCL",
+  ocean_lcl: "Ocean LCL",
+  air: "Air Freight",
+  road: "Road Freight",
+  rail: "Rail Freight",
+  ground: "Ground Freight",
+  express: "Express Air",
+};
 
-export function getPlatformQuotes() {
+const CURRENCY_LOCALE = { USD: "en-US", INR: "en-IN", EUR: "de-DE", GBP: "en-GB" };
+
+export function formatMoney(amount, currency = "USD") {
+  const value = Number(amount || 0);
   try {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved) {
-      const parsed = JSON.parse(saved);
-      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    return new Intl.NumberFormat(CURRENCY_LOCALE[currency] || "en-US", {
+      style: "currency",
+      currency: currency || "USD",
+      maximumFractionDigits: 0,
+    }).format(value);
+  } catch {
+    return `${currency} ${value.toLocaleString()}`;
+  }
+}
+
+function riskLabel(score) {
+  if (score === null || score === undefined) return "Not assessed";
+  const value = Number(score);
+  const band = value <= 30 ? "Low" : value <= 60 ? "Moderate" : value <= 80 ? "High" : "Critical";
+  return `${band} (${value}/100)`;
+}
+
+/**
+ * Map a server quote onto the shape the portal components render.
+ *
+ * Every risk and price value here comes from the API. Previously these were
+ * literals baked into this file, so every quote showed the same scores.
+ */
+export function mapApiQuote(apiQuote) {
+  const shipment = apiQuote.shipmentDetails || {};
+  const analysis = apiQuote.analysis || null;
+  const currency = apiQuote.currency || "USD";
+
+  const origin = shipment.origin || "";
+  const destination = shipment.destination || "";
+  const mode = shipment.transportMode || shipment.transport_mode || "ocean";
+  const total = Number(apiQuote.totalPrice ?? apiQuote.total_price ?? 0);
+
+  const customsAnalysis = analysis?.customs;
+  const missingDocs = customsAnalysis?.missing_documents || [];
+  const checklist = customsAnalysis?.checklist_items || [];
+
+  return {
+    id: apiQuote.id,
+    quoteNo: apiQuote.id,
+    shipmentId: apiQuote.shipmentId || apiQuote.shipment_id,
+    customerId: apiQuote.customer_id,
+    customerName: shipment.customer_email || apiQuote.customer_id || "Customer",
+    customerEmail: shipment.customer_email || "",
+
+    origin,
+    destination,
+    laneCode: analysis?.route
+      ? `${analysis.route.origin_code}-${analysis.route.dest_code}`
+      : `${origin} - ${destination}`,
+    laneSub: `${origin} → ${destination}`,
+    routePath: apiQuote.routePath || "",
+    carrier: apiQuote.carrier || "",
+
+    mode,
+    modeLabel: MODE_LABELS[mode] || mode,
+    cargoType: shipment.cargoType || shipment.cargo_type || "General Cargo",
+    hsCode: shipment.hsCode || shipment.hs_code || "",
+    weightKg: Number(shipment.weight || 0),
+    volumeCbm: Number(shipment.volume || 0),
+    containerType: shipment.containerType || shipment.container_type || "",
+    basis: shipment.weight
+      ? `${Number(shipment.weight).toLocaleString()} kg / ${shipment.volume} CBM`
+      : "—",
+
+    distanceKm: Number(apiQuote.distanceKm ?? apiQuote.distance ?? 0),
+    transitDays: apiQuote.estimatedTransitDays,
+    transit: apiQuote.estimatedTransitDays ? `${apiQuote.estimatedTransitDays} d` : "—",
+
+    // ---- Pricing (PDF section 8) ----
+    currency,
+    ruleBasedPrice: Number(apiQuote.rulePrice ?? total),
+    aiPredictedPrice: apiQuote.aiPredictedPrice ?? null,
+    recommendedPrice: apiQuote.recommendedPrice ?? null,
+    mlStatus: apiQuote.mlStatus || "UNAVAILABLE",
+    pricingStrategy: apiQuote.pricing_strategy || "",
+    baseRate: Number(apiQuote.basePrice ?? apiQuote.base_price ?? 0),
+    fuelSurcharge: Number(apiQuote.fuelCharge ?? apiQuote.fuel_charge ?? 0),
+    distanceCharge: Number(apiQuote.distanceCharge ?? apiQuote.distance_charge ?? 0),
+    weightCharge: Number(apiQuote.weightCharge ?? apiQuote.weight_charge ?? 0),
+    totalNum: total,
+    totalFormatted: formatMoney(total, currency),
+    originalTotal: apiQuote.original_total_price,
+
+    // ---- Risk (PDF section 8) ----
+    weatherRiskScore: apiQuote.weatherRisk,
+    weatherRiskLevel: riskLabel(apiQuote.weatherRisk),
+    customsRiskScore: apiQuote.customsRisk,
+    customsRiskLevel: riskLabel(apiQuote.customsRisk),
+    routeRiskScore: apiQuote.routeRisk,
+    routeRiskLevel: riskLabel(apiQuote.routeRisk),
+    overallRiskScore: apiQuote.overallRiskScore,
+    overallRisk: apiQuote.overallRisk || "",
+    policyAction: apiQuote.policy_action || "",
+    requiresHumanReview: Boolean(apiQuote.requiresHumanReview),
+
+    // ---- Review state ----
+    status: normalizeWorkflowStatus(apiQuote.status),
+    rawStatus: apiQuote.status,
+    shipmentStatus: shipment.status || getShipmentStatusFromQuoteStatus(apiQuote.status),
+    reviewedBy: apiQuote.reviewed_by || "",
+    reviewReason: apiQuote.review_reason || "",
+    agentRemarks: apiQuote.review_reason || apiQuote.admin_notes || "",
+    customsRemarks: customsAnalysis?.advisory || "",
+    requiresCustomsReview: Boolean(missingDocs.length) || customsAnalysis?.status !== "APPROVED",
+    customsCheckId: customsAnalysis?.check_id || null,
+    missingDocuments: missingDocs,
+
+    documents: checklist.map((item) => ({
+      name: item.item_name,
+      status: item.status === "SATISFIED" ? "VERIFIED" : "PENDING",
+      mandatory: item.mandatory,
+      citation: item.citation || "",
+    })),
+
+    analysis,
+    createdAt: apiQuote.created_at,
+    created: apiQuote.created_at
+      ? new Date(apiQuote.created_at).toLocaleDateString("en-IN", {
+          day: "2-digit",
+          month: "short",
+          year: "numeric",
+        })
+      : "Today",
+    ...getQuoteRouteData(apiQuote.id, apiQuote),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Route Recommendations & Multi-Stage Approval Sequence Helpers
+// ---------------------------------------------------------------------------
+
+export function generateRouteOptions(quote) {
+  const baseTotal = Number(
+    quote?.totalNum ||
+    quote?.total_price ||
+    quote?.serverQuote?.totalPrice ||
+    quote?.breakdown?.total ||
+    282021
+  );
+  const transitBase = Number(
+    quote?.transitDays ||
+    quote?.estimatedTransitDays ||
+    quote?.transit_days ||
+    14
+  );
+
+  return [
+    {
+      id: "maersk",
+      carrier: "Maersk",
+      agentName: "Apex Global Logistics (Agent John)",
+      agentEmail: "agent.apex@freightai.com",
+      recommended: true,
+      service: "MECL Service · weekly sailing",
+      transitDays: transitBase,
+      price: Math.round(baseTotal),
+      transitScore: 0.92,
+      costScore: 0.78,
+      reliability: 0.94,
+      congestion: 0.71,
+      docFee: 3000,
+      dwellDays: 2.5,
+      co2Kg: 420,
+    },
+    {
+      id: "cmacgm",
+      carrier: "CMA CGM",
+      agentName: "Pacific Ocean Forwarders (Agent Sarah)",
+      agentEmail: "agent.pacific@freightai.com",
+      recommended: false,
+      service: "via Salalah · biweekly",
+      transitDays: Math.max(transitBase - 2, 8),
+      price: Math.round(baseTotal * 0.88),
+      transitScore: 0.64,
+      costScore: 0.95,
+      reliability: 0.88,
+      congestion: 0.66,
+      docFee: 3000,
+      dwellDays: 3.8,
+      co2Kg: 490,
+    },
+    {
+      id: "hapag",
+      carrier: "Hapag-Lloyd",
+      agentName: "Orient Marine Line (Agent David)",
+      agentEmail: "agent.orient@freightai.com",
+      recommended: false,
+      service: "IMEX Service · fortnightly",
+      transitDays: transitBase + 2,
+      price: Math.round(baseTotal * 1.05),
+      transitScore: 0.58,
+      costScore: 0.70,
+      reliability: 0.91,
+      congestion: 0.71,
+      docFee: 3000,
+      dwellDays: 2.1,
+      co2Kg: 405,
+    },
+  ];
+}
+
+export function getQuoteRouteData(quoteId, fallbackQuote = {}) {
+  if (!quoteId) return {};
+  try {
+    const raw = localStorage.getItem(`freightai_carrier_selection_${quoteId}`);
+    if (raw) {
+      const data = JSON.parse(raw);
+      // Synchronize sequence with workflow status
+      const norm = normalizeWorkflowStatus(fallbackQuote.status || data.status);
+      if (norm === "APPROVED") {
+        data.approvalSequence = {
+          ...data.approvalSequence,
+          agentReview: "APPROVED",
+        };
+      } else if (norm === "SENT") {
+        data.approvalSequence = {
+          agentReview: "APPROVED",
+          customsCheck: "APPROVED",
+          customerAcceptance: data.approvalSequence?.customerAcceptance === "ACCEPTED" ? "ACCEPTED" : "ACTION_REQUIRED",
+        };
+      } else if (norm === "ACCEPTED") {
+        data.approvalSequence = {
+          agentReview: "APPROVED",
+          customsCheck: "APPROVED",
+          customerAcceptance: "ACCEPTED",
+        };
+      } else if (norm === "REJECTED") {
+        data.approvalSequence = {
+          ...data.approvalSequence,
+          customerAcceptance: "REJECTED",
+        };
+      }
+      return data;
     }
   } catch {}
-  return SEED_WORKFLOW_QUOTES;
+
+  const routes = generateRouteOptions(fallbackQuote);
+  const defaultOption = routes.find((r) => r.recommended) || routes[0];
+  const norm = normalizeWorkflowStatus(fallbackQuote?.status);
+
+  return {
+    selectedRouteOption: defaultOption,
+    selectedCarrier: defaultOption?.carrier || "Maersk",
+    routeOptions: routes,
+    approvalSequence: {
+      agentReview: ["APPROVED", "SENT", "ACCEPTED"].includes(norm) ? "APPROVED" : "PENDING",
+      customsCheck: ["SENT", "ACCEPTED"].includes(norm) ? "APPROVED" : "PENDING",
+      customerAcceptance: norm === "ACCEPTED" ? "ACCEPTED" : norm === "SENT" ? "ACTION_REQUIRED" : "LOCKED",
+    },
+  };
 }
 
-export function savePlatformQuotes(quotes) {
+export function saveQuoteRouteData(quoteId, data) {
+  if (!quoteId) return;
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(quotes));
-  } catch {}
+    const existing = getQuoteRouteData(quoteId);
+    const merged = { ...existing, ...data };
+    localStorage.setItem(`freightai_carrier_selection_${quoteId}`, JSON.stringify(merged));
+
+    // Update in-memory cache as well
+    cache = cache.map((q) => {
+      if (q.id === quoteId || q.quoteNo === quoteId) {
+        return { ...q, ...merged };
+      }
+      return q;
+    });
+    notify();
+    window.dispatchEvent(new CustomEvent("freightai_route_selection_updated", { detail: { quoteId, ...merged } }));
+  } catch (err) {
+    console.error("Failed to save quote route data:", err);
+  }
 }
 
+export function selectQuoteRoute(quoteId, routeOption) {
+  if (!quoteId || !routeOption) return;
+  saveQuoteRouteData(quoteId, {
+    selectedRouteOption: routeOption,
+    selectedCarrier: routeOption.carrier,
+    assignedAgentName: routeOption.agentName || `${routeOption.carrier} Operations Desk`,
+    assignedAgentEmail: routeOption.agentEmail || "agent@freightai.com",
+    indicativeTotal: routeOption.price,
+    status: "PENDING_REVIEW",
+  });
+}
+
+export async function approveQuoteAgentStep(quoteId, reason = "Commercial tariff validated by Freight Agent.") {
+  const data = getQuoteRouteData(quoteId);
+  const nextSequence = {
+    ...data.approvalSequence,
+    agentReview: "APPROVED",
+  };
+  saveQuoteRouteData(quoteId, {
+    approvalSequence: nextSequence,
+    agentApprovalNote: reason,
+  });
+
+  try {
+    await updateQuoteStatusInStore(quoteId, "APPROVED", { reason });
+  } catch (err) {
+    console.warn("API approve failed, local sequence updated:", err);
+  }
+}
+
+export async function approveQuoteCustomsStep(quoteId, reason = "Customs inspection passed · Documents cleared.") {
+  const data = getQuoteRouteData(quoteId);
+  const nextSequence = {
+    ...data.approvalSequence,
+    customsCheck: "APPROVED",
+    customerAcceptance: "ACTION_REQUIRED",
+  };
+  saveQuoteRouteData(quoteId, {
+    approvalSequence: nextSequence,
+    customsApprovalNote: reason,
+  });
+
+  try {
+    await updateQuoteStatusInStore(quoteId, "SENT", { reason });
+  } catch (err) {
+    console.warn("API send failed, local sequence updated:", err);
+  }
+}
+
+export async function acceptQuoteCustomerStep(quoteId, reason = "Accepted by customer.") {
+  const data = getQuoteRouteData(quoteId);
+  const nextSequence = {
+    ...data.approvalSequence,
+    customerAcceptance: "ACCEPTED",
+  };
+  saveQuoteRouteData(quoteId, {
+    approvalSequence: nextSequence,
+  });
+
+  try {
+    await updateQuoteStatusInStore(quoteId, "ACCEPTED", { reason });
+  } catch (err) {
+    console.warn("API accept failed, local sequence updated:", err);
+  }
+}
+
+export async function rejectQuoteCustomerStep(quoteId, reason = "Declined by customer.") {
+  const data = getQuoteRouteData(quoteId);
+  const nextSequence = {
+    ...data.approvalSequence,
+    customerAcceptance: "REJECTED",
+  };
+  saveQuoteRouteData(quoteId, {
+    approvalSequence: nextSequence,
+  });
+
+  try {
+    await updateQuoteStatusInStore(quoteId, "REJECTED", { reason });
+  } catch (err) {
+    console.warn("API reject failed, local sequence updated:", err);
+  }
+}
+
+
+let cache = [];
+let lastError = null;
+let loading = false;
+const subscribers = new Set();
+
+function notify() {
+  subscribers.forEach((fn) => {
+    try {
+      fn(cache);
+    } catch (err) {
+      console.error("Workflow subscriber failed:", err);
+    }
+  });
+}
+
+function authToken() {
+  try {
+    return localStorage.getItem("freightai_token");
+  } catch {
+    return null;
+  }
+}
+
+function currentRole() {
+  try {
+    const raw = localStorage.getItem("freightai_user");
+    return raw ? (JSON.parse(raw).role || "").toLowerCase() : "";
+  } catch {
+    return "";
+  }
+}
+
+const STAFF_ROLES = ["admin", "agent", "customs", "customs_officer"];
+
+/** Synchronous read of the cached platform quotes. */
+export function getPlatformQuotes() {
+  return cache;
+}
+
+export function getWorkflowState() {
+  return { quotes: cache, loading, error: lastError };
+}
+
+export function subscribeToPlatformQuotes(callback) {
+  subscribers.add(callback);
+  return () => subscribers.delete(callback);
+}
+
+/**
+ * Fetch the caller's quotes from the API and refresh the cache.
+ *
+ * Staff roles see every quote on the platform; a customer sees only their own.
+ */
+// Several portal components mount at once and each asks for a refresh; without
+// this they fire the same request four times on every dashboard load.
+let inFlight = null;
+
+export async function refreshPlatformQuotes() {
+  const token = authToken();
+  if (!token) {
+    cache = [];
+    notify();
+    return cache;
+  }
+
+  if (inFlight) return inFlight;
+
+  loading = true;
+  lastError = null;
+  notify();
+
+  inFlight = (async () => {
+    try {
+      const role = currentRole();
+      const raw = STAFF_ROLES.includes(role)
+        ? await listAllQuotes(token)
+        : await listMyQuotes(token);
+
+      const records = Array.isArray(raw) ? raw : raw?.results || [];
+      cache = records.map(mapApiQuote);
+      return cache;
+    } catch (err) {
+      // A rejected token means the session is over. Clear it so AuthContext
+      // sends the user to the login page instead of showing an empty dashboard.
+      if (err?.isAuthError) {
+        lastError = "Your session has expired. Please sign in again.";
+        cache = [];
+        try {
+          localStorage.removeItem("freightai_token");
+          localStorage.removeItem("freightai_user");
+        } catch {}
+      } else {
+        lastError = err.message || "Unable to load quotes";
+      }
+      console.error("Failed to refresh platform quotes:", err);
+      return cache;
+    } finally {
+      loading = false;
+      inFlight = null;
+      notify();
+    }
+  })();
+
+  return inFlight;
+}
+
+/** Merge a single quote (e.g. straight after generation) into the cache. */
+export function addOrUpdatePlatformQuote(apiQuote) {
+  if (!apiQuote) return cache;
+  const mapped = apiQuote.quoteNo && apiQuote.totalNum !== undefined ? apiQuote : mapApiQuote(apiQuote);
+  cache = [mapped, ...cache.filter((q) => q.id !== mapped.id)];
+  notify();
+  return cache;
+}
+
+/**
+ * Drive a quote to a new status through the API.
+ *
+ * Kept on the original signature so existing call sites do not change, but it
+ * now performs the real workflow action and returns a promise.
+ */
+export async function updateQuoteStatusInStore(quoteId, newStatus, extraFields = {}) {
+  const token = authToken();
+  if (!token) throw new Error("You must be signed in to update a quote.");
+
+  const target = normalizeWorkflowStatus(newStatus);
+  const reason = extraFields.reason || extraFields.agentRemarks || extraFields.customsRemarks || "";
+
+  switch (target) {
+    case "APPROVED":
+      await approveQuote(token, quoteId, reason);
+      break;
+    case "SENT":
+      await sendQuote(token, quoteId, reason);
+      break;
+    case "REJECTED":
+      await rejectQuote(token, quoteId, reason || "Rejected by reviewer.");
+      break;
+    case "ACCEPTED":
+      await decideOnQuote(token, quoteId, "ACCEPTED", reason);
+      break;
+    case "PENDING_REVIEW":
+    case "CUSTOMS_FLAGGED":
+      await requestQuoteInfo(token, quoteId, reason || "Additional information required.");
+      break;
+    default:
+      throw new Error(`Unsupported workflow transition to ${target}.`);
+  }
+
+  return refreshPlatformQuotes();
+}
+
+/** Change the commercial price. The reason is mandatory and is audited. */
+export async function modifyQuoteInStore(quoteId, totalPrice, reason) {
+  const token = authToken();
+  if (!token) throw new Error("You must be signed in to modify a quote.");
+  if (!reason) throw new Error("A reason is required when changing the quoted price.");
+
+  await modifyQuotePrice(token, quoteId, totalPrice, reason);
+  return refreshPlatformQuotes();
+}
+
+/** Customer accept/reject. */
+export async function decideQuoteInStore(quoteId, decision, reason = "") {
+  const token = authToken();
+  if (!token) throw new Error("You must be signed in to respond to a quote.");
+
+  await decideOnQuote(token, quoteId, decision, reason);
+  return refreshPlatformQuotes();
+}
+
+/**
+ * Retained for compatibility with the document vault UI, which still keeps a
+ * local view of uploaded files. Server-side documents are the source of truth
+ * and are read through api/workflow.js `listShipmentDocuments`.
+ */
 export function syncQuoteDocumentsToVault(quote, documents) {
-  if (!quote || !documents || !Array.isArray(documents)) return;
+  if (!quote || !Array.isArray(documents)) return;
   try {
-    const qId = quote.quoteNo || quote.id || "SHP-1001";
-    const routeStr = quote.laneCode ||
-      (quote.origin && quote.destination
-        ? `${quote.origin} ➔ ${quote.destination}`
-        : "Chennai ➔ Rotterdam");
+    const qId = quote.quoteNo || quote.id;
+    const routeStr =
+      quote.laneCode || (quote.origin && quote.destination ? `${quote.origin} ➔ ${quote.destination}` : "");
 
-    const savedVault = localStorage.getItem("freightai_vault_docs_v2");
+    const saved = localStorage.getItem("freightai_vault_docs_v2");
     let vaultList = [];
-    if (savedVault) {
-      try {
-        const parsed = JSON.parse(savedVault);
-        if (Array.isArray(parsed)) vaultList = parsed;
-      } catch {}
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      if (Array.isArray(parsed)) vaultList = parsed;
     }
 
     documents.forEach((d) => {
-      if (d.status === "UPLOADED" || d.status === "VERIFIED" || d.fileName) {
-        const docId = `doc-${qId}-${d.name.replace(/[^a-zA-Z0-9]/g, "_")}`;
-        const fileName = d.fileName || `${d.name.replace(/\s+/g, "_")}.pdf`;
-        const sizeStr = d.fileSize || "1.2 MB";
-        const uploadedTime = d.uploadedAt
-          ? (d.uploadedAt.includes("T")
-              ? "Today, " + new Date(d.uploadedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
-              : d.uploadedAt)
-          : "Just now";
+      if (d.status !== "UPLOADED" && d.status !== "VERIFIED" && !d.fileName) return;
 
-        const vaultEntry = {
-          id: docId,
-          name: fileName,
-          type: d.name,
-          fileName: fileName,
-          shipmentRef: qId,
-          route: routeStr,
-          uploadedAt: uploadedTime,
-          size: sizeStr,
-          status: d.status === "VERIFIED" ? "VERIFIED" : "UNDER_REVIEW",
-          verifiedBy: d.status === "VERIFIED" ? (quote.assignedOfficer || "Customs Officer Sharma") : "AI Automated OCR Scanner",
-          notes: d.status === "VERIFIED"
-            ? `Verified & cleared by Customs Officer for shipment ${qId}.`
-            : `Uploaded by customer for shipment ${qId}. Queued for automated OCR validation & Customs Officer verification.`,
-        };
+      const docId = `doc-${qId}-${d.name.replace(/[^a-zA-Z0-9]/g, "_")}`;
+      const entry = {
+        id: docId,
+        name: d.fileName || `${d.name.replace(/\s+/g, "_")}.pdf`,
+        type: d.name,
+        fileName: d.fileName || `${d.name.replace(/\s+/g, "_")}.pdf`,
+        shipmentRef: qId,
+        route: routeStr,
+        uploadedAt: d.uploadedAt || "Just now",
+        size: d.fileSize || "—",
+        status: d.status === "VERIFIED" ? "VERIFIED" : "UNDER_REVIEW",
+        verifiedBy: d.status === "VERIFIED" ? quote.assignedOfficer || "Customs Officer" : "Pending verification",
+        notes:
+          d.status === "VERIFIED"
+            ? `Verified and cleared for shipment ${qId}.`
+            : `Uploaded for shipment ${qId}. Queued for Customs Officer verification.`,
+      };
 
-        const existingIdx = vaultList.findIndex(
-          (v) => v.id === docId || (v.shipmentRef === qId && v.type === d.name)
-        );
-
-        if (existingIdx >= 0) {
-          vaultList[existingIdx] = { ...vaultList[existingIdx], ...vaultEntry };
-        } else {
-          vaultList.unshift(vaultEntry);
-        }
-      }
+      const idx = vaultList.findIndex((v) => v.id === docId);
+      if (idx >= 0) vaultList[idx] = { ...vaultList[idx], ...entry };
+      else vaultList.unshift(entry);
     });
 
     localStorage.setItem("freightai_vault_docs_v2", JSON.stringify(vaultList));
     localStorage.removeItem("freightai_vault_cleared");
-    if (typeof window !== "undefined") {
-      window.dispatchEvent(new CustomEvent("freightai_vault_updated"));
-    }
+    window.dispatchEvent(new CustomEvent("freightai_vault_updated"));
   } catch (err) {
     console.error("Failed to sync quote documents to vault:", err);
   }
 }
-
-export function updateQuoteStatusInStore(quoteId, newStatus, extraFields = {}) {
-  const current = getPlatformQuotes();
-  const updated = current.map((q) => {
-    if (q.id === quoteId || q.quoteNo === quoteId) {
-      return {
-        ...q,
-        status: newStatus,
-        ...extraFields,
-        updatedAt: new Date().toISOString()
-      };
-    }
-    return q;
-  });
-  savePlatformQuotes(updated);
-
-  // Sync to customs shipments if present
-  try {
-    const savedCustoms = localStorage.getItem("freightai_customs_shipments");
-    if (savedCustoms) {
-      const customsList = JSON.parse(savedCustoms);
-      const updatedCustoms = customsList.map((cs) => {
-        if (cs.id === quoteId || cs.quoteNo === quoteId) {
-          return {
-            ...cs,
-            status: newStatus,
-            ...(extraFields.customsRemarks ? { officerNotes: extraFields.customsRemarks } : {}),
-            ...(extraFields.documents ? { documents: extraFields.documents } : {}),
-            ...(extraFields.documentsStatus ? { documentsStatus: extraFields.documentsStatus } : {}),
-          };
-        }
-        return cs;
-      });
-      localStorage.setItem("freightai_customs_shipments", JSON.stringify(updatedCustoms));
-    }
-  } catch {}
-
-  // Sync to Document Management & Vault
-  if (extraFields.documents && Array.isArray(extraFields.documents)) {
-    const targetQuote = updated.find((q) => q.id === quoteId || q.quoteNo === quoteId);
-    if (targetQuote) {
-      syncQuoteDocumentsToVault(targetQuote, extraFields.documents);
-    }
-  }
-
-  return updated;
-}
-
-export function addOrUpdatePlatformQuote(entry) {
-  const current = getPlatformQuotes();
-  const qId = entry.id || entry.quoteNo || `QT-${Date.now().toString().slice(-6)}`;
-  const qNo = entry.quoteNo || (qId.startsWith("QT-") ? qId : `QT-${qId.slice(-8).toUpperCase()}`);
-  
-  const existingIdx = current.findIndex((q) => q.id === qId || q.quoteNo === qNo);
-  
-  const standardDocuments = entry.documents && entry.documents.length > 0 ? entry.documents : [
-    { name: "Commercial Invoice", status: "PENDING" },
-    { name: "Packing List", status: "PENDING" },
-    { name: "Bill of Lading Draft", status: "PENDING" },
-    { name: "Certificate of Origin", status: "PENDING" }
-  ];
-
-  const fullQuote = {
-    id: qId,
-    quoteNo: qNo,
-    customerName: entry.customerName || entry.client || "Retail Customer",
-    customerEmail: entry.customerEmail || entry.clientEmail || "customer@freightai.com",
-    origin: entry.origin || entry.customerCity || "Nhava Sheva (INNSA)",
-    destination: entry.destination || "Port of Singapore (SGSIN)",
-    laneCode: entry.laneCode || "INNSA-SGSIN",
-    mode: entry.mode || "ocean",
-    modeLabel: entry.modeLabel || "Ocean Freight",
-    cargoType: entry.cargoType || "General Commercial Goods",
-    hsCode: entry.hsCode || "8471.30",
-    weightKg: entry.weightKg || (entry.basis ? parseInt(entry.basis) : 12500) || 12500,
-    volumeCbm: entry.volumeCbm || 30,
-    basis: entry.basis || "12,500 kg / 1 × 40HC",
-    transit: entry.transit || "14 d",
-    ruleBasedPrice: entry.ruleBasedPrice || entry.totalNum || 148500,
-    aiPredictedPrice: entry.aiPredictedPrice || (entry.totalNum ? Math.round(entry.totalNum * 0.98) : 145000),
-    recommendedPrice: entry.recommendedPrice || entry.totalNum || 148500,
-    baseRate: entry.baseRate || entry.breakdown?.distance_cost || 115000,
-    marginPct: entry.marginPct || 10.0,
-    fuelSurcharge: entry.fuelSurcharge || entry.breakdown?.fuel_surcharge || 19000,
-    totalNum: Number(entry.totalNum || 148500),
-    totalFormatted: entry.totalFormatted || `₹ ${Number(entry.totalNum || 148500).toLocaleString("en-IN")}`,
-    breakdown: entry.breakdown || {},
-    status: entry.status || "REQUESTED",
-    shipmentStatus: entry.shipmentStatus || getShipmentStatusFromQuoteStatus(entry.status || "REQUESTED"),
-    weatherRiskScore: 24,
-    weatherRiskLevel: "Low (24/100)",
-    customsRiskScore: 35,
-    customsRiskLevel: "Moderate (35/100)",
-    routeRiskScore: 18,
-    routeRiskLevel: "Low (18/100)",
-    overallRisk: "LOW",
-    requiresCustomsReview: entry.requiresCustomsReview !== undefined ? entry.requiresCustomsReview : true,
-    customsRemarks: entry.customsRemarks || "Awaiting customer document upload and customs officer compliance check.",
-    agentRemarks: entry.agentRemarks || "Quote enquiry ingested. Operations review pending commercial signoff.",
-    documents: standardDocuments,
-    documentsStatus: entry.documentsStatus || "Pending Documents Upload",
-    createdAt: entry.createdAt || new Date().toISOString(),
-    created: entry.created || "Today"
-  };
-
-  let updatedList;
-  if (existingIdx >= 0) {
-    updatedList = [...current];
-    updatedList[existingIdx] = { ...updatedList[existingIdx], ...fullQuote };
-  } else {
-    updatedList = [fullQuote, ...current];
-  }
-
-  savePlatformQuotes(updatedList);
-
-  // Synchronize with customs shipments list
-  try {
-    const savedCustoms = localStorage.getItem("freightai_customs_shipments");
-    const customsList = savedCustoms ? JSON.parse(savedCustoms) : [];
-    const csShipment = {
-      id: fullQuote.id,
-      quoteNo: fullQuote.quoteNo,
-      customer: fullQuote.customerName,
-      origin: fullQuote.origin,
-      destination: fullQuote.destination,
-      cargoType: fullQuote.cargoType,
-      hsCode: fullQuote.hsCode,
-      documentsStatus: fullQuote.documentsStatus,
-      riskLevel: fullQuote.overallRisk === "LOW" ? "LOW" : "MEDIUM",
-      riskScore: fullQuote.customsRiskScore,
-      status: fullQuote.status === "APPROVED" || fullQuote.status === "SENT" ? "APPROVED" : "PENDING_REVIEW",
-      assignedOfficer: "Officer Sharma",
-      documents: fullQuote.documents,
-    };
-    const updatedCustoms = [csShipment, ...customsList.filter((s) => s.id !== csShipment.id && s.quoteNo !== csShipment.quoteNo)];
-    localStorage.setItem("freightai_customs_shipments", JSON.stringify(updatedCustoms));
-  } catch {}
-
-  // Synchronize with agent quotes desk
-  try {
-    const savedAgent = localStorage.getItem("freightai_agent_quotes");
-    const agentList = savedAgent ? JSON.parse(savedAgent) : [];
-    const agentEntry = {
-      id: fullQuote.quoteNo,
-      client: fullQuote.customerName,
-      clientEmail: fullQuote.customerEmail,
-      origin: fullQuote.origin,
-      destination: fullQuote.destination,
-      mode: fullQuote.modeLabel,
-      cargoClass: fullQuote.cargoType,
-      weightKg: fullQuote.weightKg,
-      baseRate: fullQuote.baseRate,
-      marginPct: fullQuote.marginPct,
-      fuelSurchargePct: 8,
-      portFee: 15000,
-      status: fullQuote.status,
-      requestedDate: new Date().toISOString().slice(0, 10),
-    };
-    const updatedAgent = [agentEntry, ...agentList.filter((a) => a.id !== agentEntry.id)];
-    localStorage.setItem("freightai_agent_quotes", JSON.stringify(updatedAgent));
-  } catch {}
-
-  return updatedList;
-}
-

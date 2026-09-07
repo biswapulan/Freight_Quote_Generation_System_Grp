@@ -18,6 +18,13 @@ from .engine import WeatherRiskEngine
 class WeatherAssessView(APIView):
     """Assess weather along candidate routes, predict delay probability, and generate alerts."""
 
+    # The M1-M3 service endpoints resolve the caller through
+    # quotes.auth_helper rather than DRF's Mongo-backed authenticator, which
+    # rejects any subject id that is not a Mongo ObjectId. Declared here so a
+    # freight-agent or customs token is not turned away with a 403.
+    authentication_classes = []
+    permission_classes = []
+
     def post(self, request):
         serializer = WeatherAssessRequestSerializer(data=request.data)
         if not serializer.is_valid():
@@ -136,6 +143,13 @@ class WeatherAssessView(APIView):
 
 class WeatherAlertListView(APIView):
     """List active weather alerts."""
+
+    # The M1-M3 service endpoints resolve the caller through
+    # quotes.auth_helper rather than DRF's Mongo-backed authenticator, which
+    # rejects any subject id that is not a Mongo ObjectId. Declared here so a
+    # freight-agent or customs token is not turned away with a 403.
+    authentication_classes = []
+    permission_classes = []
 
     def get(self, request):
         shipment_id = request.query_params.get("shipment_id")

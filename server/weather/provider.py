@@ -17,6 +17,11 @@ logger = logging.getLogger(__name__)
 _WEATHER_CACHE: Dict[str, Dict[str, Any]] = {}
 CACHE_TTL_SECONDS = 6 * 3600  # 6 Hours TTL
 
+# A simulated observation is cached too, but only briefly: during a provider
+# outage this stops every waypoint on every quote paying the full HTTP timeout,
+# while still retrying often enough to pick the live feed back up quickly.
+FALLBACK_CACHE_TTL_SECONDS = 5 * 60
+
 
 class WeatherProviderAdapter:
     """Unified Marine & Atmospheric Weather Provider with resilient fallback."""
@@ -30,20 +35,31 @@ class WeatherProviderAdapter:
         cache_key = f"{round(lat, 2)}_{round(lon, 2)}"
         now = time.time()
 
-        if not force_live and cache_key in _WEATHER_CACHE:
-            cached_data, cached_time = _WEATHER_CACHE[cache_key]["data"], _WEATHER_CACHE[cache_key]["time"]
-            if now - cached_time < CACHE_TTL_SECONDS:
+        entry = _WEATHER_CACHE.get(cache_key)
+        if not force_live and entry:
+            ttl = entry.get("ttl", CACHE_TTL_SECONDS)
+            if now - entry["time"] < ttl:
+                cached_data = entry["data"]
                 cached_data["cached"] = True
                 return cached_data
 
         try:
             # 1. Try Live Open-Meteo API
             live_data = cls._fetch_open_meteo(lat, lon)
-            _WEATHER_CACHE[cache_key] = {"data": live_data, "time": now}
+            _WEATHER_CACHE[cache_key] = {
+                "data": live_data,
+                "time": now,
+                "ttl": CACHE_TTL_SECONDS,
+            }
             return live_data
         except Exception as exc:
             logger.warning("Open-Meteo API call failed for (%f, %f): %s. Using resilient fallback.", lat, lon, exc)
             fallback_data = cls._generate_fallback(lat, lon)
+            _WEATHER_CACHE[cache_key] = {
+                "data": fallback_data,
+                "time": now,
+                "ttl": FALLBACK_CACHE_TTL_SECONDS,
+            }
             return fallback_data
 
     @classmethod
@@ -110,6 +126,16 @@ class WeatherProviderAdapter:
             "cached": False,
             "timestamp": datetime.now(dt_timezone.utc).isoformat(),
         }
+
+    @classmethod
+    def get_simulated_observation(cls, lat: float, lon: float) -> Dict[str, Any]:
+        """Deterministic observation with no network call.
+
+        Used by the orchestrator when a deployment disables live weather lookups
+        (ORCHESTRATOR_LIVE_WEATHER=False) and by the test suite, so quote
+        generation stays fast and reproducible.
+        """
+        return cls._generate_fallback(lat, lon)
 
     @classmethod
     def _generate_fallback(cls, lat: float, lon: float) -> Dict[str, Any]:

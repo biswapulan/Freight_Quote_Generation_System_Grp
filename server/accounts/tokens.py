@@ -6,8 +6,13 @@ import jwt
 from django.conf import settings
 
 
-def create_token(user_id, expires_in_hours=24):
-    """Create a signed JWT containing the Mongo user id as a string."""
+def create_token(user_id, role=None, email=None, expires_in_hours=24):
+    """Create a signed JWT for a user.
+
+    The role is embedded in the signed payload so downstream services can
+    authorise a request without a database round trip, and — unlike the
+    ``X-User-Role`` header this replaces — the caller cannot alter it.
+    """
 
     now = datetime.now(timezone.utc)
     payload = {
@@ -15,6 +20,11 @@ def create_token(user_id, expires_in_hours=24):
         'iat': now,
         'exp': now + timedelta(hours=expires_in_hours),
     }
+    if role:
+        payload['role'] = str(role).lower()
+    if email:
+        payload['email'] = email
+
     return jwt.encode(payload, settings.SECRET_KEY, algorithm='HS256')
 
 

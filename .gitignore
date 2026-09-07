@@ -13,6 +13,9 @@ db.sqlite3
 db.sqlite3-journal
 staticfiles/
 
+# Customer-uploaded trade documents (served from MEDIA_ROOT at runtime)
+media/
+
 # Node / Vite
 node_modules/
 dist/

@@ -11,6 +11,10 @@ const API_BASE_URL =
 
 const BASE = API_BASE_URL.replace(/\/$/, "");
 
+// Exported so callers that cannot use apiRequest — multipart file uploads, which
+// must not carry a JSON Content-Type — can still resolve the same origin.
+export const API_BASE = BASE;
+
 export async function apiRequest(endpoint, { method = "GET", token, body, timeoutMs = 10000 } = {}) {
   const headers = { "Content-Type": "application/json" };
   if (token) headers.Authorization = `Bearer ${token}`;
@@ -30,7 +34,13 @@ export async function apiRequest(endpoint, { method = "GET", token, body, timeou
     const data = await res.json().catch(() => ({}));
 
     if (!res.ok) {
-      throw new Error(data.detail || data.error || "Something went wrong");
+      const error = new Error(data.detail || data.error || "Something went wrong");
+      // Callers need to tell "the server rejected you" apart from "the server
+      // could not be reached" — the first should sign you out, the second
+      // should not. A bare Error message cannot express that.
+      error.status = res.status;
+      error.isAuthError = res.status === 401 || res.status === 403;
+      throw error;
     }
 
     return data;

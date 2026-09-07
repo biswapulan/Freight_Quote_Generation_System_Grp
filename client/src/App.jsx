@@ -15,6 +15,7 @@ import ContactPage from "./components/ContactPage";
 import PageLoader from "./components/PageLoader";
 import CookieConsent from "./components/CookieConsent";
 import M3IntelligenceDashboard from "./components/M3IntelligenceDashboard";
+import QuoteDetailView from "./components/QuoteDetailView";
 import { LocationProvider } from "./context/LocationContext";
 
 const INITIAL_LOAD_MS = 600;
@@ -83,6 +84,24 @@ function App() {
           element={
             <ProtectedRoute>
               <QuotePage />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/quotes/:quoteId"
+          element={
+            <ProtectedRoute>
+              <QuoteDetailView />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/quote/:quoteId"
+          element={
+            <ProtectedRoute>
+              <QuoteDetailView />
             </ProtectedRoute>
           }
         />

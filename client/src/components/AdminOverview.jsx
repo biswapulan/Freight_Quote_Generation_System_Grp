@@ -19,18 +19,59 @@ import {
   Clock,
 } from "lucide-react";
 import {
-  getPlatformQuotes,
+  formatMoney,
   normalizeWorkflowStatus,
   STATUS_CONFIG,
 } from "../utils/quoteWorkflow";
+import { usePlatformQuotes } from "../hooks/usePlatformQuotes";
+import { getAgentMonitor } from "../api/workflow";
+import { listUsers } from "../api/admin";
+import { useAuth } from "../context/AuthContext";
 import "./AdminOverview.css";
 
 export default function AdminOverview() {
-  const [quotes, setQuotes] = useState(() => getPlatformQuotes());
+  const { token } = useAuth();
+  const { quotes, loading, error } = usePlatformQuotes();
+  const [userCount, setUserCount] = useState(null);
+  const [agentTelemetry, setAgentTelemetry] = useState(null);
 
+  // Platform-wide counters the quote feed cannot supply on its own.
   useEffect(() => {
-    setQuotes(getPlatformQuotes());
-  }, []);
+    if (!token) return undefined;
+    let cancelled = false;
+
+    listUsers(token)
+      .then((rows) => {
+        if (!cancelled) setUserCount(Array.isArray(rows) ? rows.length : rows?.count ?? null);
+      })
+      .catch(() => {});
+
+    getAgentMonitor(token)
+      .then((data) => {
+        if (!cancelled) setAgentTelemetry(data);
+      })
+      .catch(() => {});
+
+    return () => {
+      cancelled = true;
+    };
+  }, [token]);
+
+  // Every card below is derived from live platform data.
+  const shipmentIds = new Set(quotes.map((q) => q.shipmentId).filter(Boolean));
+  const pendingReviews = quotes.filter((q) => q.status === "PENDING_REVIEW").length;
+  const highRiskAlerts = quotes.filter((q) => ["HIGH", "CRITICAL"].includes(q.overallRisk)).length;
+  const aiPredictions = quotes.filter((q) => q.mlStatus === "PREDICTED").length;
+  const pricedQuotes = quotes.filter((q) => q.totalNum > 0);
+  const avgQuoteValue = pricedQuotes.length
+    ? Math.round(pricedQuotes.reduce((sum, q) => sum + q.totalNum, 0) / pricedQuotes.length)
+    : 0;
+  const orchestratorRuns = agentTelemetry?.orchestrator?.total_runs ?? 0;
+  const degradedRuns = agentTelemetry?.orchestrator?.degraded_runs ?? 0;
+  const pipelineHealth =
+    orchestratorRuns > 0
+      ? `${(((orchestratorRuns - degradedRuns) / orchestratorRuns) * 100).toFixed(1)}%`
+      : "—";
 
   return (
     <div className="admin-overview">
@@ -49,6 +90,19 @@ export default function AdminOverview() {
       </div>
 
       {/* KPI Cards Grid (6. Dashboard Architecture: Total Users, Shipments, Quotes, Pending Reviews, High Risk Alerts, AI Predictions, Analytics) */}
+      {error && (
+        <div
+          style={{
+            display: "flex", alignItems: "center", gap: "8px",
+            padding: "11px 16px", marginBottom: "14px", borderRadius: "10px",
+            background: "#fef2f2", border: "1px solid #fecaca",
+            color: "#b91c1c", fontSize: "13px", fontWeight: 600,
+          }}
+        >
+          <AlertTriangle size={16} /> Platform metrics are incomplete: {error}
+        </div>
+      )}
+
       <div className="admin-kpi-grid">
         <div className="admin-kpi-card">
           <div className="admin-kpi-top">
@@ -57,7 +111,7 @@ export default function AdminOverview() {
               <Users size={18} />
             </div>
           </div>
-          <div className="admin-kpi-value">1,420</div>
+          <div className="admin-kpi-value">{userCount ?? "—"}</div>
           <div className="admin-kpi-sub">Customers, Agents &amp; Customs</div>
         </div>
 
@@ -68,8 +122,8 @@ export default function AdminOverview() {
               <Package size={18} />
             </div>
           </div>
-          <div className="admin-kpi-value">348</div>
-          <div className="admin-kpi-sub">Active in global transit</div>
+          <div className="admin-kpi-value">{shipmentIds.size}</div>
+          <div className="admin-kpi-sub">Shipments with an issued quote</div>
         </div>
 
         <div className="admin-kpi-card">
@@ -79,8 +133,8 @@ export default function AdminOverview() {
               <FileText size={18} />
             </div>
           </div>
-          <div className="admin-kpi-value">{quotes.length + 80}</div>
-          <div className="admin-kpi-sub">+18% this month</div>
+          <div className="admin-kpi-value">{quotes.length}</div>
+          <div className="admin-kpi-sub">Avg {formatMoney(avgQuoteValue, quotes[0]?.currency)}</div>
         </div>
 
         <div className="admin-kpi-card">
@@ -90,7 +144,7 @@ export default function AdminOverview() {
               <Clock size={18} />
             </div>
           </div>
-          <div className="admin-kpi-value">14</div>
+          <div className="admin-kpi-value">{pendingReviews}</div>
           <div className="admin-kpi-sub">Awaiting agent/customs action</div>
         </div>
 
@@ -101,8 +155,8 @@ export default function AdminOverview() {
               <AlertTriangle size={18} />
             </div>
           </div>
-          <div className="admin-kpi-value">3</div>
-          <div className="admin-kpi-sub">Customs hold / Severe swell</div>
+          <div className="admin-kpi-value">{highRiskAlerts}</div>
+          <div className="admin-kpi-sub">High or critical composite risk</div>
         </div>
 
         <div className="admin-kpi-card">
@@ -112,8 +166,8 @@ export default function AdminOverview() {
               <Sparkles size={18} />
             </div>
           </div>
-          <div className="admin-kpi-value">1,280</div>
-          <div className="admin-kpi-sub">ML Spot Rate Inferences</div>
+          <div className="admin-kpi-value">{aiPredictions}</div>
+          <div className="admin-kpi-sub">Quotes priced by the ML model</div>
         </div>
 
         <div className="admin-kpi-card">
@@ -123,8 +177,8 @@ export default function AdminOverview() {
               <BarChart3 size={18} />
             </div>
           </div>
-          <div className="admin-kpi-value">98.4%</div>
-          <div className="admin-kpi-sub">Platform SLA Compliance</div>
+          <div className="admin-kpi-value">{pipelineHealth}</div>
+          <div className="admin-kpi-sub">{orchestratorRuns} orchestrator run(s), {degradedRuns} degraded</div>
         </div>
       </div>
 

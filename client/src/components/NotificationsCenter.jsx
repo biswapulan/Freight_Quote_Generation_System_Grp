@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   Bell,
   CheckCircle2,
@@ -15,114 +15,128 @@ import {
   Info,
 } from "lucide-react";
 import { Link } from "react-router-dom";
+import {
+  listNotifications,
+  markAllNotificationsRead,
+  markNotificationRead,
+} from "../api/workflow";
+import { useAuth } from "../context/AuthContext";
 import "./NotificationsCenter.css";
 
-const INITIAL_NOTIFICATIONS = [
-  {
-    id: "notif-1",
-    title: "Final Quote Ready for Review",
-    message: "Freight Agent has validated commercial terms for Quote SHP-1001 (Chennai ➔ Rotterdam). Total: ₹ 86,000.",
-    category: "quotes",
-    priority: "high",
-    time: "10 mins ago",
-    read: false,
-    link: "/dashboard/my-quotes",
-    linkLabel: "View & Decide",
-    icon: DollarSign,
-    color: "#059669",
-    bg: "#ecfdf5",
-  },
-  {
-    id: "notif-2",
-    title: "Customs Clearance Sign-Off Completed",
-    message: "Officer Sharma digitally verified HS Code 8517.12 and CE Conformity for shipment SHP-1001.",
-    category: "customs",
-    priority: "medium",
-    time: "45 mins ago",
-    read: false,
-    link: "/dashboard/documents",
-    linkLabel: "View Certificate",
-    icon: ShieldCheck,
-    color: "#7c3aed",
-    bg: "#f5f3ff",
-  },
-  {
-    id: "notif-3",
-    title: "Marine Swell Advisory — Arabian Sea",
-    message: "Monsoon swell (3.8m waves) detected on INNSA ➔ NLRTM lane. AI transit estimate adjusted by +1.2 days.",
-    category: "weather",
-    priority: "high",
-    time: "2 hours ago",
-    read: false,
-    link: "/dashboard/risk-analysis",
-    linkLabel: "Inspect Weather Risk",
-    icon: AlertTriangle,
-    color: "#d97706",
-    bg: "#fffbeb",
-  },
-  {
-    id: "notif-4",
-    title: "Bunker Fuel Adjustment (BAF) Update",
-    message: "Global maritime BAF index updated to 12.5% effective this week across all Asia-Europe routes.",
-    category: "pricing",
-    priority: "low",
-    time: "Yesterday",
-    read: true,
-    link: "/dashboard/pricing-rules",
-    linkLabel: "Rate Index",
-    icon: Info,
-    color: "#2563eb",
-    bg: "#eff6ff",
-  },
-  {
-    id: "notif-5",
-    title: "Port Congestion Notice — Jebel Ali",
-    message: "Vessel dwell time reduced from 3.4 days to 2.1 days. Transshipment turnaround back to normal SLA.",
-    category: "routes",
-    priority: "low",
-    time: "2 days ago",
-    read: true,
-    link: "/dashboard/routes",
-    linkLabel: "View Route Map",
-    icon: Ship,
-    color: "#0284c7",
-    bg: "#f0f9ff",
-  },
-  {
-    id: "notif-6",
-    title: "Commercial Invoice Verified",
-    message: "Automated OCR extraction successfully parsed shipment document for INMAA-DEHAM booking.",
-    category: "documents",
-    priority: "low",
-    time: "3 days ago",
-    read: true,
-    link: "/dashboard/documents",
-    linkLabel: "Doc Vault",
-    icon: FileText,
-    color: "#475569",
-    bg: "#f1f5f9",
-  },
-];
+/**
+ * Notifications come from the platform API. Each portal's nav carries a
+ * Notifications item (PDF section 6), and the feed is emitted server-side when a
+ * quote is generated, approved, sent, flagged by customs, or decided on.
+ *
+ * This file previously held a hardcoded array in component state, so every user
+ * saw the same fictional five notifications and nothing ever produced a new one.
+ */
+
+// Server categories -> the icon and palette used by the list.
+const CATEGORY_PRESENTATION = {
+  QUOTE: { icon: DollarSign, color: "#0284c7", bg: "#e0f2fe", filter: "quotes" },
+  SHIPMENT: { icon: Ship, color: "#0f766e", bg: "#ccfbf1", filter: "quotes" },
+  CUSTOMS: { icon: FileText, color: "#b45309", bg: "#fef3c7", filter: "customs" },
+  RISK: { icon: AlertTriangle, color: "#dc2626", bg: "#fee2e2", filter: "routes" },
+  SYSTEM: { icon: Info, color: "#475569", bg: "#f1f5f9", filter: "all" },
+};
+
+const SEVERITY_OVERRIDE = {
+  CRITICAL: { color: "#dc2626", bg: "#fee2e2" },
+  WARNING: { color: "#b45309", bg: "#fef3c7" },
+  SUCCESS: { color: "#059669", bg: "#ecfdf5" },
+};
+
+function relativeTime(iso) {
+  if (!iso) return "just now";
+  const seconds = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
+  if (seconds < 60) return "just now";
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes} min${minutes === 1 ? "" : "s"} ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours} hour${hours === 1 ? "" : "s"} ago`;
+  const days = Math.floor(hours / 24);
+  return `${days} day${days === 1 ? "" : "s"} ago`;
+}
+
+function presentNotification(n) {
+  const preset = CATEGORY_PRESENTATION[n.category] || CATEGORY_PRESENTATION.SYSTEM;
+  const severity = SEVERITY_OVERRIDE[n.severity] || {};
+  return {
+    id: n.id,
+    title: n.title,
+    message: n.message,
+    category: preset.filter,
+    priority: n.severity === "CRITICAL" ? "high" : "normal",
+    time: relativeTime(n.created_at),
+    read: n.read,
+    link: n.link || "",
+    linkLabel: "View",
+    icon: preset.icon,
+    color: severity.color || preset.color,
+    bg: severity.bg || preset.bg,
+  };
+}
 
 export default function NotificationsCenter() {
-  const [notifications, setNotifications] = useState(INITIAL_NOTIFICATIONS);
+  const { token } = useAuth();
+  const [notifications, setNotifications] = useState([]);
+  const [unreadCount, setUnreadCount] = useState(0);
   const [filter, setFilter] = useState("all");
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
-  const unreadCount = notifications.filter((n) => !n.read).length;
+  const load = useCallback(async () => {
+    if (!token) {
+      setNotifications([]);
+      setLoading(false);
+      return;
+    }
+    try {
+      setError("");
+      const data = await listNotifications(token, { limit: 50 });
+      setNotifications((data.results || []).map(presentNotification));
+      setUnreadCount(data.unread_count || 0);
+    } catch (err) {
+      setError(err.message || "Could not load notifications.");
+    } finally {
+      setLoading(false);
+    }
+  }, [token]);
 
-  const markAsRead = (id) => {
-    setNotifications((prev) =>
-      prev.map((n) => (n.id === id ? { ...n, read: true } : n))
-    );
+  useEffect(() => {
+    load();
+    // Poll so an agent approval shows up on the customer's screen without a reload.
+    const interval = setInterval(load, 30000);
+    return () => clearInterval(interval);
+  }, [load]);
+
+  const markAsRead = async (id) => {
+    const target = notifications.find((n) => n.id === id);
+    if (!target || target.read) return;
+
+    setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, read: true } : n)));
+    setUnreadCount((c) => Math.max(0, c - 1));
+    try {
+      await markNotificationRead(token, id);
+    } catch {
+      load();
+    }
   };
 
-  const markAllAsRead = () => {
+  const markAllAsRead = async () => {
     setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+    setUnreadCount(0);
+    try {
+      await markAllNotificationsRead(token);
+    } catch {
+      load();
+    }
   };
 
-  const clearAll = () => {
-    setNotifications([]);
-  };
+  // Notifications are an audit-relevant server record, so the UI marks them read
+  // rather than deleting them outright.
+  const clearAll = markAllAsRead;
 
   const filtered = notifications.filter((n) => {
     if (filter === "unread") return !n.read;
@@ -155,7 +169,7 @@ export default function NotificationsCenter() {
           )}
           {notifications.length > 0 && (
             <button className="notif-btn-ghost" onClick={clearAll}>
-              <Trash2 size={16} /> Clear all
+              <Trash2 size={16} /> Mark all read
             </button>
           )}
         </div>
@@ -195,6 +209,16 @@ export default function NotificationsCenter() {
         </button>
       </div>
 
+      {error && (
+        <div className="notif-empty-state" style={{ color: "#b91c1c" }}>
+          <div className="notif-empty-icon">
+            <AlertTriangle size={48} />
+          </div>
+          <h3>Notifications unavailable</h3>
+          <p>{error}</p>
+        </div>
+      )}
+
       {/* Notifications List */}
       <div className="notif-list">
         {filtered.length === 0 ? (
@@ -202,8 +226,12 @@ export default function NotificationsCenter() {
             <div className="notif-empty-icon">
               <CheckCircle2 size={48} />
             </div>
-            <h3>All caught up!</h3>
-            <p>You have no notifications in this category right now.</p>
+            <h3>{loading ? "Loading notifications…" : "All caught up!"}</h3>
+            <p>
+              {loading
+                ? "Fetching your latest platform alerts."
+                : "You have no notifications in this category right now."}
+            </p>
           </div>
         ) : (
           filtered.map((item) => {
