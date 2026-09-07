@@ -33,6 +33,7 @@ import {
   normalizeShipmentStatus,
   getShipmentStatusFromQuoteStatus,
   decideQuoteInStore,
+  isRouteConfirmed,
 } from "../utils/quoteWorkflow";
 import { uploadShipmentDocument } from "../api/workflow";
 import { useAuth } from "../context/AuthContext";
@@ -80,13 +81,21 @@ export default function RetailShipmentsHistory({ viewMode = "quotes" }) {
     ...Array.from(new Set(quotations.map((quote) => quote.laneCode).filter(Boolean))).map((lane) => ({ value: lane, label: lane })),
   ], [quotations]);
 
+  // My Quotes is the finished-article view: a quote only belongs here once the
+  // customer has picked a carrier on the Recommendations screen. Before that
+  // it's still mid-flow inside Request Quote, not a record to browse back to.
+  const confirmedQuotations = useMemo(
+    () => quotations.filter((q) => isRouteConfirmed(q.id || q.quoteNo, q)),
+    [quotations]
+  );
+
   // If in shipments mode, focus on confirmed/booked cargo orders
   const baseList = useMemo(() => {
     if (isShipmentMode) {
       return quotations.filter((q) => q.status === "Booked" || q.status === "confirmed" || q.status === "Issued");
     }
-    return quotations;
-  }, [quotations, isShipmentMode]);
+    return confirmedQuotations;
+  }, [quotations, confirmedQuotations, isShipmentMode]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -244,14 +253,14 @@ export default function RetailShipmentsHistory({ viewMode = "quotes" }) {
   }
 
   const now = new Date();
-  const quotesThisMonth = quotations.filter((q) => {
+  const quotesThisMonth = confirmedQuotations.filter((q) => {
     if (!q.createdAt) return false;
     const d = new Date(q.createdAt);
     return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
   }).length;
 
   const bookedCount = quotations.filter((q) => q.status === "Booked" || q.status === "confirmed").length;
-  const routesAnalysed = quotations.length > 0 ? quotations.length * 3 + 4 : 0;
+  const routesAnalysed = confirmedQuotations.length > 0 ? confirmedQuotations.length * 3 + 4 : 0;
 
   return (
     <div className="dashboard-view">
@@ -308,8 +317,8 @@ export default function RetailShipmentsHistory({ viewMode = "quotes" }) {
             </div>
             <div className="kpi-card">
               <div className="kpi-title">Total quotes</div>
-              <div className="kpi-value">{quotations.length}</div>
-              <div className="kpi-sub slate">All recorded enquiries</div>
+              <div className="kpi-value">{confirmedQuotations.length}</div>
+              <div className="kpi-sub slate">Carrier route confirmed</div>
             </div>
             <div className="kpi-card">
               <div className="kpi-title">Routes analysed</div>
@@ -427,7 +436,11 @@ export default function RetailShipmentsHistory({ viewMode = "quotes" }) {
               ) : filtered.length === 0 ? (
                 <tr>
                   <td colSpan={10} style={{ textAlign: "center", padding: 30, color: "#94a3b8" }}>
-                    No matching {isShipmentMode ? "active shipments" : "quotations"} found.
+                    {isShipmentMode
+                      ? "No matching active shipments found."
+                      : quotations.some((q) => !isRouteConfirmed(q.id || q.quoteNo, q))
+                      ? "No confirmed quotes yet. Finish selecting a carrier route on your open enquiry to see it here."
+                      : "No matching quotations found."}
                   </td>
                 </tr>
               ) : isShipmentMode ? (
@@ -543,9 +556,9 @@ export default function RetailShipmentsHistory({ viewMode = "quotes" }) {
                         type="button"
                         className="btn-open-quote"
                         onClick={() => navigate(`/quotes/${q.quoteNo || q.id}`)}
-                        title="View Recommended Carrier Routes & Approval Sequence"
+                        title="Track Freight Agent, Customs & Acceptance Approval Progress"
                       >
-                        Routes &amp; Approvals
+                        Track Approval
                       </button>
                       <button
                         type="button"
@@ -694,7 +707,7 @@ export default function RetailShipmentsHistory({ viewMode = "quotes" }) {
                     navigate(`/quotes/${selectedQuote.quoteNo || selectedQuote.id}`);
                   }}
                 >
-                  <Ship size={13} /> Recommended Routes &amp; Approvals &rarr;
+                  <Ship size={13} /> Track Approval Status &rarr;
                 </button>
                 <button
                   type="button"

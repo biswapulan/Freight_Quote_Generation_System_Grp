@@ -394,6 +394,10 @@ export function getQuoteRouteData(quoteId, fallbackQuote = {}) {
   return {
     selectedRouteOption: defaultOption,
     selectedCarrier: defaultOption?.carrier || "Maersk",
+    // No explicit pick has been persisted yet — this is only a preview default
+    // shown while the customer is still on the Recommendations screen. My
+    // Quotes uses this flag to decide whether the quote is ready to be listed.
+    routeConfirmed: false,
     routeOptions: routes,
     approvalSequence: {
       agentReview: ["APPROVED", "SENT", "ACCEPTED"].includes(norm) ? "APPROVED" : "PENDING",
@@ -433,7 +437,15 @@ export function selectQuoteRoute(quoteId, routeOption) {
     assignedAgentEmail: routeOption.agentEmail || "agent@freightai.com",
     indicativeTotal: routeOption.price,
     status: "PENDING_REVIEW",
+    // Marks the quote -> route recommendation step as finished. Only once
+    // this is true should the quote surface in the customer's My Quotes list.
+    routeConfirmed: true,
   });
+}
+
+/** Has the customer picked a carrier on the Recommendations screen yet? */
+export function isRouteConfirmed(quoteId, fallbackQuote) {
+  return Boolean(getQuoteRouteData(quoteId, fallbackQuote)?.routeConfirmed);
 }
 
 export async function approveQuoteAgentStep(quoteId, reason = "Commercial tariff validated by Freight Agent.") {
