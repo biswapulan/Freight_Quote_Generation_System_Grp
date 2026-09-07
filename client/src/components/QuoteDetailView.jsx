@@ -50,8 +50,8 @@ import "./QuoteDetailView.css";
 const RETAIL_NAV = [
   { label: "Dashboard", slug: "dashboard" },
   { label: "Request Quote", slug: "request-quote" },
-  { label: "My Shipments", slug: "my-shipments" },
   { label: "My Quotes", slug: "my-quotes" },
+  { label: "My Shipments", slug: "my-shipments" },
   { label: "Documents", slug: "documents" },
   { label: "Notifications", slug: "notifications" },
   { label: "Profile", slug: "profile" },

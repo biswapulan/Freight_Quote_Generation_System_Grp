@@ -33,13 +33,13 @@ import "./Logo.css";
 import "./DashboardShell.css";
 
 // 6. Dashboard Architecture Navigation Specifications per Role
-// Ordered to follow the customer journey: raise an enquiry, watch the cargo
-// move, review the resulting quotes, then the supporting record sections.
+// Ordered to follow the customer journey: raise an enquiry, track the quotes it
+// produces, then the shipments those quotes become, then the record sections.
 const RETAIL_SECTIONS = [
   "Dashboard",
   "Request Quote",
-  "My Shipments",
   "My Quotes",
+  "My Shipments",
   "Documents",
   "Notifications",
   "Profile",
@@ -48,8 +48,8 @@ const RETAIL_SECTIONS = [
 const BUSINESS_SECTIONS = [
   "Dashboard",
   "Request Quote",
-  "My Shipments",
   "My Quotes",
+  "My Shipments",
   "Documents",
   "Notifications",
   "Profile",

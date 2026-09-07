@@ -91,7 +91,11 @@ export default function RetailShipmentsHistory({ viewMode = "quotes" }) {
   // If in shipments mode, focus on confirmed/booked cargo orders
   const baseList = useMemo(() => {
     if (isShipmentMode) {
-      return quotations.filter((q) => q.status === "Booked" || q.status === "confirmed" || q.status === "Issued");
+      // A shipment exists once the customer accepts the quote. This used to
+      // filter on "Booked", "confirmed" and "Issued", none of which the status
+      // normaliser can ever produce, so My Shipments was permanently empty no
+      // matter how many bookings had been confirmed.
+      return quotations.filter((q) => normalizeWorkflowStatus(q.status) === "ACCEPTED");
     }
     return confirmedQuotations;
   }, [quotations, confirmedQuotations, isShipmentMode]);
@@ -301,7 +305,9 @@ export default function RetailShipmentsHistory({ viewMode = "quotes" }) {
     return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
   }).length;
 
-  const bookedCount = quotations.filter((q) => q.status === "Booked" || q.status === "confirmed").length;
+  const bookedCount = quotations.filter(
+    (q) => normalizeWorkflowStatus(q.status) === "ACCEPTED",
+  ).length;
   const routesAnalysed = confirmedQuotations.length > 0 ? confirmedQuotations.length * 3 + 4 : 0;
 
   return (
@@ -511,11 +517,11 @@ export default function RetailShipmentsHistory({ viewMode = "quotes" }) {
                         <div className="ship-progress-bar">
                           <div
                             className="ship-progress-fill"
-                            style={{ width: q.status === "Booked" ? "65%" : "25%" }}
+                            style={{ width: normalizeWorkflowStatus(q.status) === "ACCEPTED" ? "65%" : "25%" }}
                           ></div>
                         </div>
                         <span className="ship-progress-label">
-                          {q.status === "Booked" ? "High Seas · In Transit" : "Depot Gate-In"}
+                          {normalizeWorkflowStatus(q.status) === "ACCEPTED" ? "Booking confirmed · Awaiting dispatch" : "Depot Gate-In"}
                         </span>
                       </div>
                     </td>
