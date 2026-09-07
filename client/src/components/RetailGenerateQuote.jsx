@@ -1085,7 +1085,23 @@ export default function RetailGenerateQuote() {
 
           apiQuote = await generateQuote(token, shipment.id);
         } catch (apiErr) {
-          console.warn("Remote pipeline unavailable, falling back to local multi-agent intelligence engine:", apiErr);
+          console.warn("Remote quote pipeline failed:", apiErr);
+
+          // The local engine below fabricates a quote with its own QT- id that
+          // exists nowhere on the server. That is fine as an offline demo, but
+          // for a signed-in customer it produced a quote they could never send
+          // for review: the carrier step then failed against a quote id the
+          // backend had never heard of. Surface the real problem instead.
+          setAgentEvaluating(false);
+          setGenerating(false);
+          setQuoteError(
+            apiErr?.isNetworkError
+              ? "Can't reach the FreightAI server, so this quote can't be created. Start the backend on port 8000 and try again."
+              : apiErr?.isAuthError
+              ? "Your session has expired. Please sign in again to request a quote."
+              : apiErr.message || "The quote engine could not complete this request.",
+          );
+          return;
         }
       }
 
