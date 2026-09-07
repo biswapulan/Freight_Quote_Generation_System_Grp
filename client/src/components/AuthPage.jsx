@@ -39,6 +39,11 @@ gstNumber: "",
 
 const [signupDone, setSignupDone] = useState(false);
 
+function fillDemoAccount(email) {
+  setLoginData({ email, password: "Password123!" });
+  setErrorMsg("");
+}
+
 function switchMode(next) {
 setMode(next);
 setStep(1);
@@ -50,6 +55,13 @@ setLoading(false);
 }
 
 const STANDARD_ACCOUNTS = {
+  "customer@freightai.com": {
+    token: "freight_jwt_customer_" + Date.now(),
+    role: "retail",
+    full_name: "Customer Shipper",
+    email: "customer@freightai.com",
+    company_name: "Global Freight Customer",
+  },
   "admin@freightai.com": {
     token: "freight_jwt_admin_" + Date.now(),
     role: "admin",
@@ -276,6 +288,51 @@ Forgot password?
 <button type="submit" className="primary-btn" disabled={loading} aria-busy={loading}>
 {loading ? <><FaSpinner className="button-loader" /> Logging in...</> : "Log In"}
 </button>
+
+<div className="demo-accounts-helper">
+  <div className="demo-helper-header">
+    <span className="demo-helper-title">One-Click Demo Credentials</span>
+    <span className="demo-helper-hint">(Password: Password123!)</span>
+  </div>
+  <div className="demo-chips-grid">
+    <button
+      type="button"
+      className="demo-chip-btn"
+      onClick={() => fillDemoAccount("customer@freightai.com")}
+      title="Click to autofill Customer login"
+    >
+      <span className="chip-role">📦 Customer</span>
+      <span className="chip-email">customer@freightai.com</span>
+    </button>
+    <button
+      type="button"
+      className="demo-chip-btn"
+      onClick={() => fillDemoAccount("agent@freightai.com")}
+      title="Click to autofill Freight Agent login"
+    >
+      <span className="chip-role">🚢 Agent</span>
+      <span className="chip-email">agent@freightai.com</span>
+    </button>
+    <button
+      type="button"
+      className="demo-chip-btn"
+      onClick={() => fillDemoAccount("customs@freightai.com")}
+      title="Click to autofill Customs Officer login"
+    >
+      <span className="chip-role">📋 Customs</span>
+      <span className="chip-email">customs@freightai.com</span>
+    </button>
+    <button
+      type="button"
+      className="demo-chip-btn"
+      onClick={() => fillDemoAccount("admin@freightai.com")}
+      title="Click to autofill Admin login"
+    >
+      <span className="chip-role">⚡ Admin</span>
+      <span className="chip-email">admin@freightai.com</span>
+    </button>
+  </div>
+</div>
 
 </form>
 

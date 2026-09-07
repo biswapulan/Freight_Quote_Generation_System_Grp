@@ -23,6 +23,18 @@ export function AuthProvider({ children }) {
       return undefined;
     }
 
+    // Demo or fallback session token - preserve user from localStorage
+    if (token.startsWith('freight_jwt_')) {
+      const cachedUser = localStorage.getItem('freightai_user');
+      if (cachedUser) {
+        try {
+          setUser(JSON.parse(cachedUser));
+        } catch {}
+      }
+      setLoading(false);
+      return undefined;
+    }
+
     setLoading(true);
     getMe(token)
       .then((profile) => {
