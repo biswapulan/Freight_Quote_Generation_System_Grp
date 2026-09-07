@@ -31,7 +31,6 @@ import { usePlatformQuotes } from "../hooks/usePlatformQuotes";
 import {
   formatMoney,
   getQuoteRouteData,
-  selectQuoteRoute,
   approveQuoteAgentStep,
   approveQuoteCustomsStep,
   acceptQuoteCustomerStep,
@@ -161,7 +160,20 @@ export default function QuoteDetailView({ quoteId: propQuoteId, embeddedQuote = 
   }, [activeQuote]);
 
   const routeOptions = routeState?.routeOptions || [];
-  const selectedOption = routeState?.selectedRouteOption || routeOptions[0] || {};
+
+  // The server records which carrier the customer actually chose. Prefer it
+  // over the route cache, which reads this browser's localStorage and so falls
+  // back to the recommended default for anyone who did not make the choice on
+  // this machine — that is how the agent desk showed Maersk for every quote.
+  const serverCarrier = activeQuote?.selectedCarrier || activeQuote?.carrier || "";
+  const selectedOption =
+    (serverCarrier &&
+      routeOptions.find(
+        (o) => (o.carrier || "").toLowerCase() === serverCarrier.toLowerCase(),
+      )) ||
+    routeState?.selectedRouteOption ||
+    routeOptions[0] ||
+    {};
   const approvalSeq = routeState?.approvalSequence || {
     agentReview: "PENDING",
     customsCheck: "PENDING",
@@ -186,7 +198,7 @@ export default function QuoteDetailView({ quoteId: propQuoteId, embeddedQuote = 
   // Until a carrier is locked in, this screen is the tail end of Request Quote
   // and the quote is not yet listed under My Quotes, so sending the customer
   // there would show them a list their quote is missing from.
-  const routeConfirmed = Boolean(routeState?.routeConfirmed);
+  const routeConfirmed = Boolean(activeQuote?.routeConfirmed || serverCarrier || routeState?.routeConfirmed);
   const inRequestFlow = isCustomer && !routeConfirmed;
   const parentCrumb = inRequestFlow
     ? { label: "Request Quote", to: "/dashboard/request-quote" }
@@ -217,25 +229,8 @@ export default function QuoteDetailView({ quoteId: propQuoteId, embeddedQuote = 
     navigate("/login");
   }
 
-  // Handle route carrier selection
-  function handleSelectCarrier(option) {
-    if (!activeQuote) return;
-    const firstConfirmation = !routeState?.routeConfirmed;
-    selectQuoteRoute(activeQuote.id, option);
-    setRouteState((prev) => ({
-      ...prev,
-      selectedRouteOption: option,
-      selectedCarrier: option.carrier,
-      indicativeTotal: option.price,
-      routeConfirmed: true,
-    }));
-    notifyUser(
-      firstConfirmation
-        ? `${option.carrier} confirmed. Your quote is now with our freight team — no further action needed from you yet.`
-        : `Carrier changed to ${option.carrier}.`
-    );
-    if (reload) reload();
-  }
+  // Carrier selection lives in the Request Quote flow's final modal, not here.
+  // This screen only reports what was offered and what the customer picked.
 
   // Step 1: Freight Agent approval
   async function handleAgentApprove() {
@@ -479,9 +474,11 @@ export default function QuoteDetailView({ quoteId: propQuoteId, embeddedQuote = 
                 <div className="qdv-head-title-wrap">
                   <div className="qdv-badge-count">{routeOptions.length}</div>
                   <div>
-                    <h2 className="qdv-section-title">Available Carrier Routes</h2>
+                    <h2 className="qdv-section-title">Carrier Routes Offered</h2>
                     <p className="qdv-section-desc">
-                      Select your preferred carrier. The choice will be automatically locked and synchronized with the Freight Agent &amp; Customs review desks.
+                      {selectedOption?.carrier
+                        ? `The options quoted for this shipment. The customer chose ${selectedOption.carrier}, and that choice is locked.`
+                        : "The carrier options quoted for this shipment. No carrier has been chosen yet."}
                     </p>
                   </div>
                 </div>
@@ -545,8 +542,7 @@ export default function QuoteDetailView({ quoteId: propQuoteId, embeddedQuote = 
                   return (
                     <div
                       key={opt.id}
-                      className={`qdv-carrier-card ${isSelected ? "selected-carrier" : ""}`}
-                      onClick={() => handleSelectCarrier(opt)}
+                      className={`qdv-carrier-card is-readonly ${isSelected ? "selected-carrier" : ""}`}
                     >
                       <div className="qdv-carrier-header">
                         <div className="qdv-carrier-identity">
@@ -560,7 +556,7 @@ export default function QuoteDetailView({ quoteId: propQuoteId, embeddedQuote = 
                                 <span className="qdv-pill-rec">RECOMMENDED</span>
                               )}
                               {isSelected && (
-                                <span className="qdv-pill-chosen">ACTIVE SELECTION</span>
+                                <span className="qdv-pill-chosen">CUSTOMER&apos;S CHOICE</span>
                               )}
                             </div>
                             <span className="qdv-carrier-service-text">{opt.service}</span>
@@ -572,22 +568,17 @@ export default function QuoteDetailView({ quoteId: propQuoteId, embeddedQuote = 
                             <span className="qdv-price-val">₹ {opt.price.toLocaleString("en-IN")}</span>
                             <span className="qdv-price-transit">{opt.transitDays} DAYS TRANSIT</span>
                           </div>
-                          <button
-                            type="button"
-                            className={`qdv-carrier-btn ${isSelected ? "btn-chosen" : "btn-select"}`}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleSelectCarrier(opt);
-                            }}
-                          >
-                            {isSelected ? (
-                              <>
-                                <Check size={15} /> Selected Route
-                              </>
-                            ) : (
-                              "Select Route"
-                            )}
-                          </button>
+                          {/* The carrier is chosen once, by the customer, in the
+                              Request Quote flow. This screen is the record of
+                              what they were offered and what they picked, so
+                              nobody re-selects from here. */}
+                          {isSelected ? (
+                            <span className="qdv-carrier-mark is-chosen">
+                              <Check size={15} /> Locked in
+                            </span>
+                          ) : (
+                            <span className="qdv-carrier-mark is-passed">Not selected</span>
+                          )}
                         </div>
                       </div>
 

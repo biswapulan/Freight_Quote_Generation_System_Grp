@@ -1132,3 +1132,55 @@
     justify-content: center;
   }
 }
+
+/* ---------------------------------------------------------------------------
+   READ-ONLY CARRIER RECORD
+   The carrier is chosen once, by the customer, in the Request Quote flow. This
+   screen reports what was offered and what they picked, so the cards do not
+   behave like buttons any more.
+   --------------------------------------------------------------------------- */
+
+.qdv-carrier-card.is-readonly {
+  cursor: default;
+}
+
+.qdv-carrier-card.is-readonly:hover {
+  border-color: #e2e8f0;
+  box-shadow: none;
+}
+
+.qdv-carrier-card.is-readonly.selected-carrier:hover {
+  border-color: #86efac;
+}
+
+.qdv-carrier-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-width: 132px;
+  padding: 8px 14px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.qdv-carrier-mark.is-chosen {
+  background: #dcfce7;
+  color: #15803d;
+  border: 1px solid #86efac;
+}
+
+.qdv-carrier-mark.is-passed {
+  background: #f1f5f9;
+  color: #94a3b8;
+  border: 1px solid #e2e8f0;
+}
+
+@media (max-width: 580px) {
+  .qdv-carrier-mark {
+    min-width: 0;
+    width: 100%;
+  }
+}
