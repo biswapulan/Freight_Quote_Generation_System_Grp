@@ -6,7 +6,7 @@ import "leaflet/dist/leaflet.css";
 import { Ship, Plane, Truck, Zap, Plus, Trash2, X, CheckCircle, FileText, Check, Bot, Cpu, Sparkles, Eye, ArrowRight, Clock, Anchor, MapPin, AlertTriangle, CheckCircle2, ShieldAlert, Navigation, RefreshCw } from "lucide-react";
 import { PORTS_MASTER, useRetailQuotes } from "../context/RetailQuotesContext";
 import { createSavedAddress, getSavedAddresses } from "../api/auth";
-import { createShipment, generateQuote, getQuoteDetail } from "../api/workflow";
+import { createShipment, generateQuote, selectQuoteCarrier } from "../api/workflow";
 import {
   addOrUpdatePlatformQuote,
   getQuoteRouteData,
@@ -1292,11 +1292,15 @@ export default function RetailGenerateQuote() {
     setSendingForReview(true);
     setQuoteError("");
     try {
-      // The carrier choice is stored client-side, which cannot fail and so
-      // cannot tell us anything. Confirm the quote is really on the server
-      // first, otherwise an expired session would produce a cheerful "sent
-      // for review" for a quote the freight agent will never see.
-      await getQuoteDetail(token, bookingRef);
+      // Record the carrier on the server. This is what routes the quote into
+      // the queue of the agent who services that carrier, so it has to succeed
+      // before we tell the customer their quote is under review.
+      await selectQuoteCarrier(token, bookingRef, {
+        carrier: chosenRoute.carrier,
+        agentEmail: chosenRoute.agentEmail,
+        agentName: chosenRoute.agentName,
+        transitDays: chosenRoute.transitDays,
+      });
 
       selectQuoteRoute(bookingRef, chosenRoute);
       setShowRouteModal(false);
@@ -1307,6 +1311,8 @@ export default function RetailGenerateQuote() {
       setQuoteError(
         err?.isAuthError
           ? "Your session has expired. Please sign in again, then resend this quote for review."
+          : err?.isNetworkError || err.message === "Failed to fetch"
+          ? "Can't reach the FreightAI server. Check that the backend is running on port 8000, then try again."
           : err.message || "Could not send this quote for review. Please try again.",
       );
     } finally {

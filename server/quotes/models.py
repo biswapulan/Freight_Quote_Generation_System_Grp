@@ -130,6 +130,17 @@ class Quote(models.Model):
     # Full orchestrator output, kept verbatim so dashboards can explain every number.
     analysis = models.JSONField(null=True, blank=True)
 
+    # ---- Carrier selection & agent assignment -----------------------------------
+    # The customer picks a carrier as the last step of their enquiry. Each
+    # carrier is serviced by its own freight agent, and that agent alone works
+    # the quote. This lived only in the customer's browser before, so the agent
+    # desk could not tell which carrier had been asked for, let alone whose
+    # queue the quote belonged in.
+    selected_carrier = models.CharField(max_length=128, blank=True, default="")
+    assigned_agent_email = models.CharField(max_length=254, blank=True, default="")
+    assigned_agent_name = models.CharField(max_length=190, blank=True, default="")
+    carrier_selected_at = models.DateTimeField(null=True, blank=True)
+
     # ---- Human review (PDF section 3, step 10) ----------------------------------
     reviewed_by = models.CharField(max_length=128, blank=True, default="")
     review_reason = models.TextField(blank=True, default="")

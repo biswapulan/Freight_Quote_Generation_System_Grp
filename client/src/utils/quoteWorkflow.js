@@ -279,6 +279,20 @@ export function mapApiQuote(apiQuote) {
         })
       : "Today",
     ...getQuoteRouteData(apiQuote.id, apiQuote),
+
+    // The server is the authority on the carrier and its agent. The spread
+    // above reads this browser's localStorage, which holds only a preview
+    // default for anyone who did not make the choice on this machine — that
+    // is how the agent desk ended up showing "Maersk" for every quote.
+    ...(apiQuote.assignedAgentEmail || apiQuote.selectedCarrier
+      ? {
+          selectedCarrier: apiQuote.selectedCarrier || apiQuote.carrier,
+          assignedAgentEmail: apiQuote.assignedAgentEmail || "",
+          assignedAgentName: apiQuote.assignedAgentName || "",
+          carrierSelectedAt: apiQuote.carrierSelectedAt || null,
+          routeConfirmed: true,
+        }
+      : {}),
   };
 }
 

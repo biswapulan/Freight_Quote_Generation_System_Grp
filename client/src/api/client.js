@@ -46,6 +46,28 @@ export async function apiRequest(endpoint, { method = "GET", token, body, timeou
     return data;
   } catch (err) {
     clearTimeout(timer);
+
+    // The flag above was read by AuthContext and the quote store but nothing
+    // ever set it, so an unreachable backend looked identical to a rejected
+    // token and signed the user out. fetch throws a TypeError when it cannot
+    // reach the host at all, and an AbortError when our own timeout fires.
+    if (err && !err.status) {
+      const unreachable =
+        err.name === "TypeError" ||
+        err.name === "AbortError" ||
+        err.message === "Failed to fetch" ||
+        err.message === "Load failed";
+      if (unreachable) {
+        err.isNetworkError = true;
+        err.isAuthError = false;
+        if (err.name === "AbortError") {
+          err.message = "The FreightAI server took too long to respond.";
+        } else {
+          err.message = "Can't reach the FreightAI server. Is the backend running?";
+        }
+      }
+    }
+
     throw err;
   }
 }

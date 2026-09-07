@@ -6,6 +6,8 @@ status change goes through the lifecycle state machine and leaves an audit recor
 """
 
 from audit import service as audit_service
+from django.db.models import Q
+from django.utils import timezone
 from notifications import service as notify
 from rest_framework import status
 from rest_framework.exceptions import NotFound, PermissionDenied
@@ -235,6 +237,92 @@ class CustomerQuoteListView(APIView):
         return Response(QuoteSerializer(quotes, many=True).data, status=status.HTTP_200_OK)
 
 
+class CustomerCarrierSelectionView(APIView):
+    """POST /quotes/<id>/select-carrier -> customer picks a carrier and submits.
+
+    This is the closing step of the enquiry. Each carrier is serviced by its own
+    freight agent, so recording the choice also routes the quote into that
+    agent's queue. Until this runs the quote belongs to nobody.
+    """
+
+    authentication_classes = []
+    permission_classes = []
+
+    def post(self, request, quote_id):
+        actor = _actor(request)
+
+        try:
+            quote = Quote.objects.select_related("shipment").get(id=quote_id)
+        except Quote.DoesNotExist:
+            raise NotFound("Quote not found.")
+
+        if not _is_staff(actor["role"]) and quote.customer_id != actor["id"]:
+            raise PermissionDenied(
+                "Access denied: You cannot choose a carrier for another customer's quote."
+            )
+
+        carrier = (request.data.get("carrier") or "").strip()
+        agent_email = (request.data.get("agent_email") or "").strip().lower()
+        agent_name = (request.data.get("agent_name") or "").strip()
+
+        if not carrier:
+            return Response(
+                {"error": "A carrier is required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if not agent_email:
+            return Response(
+                {"error": "The carrier has no freight agent assigned."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        quote.selected_carrier = carrier
+        quote.carrier = carrier
+        quote.assigned_agent_email = agent_email
+        quote.assigned_agent_name = agent_name
+        quote.carrier_selected_at = timezone.now()
+
+        transit_days = request.data.get("transit_days")
+        if transit_days:
+            try:
+                quote.estimated_transit_days = int(transit_days)
+            except (TypeError, ValueError):
+                pass
+
+        quote.save(
+            update_fields=[
+                "selected_carrier",
+                "carrier",
+                "assigned_agent_email",
+                "assigned_agent_name",
+                "carrier_selected_at",
+                "estimated_transit_days",
+                "updated_at",
+            ]
+        )
+
+        audit_service.record(
+            actor_id=actor["id"],
+            actor_role=actor["role"],
+            actor_email=actor["email"],
+            action="QUOTE_CARRIER_SELECTED",
+            entity_type="quote",
+            entity_id=quote.id,
+            changes={"carrier": carrier, "assigned_agent_email": agent_email},
+        )
+
+        notify.notify_user(
+            agent_email,
+            "New quote assigned to you",
+            f"{carrier} was requested on quote {quote.id}. It is ready for your review.",
+            category="QUOTE",
+            entity_type="quote",
+            entity_id=quote.id,
+        )
+
+        return Response(QuoteDetailSerializer(quote).data, status=status.HTTP_200_OK)
+
+
 class CustomerQuoteDecisionView(APIView):
     """POST /quotes/<id>/decision -> customer accepts or rejects (PDF step 12)."""
 
@@ -333,6 +421,17 @@ class AdminQuoteListView(APIView):
             raise PermissionDenied("Access forbidden: staff privilege required.")
 
         quotes = Quote.objects.all().select_related("shipment")
+
+        # A freight agent works only the carriers they service: once a customer
+        # picks a carrier, that quote belongs to one agent and no other agent
+        # may see the customer's details. Quotes with no carrier chosen yet are
+        # unclaimed and stay visible to every agent. Admin and customs keep the
+        # whole platform view.
+        if (actor["role"] or "").lower() == "agent":
+            agent_email = (actor["email"] or "").lower()
+            quotes = quotes.filter(
+                Q(assigned_agent_email__iexact=agent_email) | Q(assigned_agent_email="")
+            )
 
         status_filter = request.query_params.get("status")
         if status_filter:

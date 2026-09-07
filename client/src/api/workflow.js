@@ -124,6 +124,21 @@ export function requestQuoteInfo(token, quoteId, reason) {
 
 // -- Customer decision (PDF section 3, step 12) -----------------------------
 
+/** Customer's closing step: lock a carrier and route the quote to its agent. */
+export function selectQuoteCarrier(token, quoteId, { carrier, agentEmail, agentName, transitDays }) {
+  return apiRequest(`/quotes/${encodeURIComponent(quoteId)}/select-carrier`, {
+    method: "POST",
+    token,
+    body: {
+      carrier,
+      agent_email: agentEmail,
+      agent_name: agentName,
+      transit_days: transitDays,
+    },
+    timeoutMs: 15000,
+  });
+}
+
 export function decideOnQuote(token, quoteId, decision, reason = "") {
   return apiRequest(`/quotes/${encodeURIComponent(quoteId)}/decision`, {
     method: "POST",

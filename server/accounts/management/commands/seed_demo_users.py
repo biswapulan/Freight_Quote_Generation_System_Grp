@@ -42,6 +42,28 @@ DEMO_USERS = [
         "full_name": "Business User",
         "company_name": "Apex Exports Pvt Ltd",
     },
+    # ---- Carrier-specific freight agents --------------------------------
+    # A customer picks a carrier at the end of their enquiry and the quote is
+    # routed to that carrier's agent, who sees only their own queue. These
+    # emails must match the agentEmail values in generateRouteOptions.
+    {
+        "email": "agent.apex@freightai.com",
+        "role": "agent",
+        "full_name": "John — Apex Global Logistics",
+        "company_name": "Apex Global Logistics (Maersk)",
+    },
+    {
+        "email": "agent.pacific@freightai.com",
+        "role": "agent",
+        "full_name": "Sarah — Pacific Ocean Forwarders",
+        "company_name": "Pacific Ocean Forwarders (CMA CGM)",
+    },
+    {
+        "email": "agent.orient@freightai.com",
+        "role": "agent",
+        "full_name": "David — Orient Marine Line",
+        "company_name": "Orient Marine Line (Hapag-Lloyd)",
+    },
 ]
 
 class Command(BaseCommand):

@@ -88,10 +88,24 @@ class QuoteSerializer(serializers.ModelSerializer):
             "checklist_items": customs.get("checklist_items") or [],
         }
 
+    # ---- Carrier selection & agent assignment ----
+    selectedCarrier = serializers.CharField(source="selected_carrier", read_only=True)
+    assignedAgentEmail = serializers.CharField(source="assigned_agent_email", read_only=True)
+    assignedAgentName = serializers.CharField(source="assigned_agent_name", read_only=True)
+    carrierSelectedAt = serializers.DateTimeField(source="carrier_selected_at", read_only=True)
+
     class Meta:
         model = Quote
         fields = [
             "customsSummary",
+            "selectedCarrier",
+            "selected_carrier",
+            "assignedAgentEmail",
+            "assigned_agent_email",
+            "assignedAgentName",
+            "assigned_agent_name",
+            "carrierSelectedAt",
+            "carrier_selected_at",
             "id",
             "shipmentId",
             "shipment_id",

@@ -4,6 +4,7 @@ from .views import (
     AdminQuoteApproveView,
     AdminQuoteListView,
     AdminQuoteStatusUpdateView,
+    CustomerCarrierSelectionView,
     CustomerQuoteDecisionView,
     CustomerQuoteListView,
     QuoteApprovalDecisionView,
@@ -37,6 +38,16 @@ urlpatterns = [
     # ---- Customer quote views -------------------------------------------
     path("quotes/my", CustomerQuoteListView.as_view(), name="quotes-my-list"),
     path("quotes/my/", CustomerQuoteListView.as_view(), name="quotes-my-list-slash"),
+    path(
+        "quotes/<str:quote_id>/select-carrier",
+        CustomerCarrierSelectionView.as_view(),
+        name="quote-select-carrier",
+    ),
+    path(
+        "quotes/<str:quote_id>/select-carrier/",
+        CustomerCarrierSelectionView.as_view(),
+        name="quote-select-carrier-slash",
+    ),
     path(
         "quotes/<str:quote_id>/decision",
         CustomerQuoteDecisionView.as_view(),
