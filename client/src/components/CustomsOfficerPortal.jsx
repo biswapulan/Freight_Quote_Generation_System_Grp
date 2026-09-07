@@ -483,8 +483,17 @@ export default function CustomsOfficerPortal({ initialTab = "pending-reviews" })
   /** Consignment whose papers have just all been verified, for the popup. */
   const [allVerifiedFor, setAllVerifiedFor] = useState(null);
 
+  /** Is there a real uploaded file behind this checklist item? */
+  const hasRealFile = (doc) =>
+    Boolean(
+      doc &&
+        (doc.fileDataUrl ||
+          (doc.documentId && !String(doc.documentId).startsWith("doc-"))),
+    );
+
   const handleOpenDocInspection = (doc) => {
     setPreviewDoc(doc);
+    setDocNotice(null);
     // If the user actually uploaded a file or if raw file is present, default to 'pdf' so officer immediately sees the uploaded document!
     if (doc.fileDataUrl || doc.uploaded) {
       setDocViewMode("pdf");
@@ -1666,7 +1675,9 @@ export default function CustomsOfficerPortal({ initialTab = "pending-reviews" })
         </div>
       )}
 
-      {previewDocModalOpen && previewDoc && (
+      {previewDocModalOpen && previewDoc && (() => {
+      const previewHasFile = hasRealFile(previewDoc);
+      return (
         <div className="cop-modal-overlay" onClick={() => setPreviewDocModalOpen(false)}>
           <div
             className="cop-modal-card"
@@ -1797,10 +1808,37 @@ export default function CustomsOfficerPortal({ initialTab = "pending-reviews" })
                 </div>
               </div>
 
+              {/* Nothing was ever uploaded for this checklist item. The styled
+                  view below is a generated representation, not the customer's
+                  file, so showing it here would present invented shipping
+                  details as if they were evidence. */}
+              {!previewHasFile && (
+                <div className="cop-nofile-state">
+                  <AlertTriangle size={30} />
+                  <h4>No file uploaded for this document</h4>
+                  <p>
+                    <strong>{previewDoc.docType}</strong> is required for clearance on{" "}
+                    {previewDoc.quoteNo}, but the customer has not uploaded it yet. There is
+                    nothing to inspect or stamp.
+                  </p>
+                  <p className="cop-nofile-hint">
+                    The customer is asked for this document in their portal under My Quotes.
+                  </p>
+                </div>
+              )}
+
               {/* ───────────────────────────────────────────────────────────────── */}
-              {/* MODE 1: AUTHENTIC DOCUMENT PAPER VIEW (MATCHES USER'S PDF 1:1)   */}
+              {/* MODE 1: STYLED REPRESENTATION OF THE DECLARED SHIPMENT            */}
               {/* ───────────────────────────────────────────────────────────────── */}
-              {docViewMode === "paper" && (
+              {previewHasFile && docViewMode === "paper" && (
+                <div className="cop-representation-warn">
+                  <AlertTriangle size={14} /> This is a formatted representation built from the
+                  shipment record. It is not the customer&apos;s uploaded file — open PDF File
+                  Embed to inspect the real document before stamping.
+                </div>
+              )}
+
+              {previewHasFile && docViewMode === "paper" && (
                 <div
                   style={{
                     background: "#ffffff",
@@ -1997,7 +2035,7 @@ export default function CustomsOfficerPortal({ initialTab = "pending-reviews" })
               {/* ───────────────────────────────────────────────────────────────── */}
               {/* MODE 2: EMBEDDED REAL PDF / IMAGE VIEWER                          */}
               {/* ───────────────────────────────────────────────────────────────── */}
-              {docViewMode === "pdf" && (() => {
+              {previewHasFile && docViewMode === "pdf" && (() => {
                 const resolvedFileUrl = resolveDocumentFileUrl(previewDoc);
                 const isImage =
                   previewDoc.fileType?.startsWith("image/") ||
@@ -2060,7 +2098,7 @@ export default function CustomsOfficerPortal({ initialTab = "pending-reviews" })
               {/* ───────────────────────────────────────────────────────────────── */}
               {/* MODE 3: OCR COMPLIANCE & TARIFF AUDIT                             */}
               {/* ───────────────────────────────────────────────────────────────── */}
-              {docViewMode === "ocr" && (
+              {previewHasFile && docViewMode === "ocr" && (
                 <div style={{ background: "#ffffff", padding: "24px", borderRadius: "10px", border: "1px solid #cbd5e1" }}>
                   <h4 style={{ margin: "0 0 12px 0", fontSize: "14px", color: "#0f172a", fontWeight: 700 }}>
                     Automated OCR Extraction &amp; Regulatory Verification Report
@@ -2108,9 +2146,9 @@ export default function CustomsOfficerPortal({ initialTab = "pending-reviews" })
                   <span style={{ color: "#059669", fontWeight: 700, display: "inline-flex", alignItems: "center", gap: "6px", fontSize: "13px" }}>
                     <CheckCircle2 size={18} /> Stamped &amp; cleared by {user?.full_name || "the customs officer"}
                   </span>
-                ) : !previewDoc.documentId || String(previewDoc.documentId).startsWith("doc-") ? (
+                ) : !previewHasFile ? (
                   <span className="cop-preview-notice error">
-                    No file has been uploaded for this document yet, so there is nothing to stamp.
+                    Waiting on the customer to upload this document.
                   </span>
                 ) : (
                   <>
@@ -2148,7 +2186,8 @@ export default function CustomsOfficerPortal({ initialTab = "pending-reviews" })
             </div>
           </div>
         </div>
-      )}
+      );
+      })()}
     </div>
   );
 }
