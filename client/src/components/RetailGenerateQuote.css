@@ -1426,3 +1426,11 @@
     justify-content: center;
   }
 }
+
+/* Waiting on real company offers rather than fabricating them locally. */
+.rq-route-loading {
+  padding: 26px 8px;
+  text-align: center;
+  font-size: 13px;
+  color: #64748b;
+}

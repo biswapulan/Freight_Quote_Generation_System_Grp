@@ -6,11 +6,15 @@ import "leaflet/dist/leaflet.css";
 import { Ship, Plane, Truck, Zap, Plus, Trash2, X, CheckCircle, FileText, Check, Bot, Cpu, Sparkles, Eye, ArrowRight, Clock, Anchor, MapPin, AlertTriangle, CheckCircle2, ShieldAlert, Navigation, RefreshCw } from "lucide-react";
 import { PORTS_MASTER, useRetailQuotes } from "../context/RetailQuotesContext";
 import { createSavedAddress, getSavedAddresses } from "../api/auth";
-import { createShipment, generateQuote, selectQuoteCarrier } from "../api/workflow";
+import {
+  createShipment,
+  generateQuote,
+  listCompanyQuotes,
+  selectQuoteCarrier,
+} from "../api/workflow";
 import {
   addOrUpdatePlatformQuote,
   getQuoteRouteData,
-  generateRouteOptions,
   selectQuoteRoute,
 } from "../utils/quoteWorkflow";
 import { useAuth } from "../context/AuthContext";
@@ -396,6 +400,36 @@ function money(n) {
   return `₹ ${Math.round(n).toLocaleString("en-IN")}`;
 }
 
+/**
+ * Map a server company offer onto the shape the selection modal renders.
+ *
+ * The modal was written against the old browser-generated options, so this
+ * keeps its vocabulary while the data underneath is now a real offer priced by
+ * that company from its own rate card.
+ */
+function toRouteOption(offer) {
+  return {
+    id: offer.id,
+    reference: offer.reference,
+    carrier: offer.companyName,
+    companyCode: offer.companyCode,
+    service: offer.serviceName || "Scheduled service",
+    price: offer.totalPrice,
+    currency: offer.currency || "INR",
+    transitDays: offer.transitDays,
+    recommended: Boolean(offer.isRecommended),
+    onTimePerformance: offer.onTimePerformance,
+    validUntil: offer.validUntil,
+    isExpired: Boolean(offer.isExpired),
+    breakdown: {
+      baseFreight: offer.baseFreight,
+      fuelSurcharge: offer.fuelSurcharge,
+      handlingFee: offer.handlingFee,
+      documentationFee: offer.documentationFee,
+    },
+  };
+}
+
 export default function RetailGenerateQuote() {
   const navigate = useNavigate();
   const { token, user } = useAuth();
@@ -419,6 +453,7 @@ export default function RetailGenerateQuote() {
   const [routeOptions, setRouteOptions] = useState([]);
   const [chosenRoute, setChosenRoute] = useState(null);
   const [sendingForReview, setSendingForReview] = useState(false);
+  const [loadingOptions, setLoadingOptions] = useState(false);
   const [showSentModal, setShowSentModal] = useState(false);
   const [bookingRef, setBookingRef] = useState("");
   const [addressModalType, setAddressModalType] = useState("");
@@ -1284,13 +1319,24 @@ export default function RetailGenerateQuote() {
         localStorage.setItem("freightai_current_quote", JSON.stringify(generatedQuote));
       } catch {}
 
-      // Final step of the enquiry: choose a carrier here, in a modal, rather
-      // than on a separate page. The quote is not sent for review, and does
-      // not reach My Quotes, until the customer confirms a route below.
-      const options = generateRouteOptions(generatedQuote);
-      setRouteOptions(options);
-      setChosenRoute(options.find((o) => o.recommended) || options[0] || null);
+      // Final step of the enquiry: choose a carrier here, in a modal. The
+      // options are real offers priced by each freight company from its own
+      // rate card, fetched from the server. They used to be invented in the
+      // browser by multiplying one platform price, so no company had actually
+      // quoted any of them.
+      setLoadingOptions(true);
       setShowRouteModal(true);
+      try {
+        const data = await listCompanyQuotes(token, refId);
+        const options = (data.results || []).map(toRouteOption);
+        setRouteOptions(options);
+        setChosenRoute(options.find((o) => o.recommended) || options[0] || null);
+        if (!options.length) {
+          setQuoteError("No freight company has quoted this lane yet.");
+        }
+      } finally {
+        setLoadingOptions(false);
+      }
     } catch (err) {
       console.error("Failed to open carrier selection:", err);
       setShowSuccessModal(true);
@@ -1312,9 +1358,8 @@ export default function RetailGenerateQuote() {
       // the queue of the agent who services that carrier, so it has to succeed
       // before we tell the customer their quote is under review.
       await selectQuoteCarrier(token, bookingRef, {
+        companyQuoteId: chosenRoute.id,
         carrier: chosenRoute.carrier,
-        agentEmail: chosenRoute.agentEmail,
-        agentName: chosenRoute.agentName,
         transitDays: chosenRoute.transitDays,
       });
 
@@ -2234,12 +2279,20 @@ export default function RetailGenerateQuote() {
                 type="button"
                 className="btn-orange-primary"
                 style={{ width: "100%", justifyContent: "center" }}
-                onClick={() => {
+                onClick={async () => {
                   setShowSuccessModal(false);
-                  const options = generateRouteOptions(generatedQuote);
-                  setRouteOptions(options);
-                  setChosenRoute(options.find((o) => o.recommended) || options[0] || null);
+                  setLoadingOptions(true);
                   setShowRouteModal(true);
+                  try {
+                    const data = await listCompanyQuotes(token, bookingRef);
+                    const options = (data.results || []).map(toRouteOption);
+                    setRouteOptions(options);
+                    setChosenRoute(options.find((o) => o.recommended) || options[0] || null);
+                  } catch (err) {
+                    setQuoteError(err.message || "Could not load company offers.");
+                  } finally {
+                    setLoadingOptions(false);
+                  }
                 }}
               >
                 Continue to Carrier Selection &rarr;
@@ -2286,6 +2339,16 @@ export default function RetailGenerateQuote() {
             </div>
 
             <div className="rq-route-list">
+              {loadingOptions && (
+                <div className="rq-route-loading">
+                  Asking each freight company for a price...
+                </div>
+              )}
+              {!loadingOptions && routeOptions.length === 0 && (
+                <div className="rq-route-loading">
+                  No freight company has quoted this lane yet.
+                </div>
+              )}
               {routeOptions.map((opt) => {
                 const picked = chosenRoute?.id === opt.id;
                 return (
@@ -2303,14 +2366,21 @@ export default function RetailGenerateQuote() {
                         <strong className="rq-route-carrier">{opt.carrier}</strong>
                         {opt.recommended && <span className="rq-route-tag">RECOMMENDED</span>}
                       </span>
-                      <span className="rq-route-service">{opt.service}</span>
+                      <span className="rq-route-service">
+                        {opt.service}
+                        {opt.onTimePerformance
+                          ? ` \u00b7 ${Math.round(opt.onTimePerformance)}% on time`
+                          : ""}
+                      </span>
                     </span>
 
                     <span className="rq-route-figures">
                       <strong className="rq-route-price">
                         ₹ {Number(opt.price).toLocaleString("en-IN")}
                       </strong>
-                      <span className="rq-route-transit">{opt.transitDays} days transit</span>
+                      <span className="rq-route-transit">
+                        {opt.transitDays} days transit
+                      </span>
                     </span>
                   </button>
                 );
@@ -2322,14 +2392,14 @@ export default function RetailGenerateQuote() {
             <div className="rq-route-footer">
               <span className="rq-route-footer-note">
                 {chosenRoute
-                  ? `${chosenRoute.carrier} · ₹ ${Number(chosenRoute.price).toLocaleString("en-IN")}`
+                  ? `${chosenRoute.carrier} \u00b7 ${chosenRoute.currency === "INR" ? "\u20b9" : chosenRoute.currency} ${Number(chosenRoute.price).toLocaleString("en-IN")}`
                   : "Select a carrier to continue"}
               </span>
               <button
                 type="button"
                 className="btn-orange-primary rq-route-submit"
                 onClick={handleSendForReview}
-                disabled={!chosenRoute || sendingForReview}
+                disabled={!chosenRoute || sendingForReview || loadingOptions}
               >
                 {sendingForReview ? "Sending..." : "Send this Quote to Freight Agent For Review"}
               </button>

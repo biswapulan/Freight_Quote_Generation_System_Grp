@@ -121,3 +121,86 @@ class CompanyAgent(models.Model):
     @property
     def can_approve_escalations(self):
         return self.role == "MANAGER"
+
+
+class CompanyRateCard(models.Model):
+    """One company's commercial terms for a transport mode.
+
+    Company offers used to be the platform's single price multiplied by 0.88
+    and 1.05 in the browser, which is one price wearing three hats: the
+    "cheaper" carrier was cheaper on every shipment by exactly the same
+    fraction. A rate card lets each company price the same shipment from its
+    own terms, so the ranking can genuinely change between lanes.
+
+    Rates are applied on top of the M1/M2 analysis rather than replacing it:
+    the platform works out distance, weight and the ML price, and each company
+    prices that work its own way.
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    company = models.ForeignKey(
+        FreightCompany, on_delete=models.CASCADE, related_name="rate_cards"
+    )
+    mode = models.CharField(
+        max_length=24,
+        default="ocean",
+        help_text="Transport mode these terms apply to.",
+    )
+
+    # ---- Commercial terms ----
+    base_booking_fee = models.FloatField(
+        default=0.0, help_text="Flat charge per booking, before any variable cost."
+    )
+    rate_per_km = models.FloatField(
+        default=0.0, help_text="Line-haul rate applied to the routed distance."
+    )
+    rate_per_kg = models.FloatField(
+        default=0.0, help_text="Rate applied to chargeable weight."
+    )
+    fuel_surcharge_pct = models.FloatField(
+        default=10.0, help_text="Bunker adjustment, percent of line haul."
+    )
+    handling_fee = models.FloatField(
+        default=0.0, help_text="Terminal handling and stevedoring."
+    )
+    documentation_fee = models.FloatField(
+        default=0.0, help_text="Bill of lading and manifest issuance."
+    )
+    minimum_charge = models.FloatField(
+        default=0.0, help_text="Floor price; the offer never falls below this."
+    )
+
+    # ---- Service terms ----
+    transit_days_delta = models.IntegerField(
+        default=0,
+        help_text="Days added to or removed from the routed transit estimate.",
+    )
+    validity_days = models.IntegerField(
+        default=14, help_text="How long this company's offer stays valid."
+    )
+
+    currency = models.CharField(max_length=8, default="INR")
+    is_active = models.BooleanField(default=True)
+    effective_from = models.DateTimeField(default=timezone.now)
+    effective_to = models.DateTimeField(null=True, blank=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "company_rate_cards"
+        ordering = ["company__name", "mode"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["company", "mode"], name="unique_rate_card_per_company_mode"
+            )
+        ]
+
+    def __str__(self):
+        return f"{self.company.code} / {self.mode}"
+
+    def is_effective(self, when=None):
+        when = when or timezone.now()
+        if not self.is_active or self.effective_from > when:
+            return False
+        return self.effective_to is None or self.effective_to > when

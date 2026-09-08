@@ -261,20 +261,88 @@ class CustomerCarrierSelectionView(APIView):
                 "Access denied: You cannot choose a carrier for another customer's quote."
             )
 
+        # M4: the customer selects one of the company offers the platform
+        # generated. Preferred form is the offer's own id, which lets the
+        # server price-check and expiry-check the exact thing they clicked.
+        from booking.models import CompanyQuote
+        from companies.models import CompanyAgent
+
+        company_quote = None
+        offer_id = request.data.get("company_quote_id") or request.data.get("offer_id")
+        if offer_id:
+            company_quote = CompanyQuote.objects.filter(
+                id=offer_id, quote=quote
+            ).select_related("company").first()
+            if not company_quote:
+                return Response(
+                    {"error": "That offer does not belong to this quote."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            # M4 business rule: an expired offer cannot be taken forward.
+            if company_quote.is_expired:
+                return Response(
+                    {
+                        "error": (
+                            f"{company_quote.company.name}'s offer expired on "
+                            f"{company_quote.valid_until:%d %b %Y}. Refresh the options "
+                            "to get a current price."
+                        )
+                    },
+                    status=status.HTTP_409_CONFLICT,
+                )
+
         carrier = (request.data.get("carrier") or "").strip()
-        agent_email = (request.data.get("agent_email") or "").strip().lower()
-        agent_name = (request.data.get("agent_name") or "").strip()
+        if company_quote:
+            carrier = company_quote.company.name
 
         if not carrier:
             return Response(
                 {"error": "A carrier is required."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+
+        # Resolve the servicing agent from company membership rather than from
+        # whatever the client sent. The browser naming its own reviewer meant a
+        # crafted request could route a customer's shipment to any address.
+        agent_email = ""
+        agent_name = ""
+        company = company_quote.company if company_quote else None
+        if company is None:
+            from companies.models import FreightCompany
+
+            company = FreightCompany.objects.filter(name__iexact=carrier).first()
+
+        if company:
+            membership = (
+                CompanyAgent.objects.filter(company=company, is_active=True)
+                .order_by("-role", "created_at")
+                .first()
+            )
+            if membership:
+                agent_email = membership.user_email.lower()
+                agent_name = membership.display_name or membership.user_email
+
+        if not agent_email:
+            # Fall back to the client-supplied values only for carriers that
+            # are not yet registered as companies.
+            agent_email = (request.data.get("agent_email") or "").strip().lower()
+            agent_name = (request.data.get("agent_name") or "").strip()
+
         if not agent_email:
             return Response(
-                {"error": "The carrier has no freight agent assigned."},
+                {"error": f"{carrier} has no active agent to review this request."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+
+        if company_quote:
+            # Record the selection against the offer, and stand the rest down.
+            CompanyQuote.objects.filter(quote=quote).exclude(
+                id=company_quote.id
+            ).update(status="NOT_SELECTED")
+            company_quote.status = "SELECTED"
+            company_quote.save(update_fields=["status", "updated_at"])
+            quote.total_price = company_quote.total_price
+            quote.currency = company_quote.currency
 
         quote.selected_carrier = carrier
         quote.carrier = carrier
@@ -297,6 +365,8 @@ class CustomerCarrierSelectionView(APIView):
                 "assigned_agent_name",
                 "carrier_selected_at",
                 "estimated_transit_days",
+                "total_price",
+                "currency",
                 "updated_at",
             ]
         )

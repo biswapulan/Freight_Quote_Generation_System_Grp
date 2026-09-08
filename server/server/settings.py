@@ -48,6 +48,7 @@ INSTALLED_APPS = [
     'corsheaders',
     'accounts',
     'companies',
+    'booking',
     'pricing',
     'quotes',
     'weather',

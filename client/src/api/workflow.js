@@ -124,15 +124,24 @@ export function requestQuoteInfo(token, quoteId, reason) {
 
 // -- Customer decision (PDF section 3, step 12) -----------------------------
 
+/** M4: the company offers a customer compares for one quote. */
+export function listCompanyQuotes(token, quoteId, { refresh = false } = {}) {
+  return apiRequest(
+    `/quotes/${encodeURIComponent(quoteId)}/company-quotes${refresh ? "?refresh=1" : ""}`,
+    { token, timeoutMs: 20000 },
+  );
+}
+
 /** Customer's closing step: lock a carrier and route the quote to its agent. */
-export function selectQuoteCarrier(token, quoteId, { carrier, agentEmail, agentName, transitDays }) {
+export function selectQuoteCarrier(token, quoteId, { companyQuoteId, carrier, transitDays }) {
   return apiRequest(`/quotes/${encodeURIComponent(quoteId)}/select-carrier`, {
     method: "POST",
     token,
+    // The servicing agent is resolved from company membership server-side. The
+    // browser no longer names its own reviewer, which was spoofable.
     body: {
+      company_quote_id: companyQuoteId,
       carrier,
-      agent_email: agentEmail,
-      agent_name: agentName,
       transit_days: transitDays,
     },
     timeoutMs: 15000,
