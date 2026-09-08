@@ -422,16 +422,32 @@ class AdminQuoteListView(APIView):
 
         quotes = Quote.objects.all().select_related("shipment")
 
-        # A freight agent works only the carriers they service: once a customer
-        # picks a carrier, that quote belongs to one agent and no other agent
-        # may see the customer's details. Quotes with no carrier chosen yet are
-        # unclaimed and stay visible to every agent. Admin and customs keep the
-        # whole platform view.
+        # M4 company isolation. A freight agent works only the companies they
+        # are a member of: once a customer picks a company, that quote belongs
+        # to that company and no other company's agents may see the customer's
+        # details. Quotes with no company chosen yet are unclaimed and stay
+        # visible to every agent. Admin and customs keep the platform view.
+        #
+        # Membership is looked up from CompanyAgent rather than compared against
+        # an email string copied onto the quote, so authority is data the
+        # platform owns rather than a convention the client could imitate.
         if (actor["role"] or "").lower() == "agent":
-            agent_email = (actor["email"] or "").lower()
-            quotes = quotes.filter(
-                Q(assigned_agent_email__iexact=agent_email) | Q(assigned_agent_email="")
-            )
+            from companies.access import memberships_for
+
+            memberships = memberships_for(actor["email"])
+            agent_emails = [m.user_email.lower() for m in memberships] or [
+                (actor["email"] or "").lower()
+            ]
+            company_codes = [m.company.code for m in memberships]
+            company_names = [m.company.name for m in memberships]
+
+            owned = Q(assigned_agent_email__iexact=actor["email"] or "")
+            for email in agent_emails:
+                owned |= Q(assigned_agent_email__iexact=email)
+            for name in company_names + company_codes:
+                owned |= Q(selected_carrier__iexact=name)
+
+            quotes = quotes.filter(owned | Q(assigned_agent_email=""))
 
         status_filter = request.query_params.get("status")
         if status_filter:
