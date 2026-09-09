@@ -289,3 +289,106 @@ export function signOffCustomsCheck(token, checkId, { decision, officerName, com
     timeoutMs: 15000,
   });
 }
+
+// ---------------------------------------------------------------------------
+// M4: company verification, selections and bookings
+// ---------------------------------------------------------------------------
+
+/** The caller's company verification queue. Scoped server-side by membership. */
+export function listVerificationRequests(token, { pending, status } = {}) {
+  const params = new URLSearchParams();
+  if (pending) params.set("pending", "1");
+  if (status) params.set("status", status);
+  const qs = params.toString();
+  return apiRequest(`/verification-requests${qs ? `?${qs}` : ""}`, {
+    token,
+    timeoutMs: 20000,
+  });
+}
+
+/** One request. Opening it starts the response clock server-side. */
+export function getVerificationRequest(token, reference) {
+  return apiRequest(`/verification-requests/${encodeURIComponent(reference)}`, {
+    token,
+    timeoutMs: 20000,
+  });
+}
+
+/** Record one line of the nine-point verification checklist. */
+export function submitVerificationCheck(token, reference, { area, result, remarks }) {
+  return apiRequest(`/verification-requests/${encodeURIComponent(reference)}/checks`, {
+    method: "POST",
+    token,
+    body: { area, result, remarks },
+    timeoutMs: 15000,
+  });
+}
+
+/** Approve, modify, reject, request info or escalate. Reason is mandatory. */
+export function submitVerificationDecision(
+  token,
+  reference,
+  { action, reason, revision, requestedInformation },
+) {
+  return apiRequest(`/verification-requests/${encodeURIComponent(reference)}/decision`, {
+    method: "POST",
+    token,
+    body: {
+      action,
+      reason,
+      revision,
+      requested_information: requestedInformation,
+    },
+    timeoutMs: 20000,
+  });
+}
+
+/** The customer's selections and where each one stands. */
+export function listMySelections(token, { active } = {}) {
+  return apiRequest(`/selections/my${active ? "?active=1" : ""}`, {
+    token,
+    timeoutMs: 20000,
+  });
+}
+
+export function getSelection(token, reference) {
+  return apiRequest(`/selections/${encodeURIComponent(reference)}`, {
+    token,
+    timeoutMs: 20000,
+  });
+}
+
+/** Accept or decline a company's counter-offer. */
+export function respondToRevision(token, reference, { decision, note }) {
+  return apiRequest(
+    `/selections/${encodeURIComponent(reference)}/revision-response`,
+    { method: "POST", token, body: { decision, note }, timeoutMs: 20000 },
+  );
+}
+
+/** Supply what the company asked for, sending the request back to them. */
+export function provideSelectionInformation(token, reference, { note, provided }) {
+  return apiRequest(`/selections/${encodeURIComponent(reference)}/information`, {
+    method: "POST",
+    token,
+    body: { note, provided },
+    timeoutMs: 20000,
+  });
+}
+
+/** Bookings visible to the caller: their own, or their company's. */
+export function listBookings(token, { status } = {}) {
+  return apiRequest(`/bookings${status ? `?status=${encodeURIComponent(status)}` : ""}`, {
+    token,
+    timeoutMs: 20000,
+  });
+}
+
+export function cancelBooking(token, reference, reason) {
+  return apiRequest(`/bookings/${encodeURIComponent(reference)}/cancel`, {
+    method: "POST",
+    token,
+    body: { reason },
+    timeoutMs: 20000,
+  });
+}

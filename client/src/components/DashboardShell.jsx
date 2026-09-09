@@ -26,6 +26,8 @@ import AdminMasterData from "./AdminMasterData";
 import M1RouteDashboard from "./M1RouteDashboard";
 import M3IntelligenceDashboard from "./M3IntelligenceDashboard";
 import CustomsOfficerPortal from "./CustomsOfficerPortal";
+import CompanyAgentPortal from "./CompanyAgentPortal";
+import CustomerSelections from "./CustomerSelections";
 import AIAgentMonitor from "./AIAgentMonitor";
 import NotificationsCenter from "./NotificationsCenter";
 import DocumentsCenter from "./DocumentsCenter";
@@ -39,6 +41,7 @@ const RETAIL_SECTIONS = [
   "Dashboard",
   "Request Quote",
   "My Quotes",
+  "Selected Quotes",
   "My Shipments",
   "Documents",
   "Notifications",
@@ -49,14 +52,20 @@ const BUSINESS_SECTIONS = [
   "Dashboard",
   "Request Quote",
   "My Quotes",
+  "Selected Quotes",
   "My Shipments",
   "Documents",
   "Notifications",
   "Profile",
 ];
 
+// M4 puts the company's own verification work first: these are the requests
+// where a customer chose this agent's company, and nobody else can act on them.
 const AGENT_SECTIONS = [
   "Dashboard",
+  "Incoming Requests",
+  "Pending Verification",
+  "Booking Management",
   "Shipment Requests",
   "All Shipments",
   "Quote Requests",
@@ -321,7 +330,13 @@ export default function DashboardShell() {
             )
           ) : /* Freight Agent Views */
           role === "agent" ? (
-            activeItem.slug === "dashboard" ? (
+            activeItem.slug === "incoming-requests" ? (
+              <CompanyAgentPortal initialTab="incoming" />
+            ) : activeItem.slug === "pending-verification" ? (
+              <CompanyAgentPortal initialTab="verifying" />
+            ) : activeItem.slug === "booking-management" ? (
+              <CompanyAgentPortal initialTab="bookings" />
+            ) : activeItem.slug === "dashboard" ? (
               <AgentOverview />
             ) : activeItem.slug === "shipment-requests" || activeItem.slug === "all-shipments" ? (
               <AgentShipmentDispatch />
@@ -357,6 +372,8 @@ export default function DashboardShell() {
             <RetailOverview />
           ) : activeItem.slug === "request-quote" || activeItem.slug === "generate-quote" ? (
             <RetailGenerateQuote />
+          ) : activeItem.slug === "selected-quotes" ? (
+            <CustomerSelections />
           ) : activeItem.slug === "my-shipments" || activeItem.slug === "company-shipments" ? (
             <RetailShipmentsHistory viewMode="shipments" />
           ) : activeItem.slug === "my-quotes" ||

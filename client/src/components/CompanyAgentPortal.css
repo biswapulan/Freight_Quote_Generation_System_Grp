@@ -1,0 +1,235 @@
+/* Freight company agent desk (M4 phase 7). */
+
+.cap-page { padding: 26px 30px 40px; }
+
+.cap-header {
+  display: flex; align-items: flex-start; justify-content: space-between;
+  gap: 16px; flex-wrap: wrap; margin-bottom: 20px;
+}
+.cap-eyebrow {
+  margin: 0 0 2px; font-size: 11px; font-weight: 800; letter-spacing: .08em;
+  text-transform: uppercase; color: #ea580c;
+}
+.cap-title { margin: 0; font-size: 25px; font-weight: 800; color: #0f172a; }
+.cap-sub { margin: 5px 0 0; font-size: 13px; color: #64748b; max-width: 620px; }
+
+.cap-refresh {
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 8px 14px; border: 1px solid #cbd5e1; border-radius: 8px;
+  background: #fff; color: #475569; font-size: 13px; font-weight: 600; cursor: pointer;
+}
+.cap-refresh:hover { background: #f1f5f9; }
+.cap-spin { animation: cap-rotate 1s linear infinite; }
+@keyframes cap-rotate { to { transform: rotate(360deg); } }
+
+.cap-banner {
+  margin-bottom: 14px; padding: 11px 14px; border-radius: 8px;
+  font-size: 13px; font-weight: 600;
+}
+.cap-banner.error   { background:#fef2f2; border:1px solid #fecaca; color:#b91c1c; }
+.cap-banner.success { background:#ecfdf5; border:1px solid #a7f3d0; color:#047857; }
+
+/* KPIs */
+.cap-kpis {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px; margin-bottom: 20px;
+}
+.cap-kpi {
+  display: flex; align-items: center; gap: 12px;
+  padding: 14px 16px; border-radius: 10px; background: #fff; border: 1px solid #e2e8f0;
+}
+.cap-kpi-icon {
+  width: 36px; height: 36px; border-radius: 8px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  background: #f1f5f9; color: #64748b;
+}
+.cap-kpi.new .cap-kpi-icon    { background:#eff6ff; color:#2563eb; }
+.cap-kpi.active .cap-kpi-icon { background:#f0f9ff; color:#0284c7; }
+.cap-kpi.ok .cap-kpi-icon     { background:#ecfdf5; color:#059669; }
+.cap-kpi.bad .cap-kpi-icon    { background:#fef2f2; color:#dc2626; }
+.cap-kpi.warn .cap-kpi-icon   { background:#fffbeb; color:#d97706; }
+.cap-kpi-body { display: flex; flex-direction: column; min-width: 0; }
+.cap-kpi-value { font-size: 21px; font-weight: 800; color: #0f172a; line-height: 1.1; }
+.cap-kpi-label { font-size: 11.5px; color: #64748b; }
+
+/* Tabs */
+.cap-tabs { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 14px; }
+.cap-tab {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 9px 15px; border: 1px solid #e2e8f0; border-radius: 8px;
+  background: #fff; color: #475569; font-size: 13px; font-weight: 600; cursor: pointer;
+}
+.cap-tab:hover { background: #f8fafc; }
+.cap-tab.active { background: #0f172a; border-color: #0f172a; color: #fff; }
+.cap-tab-count {
+  padding: 1px 7px; border-radius: 10px; background: #e2e8f0; color: #475569;
+  font-size: 11px; font-weight: 800;
+}
+.cap-tab.active .cap-tab-count { background: rgba(255,255,255,.2); color: #fff; }
+
+/* Table */
+.cap-card { background:#fff; border:1px solid #e2e8f0; border-radius:10px; overflow-x:auto; }
+.cap-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.cap-table thead th {
+  text-align: left; padding: 12px 14px; background: #f8fafc;
+  font-size: 11px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase;
+  color: #64748b; border-bottom: 1px solid #e2e8f0; white-space: nowrap;
+}
+.cap-table td { padding: 13px 14px; border-bottom: 1px solid #f1f5f9; vertical-align: top; }
+.cap-table tbody tr:hover { background: #f8fafc; }
+.cap-row-overdue { background: #fffbf5; }
+.cap-ref { font-weight: 800; color: #0f172a; }
+.cap-strong { font-weight: 600; color: #1e293b; display: block; }
+.cap-sub-line { display: block; font-size: 11.5px; color: #94a3b8; margin-top: 2px; }
+.cap-muted { color: #64748b; }
+.cap-tag {
+  margin-left: 7px; padding: 1px 7px; border-radius: 4px;
+  background:#fef3c7; color:#b45309; font-size:10px; font-weight:800;
+}
+
+.cap-pill {
+  display: inline-block; padding: 3px 10px; border-radius: 6px;
+  font-size: 11px; font-weight: 800; letter-spacing: .02em;
+}
+.cap-pill.new     { background:#dbeafe; color:#1d4ed8; }
+.cap-pill.active  { background:#e0f2fe; color:#0369a1; }
+.cap-pill.waiting { background:#fef3c7; color:#b45309; }
+.cap-pill.ok      { background:#dcfce7; color:#15803d; }
+.cap-pill.bad     { background:#fee2e2; color:#b91c1c; }
+.cap-pill.warn    { background:#ffedd5; color:#c2410c; }
+.cap-pill.muted   { background:#f1f5f9; color:#64748b; }
+
+.cap-overdue {
+  display:inline-flex; align-items:center; gap:4px; margin-left:6px;
+  font-size:11px; font-weight:700; color:#b45309;
+}
+
+.cap-open {
+  display:inline-flex; align-items:center; gap:5px;
+  padding:6px 12px; border:1px solid #cbd5e1; border-radius:6px;
+  background:#fff; color:#0f172a; font-size:12px; font-weight:700; cursor:pointer;
+}
+.cap-open:hover { background:#0f172a; color:#fff; border-color:#0f172a; }
+
+.cap-empty {
+  padding: 40px 20px; text-align: center; color: #94a3b8; font-size: 13.5px;
+  background:#fff; border:1px solid #e2e8f0; border-radius:10px;
+}
+
+/* Detail modal */
+.cap-modal-backdrop {
+  position: fixed; inset: 0; background: rgba(15,23,42,.55);
+  display: flex; align-items: flex-start; justify-content: center;
+  padding: 40px 16px; z-index: 1000; overflow-y: auto;
+}
+.cap-modal {
+  width: 100%; max-width: 820px; background: #fff; border-radius: 14px;
+  box-shadow: 0 22px 60px rgba(15,23,42,.3);
+}
+.cap-modal-head {
+  display: flex; align-items: flex-start; justify-content: space-between;
+  gap: 14px; padding: 20px 24px; border-bottom: 1px solid #e2e8f0;
+}
+.cap-modal-head h2 { margin: 2px 0 8px; font-size: 20px; font-weight: 800; color: #0f172a; }
+.cap-close {
+  padding: 7px 14px; border: 1px solid #cbd5e1; border-radius: 7px;
+  background: #fff; color: #475569; font-size: 13px; font-weight: 600; cursor: pointer;
+}
+.cap-modal-body { padding: 20px 24px 24px; }
+
+.cap-facts {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(180px,1fr));
+  gap: 12px; margin-bottom: 18px;
+}
+.cap-fact {
+  padding: 11px 13px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px;
+}
+.cap-fact-label {
+  display:flex; align-items:center; gap:5px; font-size:11px; font-weight:700;
+  text-transform:uppercase; letter-spacing:.04em; color:#94a3b8; margin-bottom:4px;
+}
+.cap-fact-value { font-size:13.5px; font-weight:700; color:#0f172a; word-break:break-word; }
+
+.cap-note {
+  display:flex; gap:10px; padding:12px 14px; border-radius:8px;
+  font-size:13px; margin-bottom:16px; line-height:1.55;
+}
+.cap-note.info { background:#eff6ff; border:1px solid #bfdbfe; color:#1e40af; }
+.cap-note.warn { background:#fffbeb; border:1px solid #fde68a; color:#92400e; }
+.cap-note.ok   { background:#ecfdf5; border:1px solid #a7f3d0; color:#047857; }
+.cap-note ul { margin:5px 0 0; padding-left:18px; }
+.cap-rev-line { margin-top:6px; font-size:12.5px; }
+
+/* Checklist */
+.cap-checklist { margin-bottom: 20px; }
+.cap-checklist-head {
+  display:flex; align-items:baseline; justify-content:space-between;
+  gap:10px; margin-bottom:10px; flex-wrap:wrap;
+}
+.cap-checklist-head h3, .cap-decide h3, .cap-history h3 {
+  margin:0; font-size:14px; font-weight:800; color:#0f172a;
+}
+.cap-check {
+  display:flex; align-items:center; justify-content:space-between; gap:14px;
+  padding:11px 13px; border:1px solid #e2e8f0; border-radius:8px; margin-bottom:7px;
+  flex-wrap:wrap;
+}
+.cap-check.pass      { border-color:#a7f3d0; background:#f0fdf4; }
+.cap-check.attention { border-color:#fde68a; background:#fffbeb; }
+.cap-check.fail      { border-color:#fecaca; background:#fef2f2; }
+.cap-check-text { display:flex; flex-direction:column; min-width:0; flex:1; }
+.cap-check-text strong { font-size:11px; letter-spacing:.05em; color:#64748b; }
+.cap-check-text span { font-size:13px; color:#1e293b; }
+.cap-check-remark { font-size:12px; color:#b45309; margin-top:3px; }
+.cap-check-actions { display:flex; gap:5px; flex-wrap:wrap; }
+.cap-check-btn {
+  padding:5px 10px; border-radius:6px; border:1px solid #e2e8f0; background:#fff;
+  font-size:11.5px; font-weight:700; cursor:pointer; color:#64748b;
+}
+.cap-check-btn.ok.on   { background:#16a34a; border-color:#16a34a; color:#fff; }
+.cap-check-btn.warn.on { background:#d97706; border-color:#d97706; color:#fff; }
+.cap-check-btn.bad.on  { background:#dc2626; border-color:#dc2626; color:#fff; }
+.cap-check-btn:disabled { opacity:.5; cursor:not-allowed; }
+
+/* Decision */
+.cap-decide { border-top:1px solid #e2e8f0; padding-top:16px; }
+.cap-actions { display:flex; gap:7px; flex-wrap:wrap; margin:10px 0 4px; }
+.cap-action {
+  padding:8px 15px; border-radius:8px; border:1px solid #e2e8f0; background:#fff;
+  font-size:13px; font-weight:700; cursor:pointer; color:#475569;
+}
+.cap-action.ok.on   { background:#16a34a; border-color:#16a34a; color:#fff; }
+.cap-action.warn.on { background:#d97706; border-color:#d97706; color:#fff; }
+.cap-action.bad.on  { background:#dc2626; border-color:#dc2626; color:#fff; }
+.cap-action.info.on { background:#0284c7; border-color:#0284c7; color:#fff; }
+
+.cap-composer { margin-top: 12px; }
+.cap-fields { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:12px; }
+.cap-fields label, .cap-field-block {
+  display:flex; flex-direction:column; gap:5px; font-size:12px; font-weight:700;
+  color:#475569; margin-bottom:12px;
+}
+.cap-composer input, .cap-composer textarea {
+  padding:9px 11px; border:1px solid #cbd5e1; border-radius:7px;
+  font-size:13px; font-weight:400; color:#0f172a; font-family:inherit; resize:vertical;
+}
+.cap-send {
+  padding:10px 20px; border:0; border-radius:8px; background:#0f172a; color:#fff;
+  font-size:13.5px; font-weight:700; cursor:pointer;
+}
+.cap-send:hover { background:#1e293b; }
+.cap-send:disabled { opacity:.6; cursor:not-allowed; }
+
+/* History */
+.cap-history { margin-top:20px; border-top:1px solid #e2e8f0; padding-top:14px; }
+.cap-history-row {
+  display:grid; grid-template-columns:150px 1fr 180px; gap:10px;
+  padding:7px 0; border-bottom:1px solid #f1f5f9; font-size:12.5px;
+}
+.cap-history-reason { color:#334155; }
+
+@media (max-width: 720px) {
+  .cap-page { padding: 18px 14px 30px; }
+  .cap-history-row { grid-template-columns: 1fr; gap: 2px; }
+  .cap-check { align-items: flex-start; }
+}
