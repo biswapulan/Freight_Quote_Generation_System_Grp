@@ -93,37 +93,48 @@ def create_selection(*, quote, company_quote, actor):
         shipment=quote.shipment, is_active=True
     ).exclude(company_quote=company_quote)
     for old in superseded:
+        # Apply the move as well as recording it. Writing only the history line
+        # left the status saying UNDER_VERIFICATION on a selection the customer
+        # had already walked away from.
+        previous = old.status
         old.is_active = False
-        old.save(update_fields=["is_active", "updated_at"])
+        old.status = lifecycle.RESELECT_QUOTE
+        old.save(update_fields=["is_active", "status", "updated_at"])
         record_status(
             old,
-            old=old.status,
+            old=previous,
             new=lifecycle.RESELECT_QUOTE,
             actor=actor,
             reason="Customer selected a different company.",
         )
 
-    selection, created = QuoteSelection.objects.get_or_create(
-        company_quote=company_quote,
-        defaults={
-            "shipment": quote.shipment,
-            "quote": quote,
-            "company": company,
-            "customer_id": actor.get("id", ""),
-            "customer_email": actor.get("email", ""),
-            "selected_total_price": company_quote.total_price,
-            "selected_currency": company_quote.currency,
-            "selected_transit_days": company_quote.transit_days,
-            "selected_valid_until": company_quote.valid_until,
-            "status": lifecycle.SELECTED,
-        },
+    # Only reuse a selection that is still live. One that was rejected or
+    # declined has reached a terminal status, so reviving it would drop the
+    # customer back into a dead end; they get a fresh selection instead.
+    existing = (
+        QuoteSelection.objects.filter(company_quote=company_quote)
+        .exclude(status__in=sorted(lifecycle.TERMINAL))
+        .order_by("-created_at")
+        .first()
     )
+    if existing:
+        existing.is_active = True
+        existing.save(update_fields=["is_active", "updated_at"])
+        return existing, getattr(existing, "verification", None), False
 
-    if not created:
-        # Re-selecting the same offer revives it rather than making a duplicate.
-        selection.is_active = True
-        selection.save(update_fields=["is_active", "updated_at"])
-        return selection, getattr(selection, "verification", None), False
+    selection = QuoteSelection.objects.create(
+        shipment=quote.shipment,
+        quote=quote,
+        company=company,
+        company_quote=company_quote,
+        customer_id=actor.get("id", ""),
+        customer_email=actor.get("email", ""),
+        selected_total_price=company_quote.total_price,
+        selected_currency=company_quote.currency,
+        selected_transit_days=company_quote.transit_days,
+        selected_valid_until=company_quote.valid_until,
+        status=lifecycle.SELECTED,
+    )
 
     record_status(
         selection,
@@ -312,6 +323,13 @@ def submit_decision(request_obj, *, action, actor, reason="", revision=None,
         ]
     )
 
+    if action == ACTION_REJECT:
+        # The company said it cannot carry this shipment, so its offer stops
+        # being selectable rather than sitting there to be picked again.
+        offer = selection.company_quote
+        offer.status = "WITHDRAWN"
+        offer.save(update_fields=["status", "updated_at"])
+
     context = {"action": action, "agent": actor.get("email", "")}
     if created_revision:
         context.update(
@@ -459,3 +477,205 @@ def notify_customer_of_decision(request_obj, revision=None):
         entity_id=str(selection.id),
         link="/dashboard/my-quotes",
     )
+
+
+# --- Customer responses (document section 3, steps 12-13) -------------------
+
+
+class CustomerResponseError(ValueError):
+    """A customer response the workflow will not accept, with the reason."""
+
+
+def _notify_company(selection, title, body, severity="INFO"):
+    """Tell the company's agent that the ball is back in their court."""
+    from notifications import service as notify
+
+    request_obj = getattr(selection, "verification", None)
+    recipient = (
+        request_obj.assigned_agent_email
+        if request_obj and request_obj.assigned_agent_email
+        else None
+    )
+    if not recipient:
+        membership = primary_agent_for(selection.company)
+        recipient = membership.user_email if membership else None
+    if not recipient:
+        return None
+
+    # The inbox is keyed by user id, not email, so resolve before sending.
+    from companies.access import resolve_user_id
+
+    recipient_id = resolve_user_id(recipient) or recipient
+
+    return notify.notify_user(
+        recipient_id,
+        title,
+        body,
+        category="QUOTE",
+        severity=severity,
+        entity_type="QUOTE_SELECTION",
+        entity_id=str(selection.id),
+        link="/dashboard/pending-verification",
+    )
+
+
+@transaction.atomic
+def respond_to_revision(selection, *, decision, actor, note=""):
+    """The customer accepts or declines the company's counter-offer.
+
+    Accepting takes the revised terms as the agreed ones. Declining does not
+    cancel the shipment: it releases the customer to choose another company,
+    which is the milestone's fallback rule.
+    """
+    decision = (decision or "").upper()
+    if decision not in ("ACCEPT", "DECLINE"):
+        raise CustomerResponseError("Decision must be ACCEPT or DECLINE.")
+
+    if selection.status != lifecycle.REVISION_PENDING_CUSTOMER:
+        raise CustomerResponseError(
+            f"There is no revision waiting on you. This request is "
+            f"{selection.status}."
+        )
+
+    revision = selection.revisions.filter(status="PENDING_CUSTOMER").first()
+    if not revision:
+        raise CustomerResponseError("No pending revision found for this request.")
+
+    now = timezone.now()
+    revision.customer_responded_at = now
+    revision.customer_response_note = (note or "").strip()
+
+    if decision == "ACCEPT":
+        revision.status = "ACCEPTED"
+        revision.save(
+            update_fields=[
+                "status",
+                "customer_responded_at",
+                "customer_response_note",
+                "updated_at",
+            ]
+        )
+
+        # The revised terms become the offer. The selection keeps its original
+        # snapshot, so what the customer first agreed to stays visible beside
+        # what they ended up with.
+        offer = selection.company_quote
+        offer.total_price = revision.revised_total_price
+        if revision.revised_transit_days is not None:
+            offer.transit_days = revision.revised_transit_days
+        for field, value in (
+            ("base_freight", revision.revised_base_freight),
+            ("fuel_surcharge", revision.revised_fuel_surcharge),
+            ("handling_fee", revision.revised_handling_fee),
+            ("documentation_fee", revision.revised_documentation_fee),
+        ):
+            if value is not None:
+                setattr(offer, field, value)
+        offer.save()
+
+        move_selection(
+            selection,
+            lifecycle.REVISION_ACCEPTED,
+            actor=actor,
+            reason=note or "Customer accepted the revised terms.",
+            context={
+                "revision": revision.reference,
+                "agreed_price": revision.revised_total_price,
+            },
+        )
+
+        # The company proposed these terms, so accepting them settles the
+        # verification: there is nothing left for the agent to decide.
+        move_selection(
+            selection,
+            lifecycle.APPROVED,
+            actor={"email": "system", "role": "system"},
+            reason=f"Revised terms accepted by the customer ({revision.reference}).",
+        )
+
+        _notify_company(
+            selection,
+            f"Revision accepted on {selection.reference}",
+            (
+                f"The customer accepted {revision.currency} "
+                f"{revision.revised_total_price:,.0f}. The request is approved and "
+                "ready to be booked."
+            ),
+            severity="SUCCESS",
+        )
+        return selection, revision
+
+    revision.status = "DECLINED"
+    revision.save(
+        update_fields=[
+            "status",
+            "customer_responded_at",
+            "customer_response_note",
+            "updated_at",
+        ]
+    )
+
+    move_selection(
+        selection,
+        lifecycle.RESELECT_QUOTE,
+        actor=actor,
+        reason=note or "Customer declined the revised terms.",
+        context={"revision": revision.reference},
+    )
+    selection.is_active = False
+    selection.save(update_fields=["is_active", "updated_at"])
+
+    _notify_company(
+        selection,
+        f"Revision declined on {selection.reference}",
+        f"The customer declined the revised terms. Reason: {note or 'none given'}",
+        severity="WARNING",
+    )
+    return selection, revision
+
+
+@transaction.atomic
+def provide_requested_information(selection, *, actor, note="", provided=None):
+    """The customer answers the company's request for more detail.
+
+    Sends the request back to the agent rather than approving anything: the
+    company still has to look at what arrived.
+    """
+    if selection.status != lifecycle.AWAITING_CUSTOMER_INFO:
+        raise CustomerResponseError(
+            f"This request is not waiting on information from you. It is "
+            f"{selection.status}."
+        )
+
+    note = (note or "").strip()
+    provided = [str(p).strip() for p in (provided or []) if str(p).strip()]
+    if not note and not provided:
+        raise CustomerResponseError(
+            "Describe what you are providing, or list the items supplied."
+        )
+
+    request_obj = getattr(selection, "verification", None)
+    if request_obj:
+        # Reopen for decision: the previous decision has been answered.
+        request_obj.decided_at = None
+        request_obj.decided_by_email = ""
+        request_obj.save(
+            update_fields=["decided_at", "decided_by_email", "updated_at"]
+        )
+
+    move_selection(
+        selection,
+        lifecycle.UNDER_VERIFICATION,
+        actor=actor,
+        reason=note or "Customer supplied the requested information.",
+        context={"provided": provided} if provided else None,
+    )
+
+    outstanding = ", ".join(provided) if provided else note
+    _notify_company(
+        selection,
+        f"Customer responded on {selection.reference}",
+        f"The information you asked for has been supplied: {outstanding}",
+        severity="INFO",
+    )
+    return selection

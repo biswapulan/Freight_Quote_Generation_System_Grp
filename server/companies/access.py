@@ -65,3 +65,40 @@ def resolve_company(identifier):
     except (ValidationError, ValueError, TypeError):
         # The identifier was neither a known code nor a well-formed UUID.
         return None
+
+
+def resolve_user_id(email):
+    """Map an email address to the platform user id notifications are keyed by.
+
+    Accounts live in MongoDB, so a company membership stores an email while the
+    notification inbox filters on the user id. Sending to the email wrote rows
+    addressed to an id nobody has, so the agent was never told about work
+    assigned to them. Memberships cache the id once resolved.
+    """
+    if not email:
+        return ""
+
+    membership = (
+        CompanyAgent.objects.filter(user_email__iexact=email)
+        .exclude(user_id="")
+        .first()
+    )
+    if membership and membership.user_id:
+        return membership.user_id
+
+    try:
+        from accounts.mongo import users_collection
+
+        user = users_collection.find_one({"email": email.lower()})
+    except Exception:
+        return ""
+
+    if not user:
+        return ""
+
+    user_id = str(user.get("_id", ""))
+    if user_id:
+        CompanyAgent.objects.filter(user_email__iexact=email, user_id="").update(
+            user_id=user_id
+        )
+    return user_id

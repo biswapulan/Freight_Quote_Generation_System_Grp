@@ -3,7 +3,11 @@
 from django.urls import path
 
 from .views import (
+    MySelectionsView,
+    ProvideInformationView,
     QuoteCompanyOptionsView,
+    RevisionResponseView,
+    SelectionDetailView,
     VerificationCheckUpdateView,
     VerificationDecisionView,
     VerificationDetailView,
@@ -66,5 +70,35 @@ urlpatterns += [
         "verification-requests/<str:reference>/decision/",
         VerificationDecisionView.as_view(),
         name="verification-decision-slash",
+    ),
+]
+
+urlpatterns += [
+    path("selections/my", MySelectionsView.as_view(), name="my-selections"),
+    path("selections/my/", MySelectionsView.as_view(), name="my-selections-slash"),
+    path(
+        "selections/<str:reference>",
+        SelectionDetailView.as_view(),
+        name="selection-detail",
+    ),
+    path(
+        "selections/<str:reference>/revision-response",
+        RevisionResponseView.as_view(),
+        name="selection-revision-response",
+    ),
+    path(
+        "selections/<str:reference>/revision-response/",
+        RevisionResponseView.as_view(),
+        name="selection-revision-response-slash",
+    ),
+    path(
+        "selections/<str:reference>/information",
+        ProvideInformationView.as_view(),
+        name="selection-information",
+    ),
+    path(
+        "selections/<str:reference>/information/",
+        ProvideInformationView.as_view(),
+        name="selection-information-slash",
     ),
 ]

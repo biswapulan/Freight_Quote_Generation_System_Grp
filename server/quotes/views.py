@@ -391,8 +391,10 @@ class CustomerCarrierSelectionView(APIView):
             changes={"carrier": carrier, "assigned_agent_email": agent_email},
         )
 
+        from companies.access import resolve_user_id
+
         notify.notify_user(
-            agent_email,
+            resolve_user_id(agent_email) or agent_email,
             "New quote assigned to you",
             f"{carrier} was requested on quote {quote.id}. It is ready for your review.",
             category="QUOTE",

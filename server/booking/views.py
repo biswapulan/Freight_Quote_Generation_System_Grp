@@ -17,19 +17,28 @@ from quotes.auth_helper import get_current_user_and_role
 from quotes.models import Quote
 
 from . import lifecycle
-from .models import CompanyQuote, VerificationCheck, VerificationRequest
+from .models import (
+    CompanyQuote,
+    QuoteSelection,
+    VerificationCheck,
+    VerificationRequest,
+)
 from .offer_engine import generate_company_quotes
 from .serializers import (
     CompanyQuoteSerializer,
     QuoteRevisionSerializer,
+    QuoteSelectionSerializer,
     StatusHistorySerializer,
     VerificationCheckSerializer,
     VerificationRequestSerializer,
 )
 from .services import (
+    CustomerResponseError,
     DecisionError,
     move_selection,
     notify_customer_of_decision,
+    provide_requested_information,
+    respond_to_revision,
     submit_decision,
 )
 
@@ -349,3 +358,155 @@ class VerificationDecisionView(APIView):
         if revision:
             payload["createdRevision"] = QuoteRevisionSerializer(revision).data
         return Response(payload, status=status.HTTP_200_OK)
+
+
+def _selection_for_customer(reference, actor):
+    """Fetch a selection the caller is entitled to act on."""
+    selection = (
+        QuoteSelection.objects.select_related(
+            "company", "company_quote", "shipment", "quote"
+        )
+        .prefetch_related("revisions", "history")
+        .filter(reference=reference)
+        .first()
+    )
+    if not selection:
+        raise NotFound("Selection not found.")
+
+    is_owner = selection.customer_id == actor["id"]
+    if not is_owner and not is_platform_wide(actor["role"]):
+        raise PermissionDenied("This selection belongs to another customer.")
+    return selection
+
+
+class MySelectionsView(APIView):
+    """GET /selections/my -> the customer's selections and where each stands."""
+
+    authentication_classes = []
+    permission_classes = []
+
+    def get(self, request):
+        actor = _actor(request)
+        selections = (
+            QuoteSelection.objects.select_related("company", "company_quote", "shipment")
+            .prefetch_related("revisions")
+            .filter(customer_id=actor["id"])
+        )
+
+        if request.query_params.get("active") in ("1", "true", "True"):
+            selections = selections.filter(is_active=True)
+
+        selections = list(selections[:100])
+        payload = []
+        for sel in selections:
+            row = QuoteSelectionSerializer(sel).data
+            pending = sel.revisions.filter(status="PENDING_CUSTOMER").first()
+            row["pendingRevision"] = (
+                QuoteRevisionSerializer(pending).data if pending else None
+            )
+            row["awaitingYou"] = lifecycle.is_customer_actionable(sel.status)
+            payload.append(row)
+
+        return Response(
+            {"count": len(payload), "results": payload}, status=status.HTTP_200_OK
+        )
+
+
+class SelectionDetailView(APIView):
+    """GET /selections/<ref> -> one selection with its revisions and history."""
+
+    authentication_classes = []
+    permission_classes = []
+
+    def get(self, request, reference):
+        actor = _actor(request)
+        selection = _selection_for_customer(reference, actor)
+
+        payload = QuoteSelectionSerializer(selection).data
+        payload["revisions"] = QuoteRevisionSerializer(
+            selection.revisions.all(), many=True
+        ).data
+        payload["history"] = StatusHistorySerializer(
+            selection.history.all(), many=True
+        ).data
+        payload["awaitingYou"] = lifecycle.is_customer_actionable(selection.status)
+
+        request_obj = getattr(selection, "verification", None)
+        if request_obj:
+            payload["verification"] = {
+                "reference": request_obj.reference,
+                "status": request_obj.status,
+                "decisionReason": request_obj.decision_reason,
+                "requestedInformation": request_obj.requested_information,
+                "companyName": request_obj.company.name,
+            }
+        return Response(payload, status=status.HTTP_200_OK)
+
+
+class RevisionResponseView(APIView):
+    """POST /selections/<ref>/revision-response -> accept or decline a revision.
+
+    Declining does not cancel the shipment. It releases the customer to choose
+    another company, which is the milestone's fallback rule.
+    """
+
+    authentication_classes = []
+    permission_classes = []
+
+    def post(self, request, reference):
+        actor = _actor(request)
+        selection = _selection_for_customer(reference, actor)
+
+        try:
+            selection, revision = respond_to_revision(
+                selection,
+                decision=request.data.get("decision"),
+                actor=actor,
+                note=request.data.get("note", ""),
+            )
+        except (CustomerResponseError, lifecycle.InvalidSelectionTransitionError) as exc:
+            return Response({"error": str(exc)}, status=status.HTTP_409_CONFLICT)
+
+        audit_service.record(
+            actor_id=actor["id"] or actor["email"],
+            actor_role=actor["role"],
+            actor_email=actor["email"],
+            action=f"REVISION_{revision.status}",
+            entity_type="QUOTE_SELECTION",
+            entity_id=selection.reference,
+            reason=request.data.get("note", ""),
+            changes={"status": {"to": selection.status}},
+            context={"revision": revision.reference},
+        )
+
+        selection.refresh_from_db()
+        payload = QuoteSelectionSerializer(selection).data
+        payload["revision"] = QuoteRevisionSerializer(revision).data
+        payload["canReselect"] = selection.status == lifecycle.RESELECT_QUOTE
+        return Response(payload, status=status.HTTP_200_OK)
+
+
+class ProvideInformationView(APIView):
+    """POST /selections/<ref>/information -> answer the company's questions."""
+
+    authentication_classes = []
+    permission_classes = []
+
+    def post(self, request, reference):
+        actor = _actor(request)
+        selection = _selection_for_customer(reference, actor)
+
+        try:
+            selection = provide_requested_information(
+                selection,
+                actor=actor,
+                note=request.data.get("note", ""),
+                provided=request.data.get("provided"),
+            )
+        except (CustomerResponseError, lifecycle.InvalidSelectionTransitionError) as exc:
+            return Response({"error": str(exc)}, status=status.HTTP_409_CONFLICT)
+
+        selection.refresh_from_db()
+        return Response(
+            QuoteSelectionSerializer(selection).data, status=status.HTTP_200_OK
+        )
