@@ -334,13 +334,23 @@ class CustomerCarrierSelectionView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        selection = None
+        verification = None
         if company_quote:
-            # Record the selection against the offer, and stand the rest down.
-            CompanyQuote.objects.filter(quote=quote).exclude(
-                id=company_quote.id
-            ).update(status="NOT_SELECTED")
-            company_quote.status = "SELECTED"
-            company_quote.save(update_fields=["status", "updated_at"])
+            # M4 phase 3: the choice becomes a QuoteSelection with a frozen
+            # price snapshot and a verification request in one company's queue,
+            # rather than three loose columns stamped onto the quote.
+            from booking.services import create_selection
+
+            try:
+                selection, verification, _created = create_selection(
+                    quote=quote, company_quote=company_quote, actor=actor
+                )
+            except ValueError as exc:
+                return Response(
+                    {"error": str(exc)}, status=status.HTTP_409_CONFLICT
+                )
+
             quote.total_price = company_quote.total_price
             quote.currency = company_quote.currency
 
@@ -390,7 +400,24 @@ class CustomerCarrierSelectionView(APIView):
             entity_id=quote.id,
         )
 
-        return Response(QuoteDetailSerializer(quote).data, status=status.HTTP_200_OK)
+        payload = QuoteDetailSerializer(quote).data
+        if selection:
+            payload["selection"] = {
+                "id": str(selection.id),
+                "reference": selection.reference,
+                "status": selection.status,
+                "company": selection.company.name,
+                "selectedTotalPrice": selection.selected_total_price,
+                "selectedCurrency": selection.selected_currency,
+            }
+        if verification:
+            payload["verification"] = {
+                "reference": verification.reference,
+                "status": verification.status,
+                "assignedAgent": verification.assigned_agent_email,
+                "slaDueAt": verification.sla_due_at,
+            }
+        return Response(payload, status=status.HTTP_200_OK)
 
 
 class CustomerQuoteDecisionView(APIView):

@@ -2,7 +2,13 @@
 
 from rest_framework import serializers
 
-from .models import CompanyQuote
+from .models import (
+    CompanyQuote,
+    QuoteSelection,
+    StatusHistory,
+    VerificationCheck,
+    VerificationRequest,
+)
 
 
 class CompanyQuoteSerializer(serializers.ModelSerializer):
@@ -61,5 +67,107 @@ class CompanyQuoteSerializer(serializers.ModelSerializer):
             "validUntil",
             "isExpired",
             "status",
+            "created_at",
+        ]
+
+
+class VerificationCheckSerializer(serializers.ModelSerializer):
+    checkedBy = serializers.EmailField(source="checked_by_email", read_only=True)
+    checkedAt = serializers.DateTimeField(source="checked_at", read_only=True)
+
+    class Meta:
+        model = VerificationCheck
+        fields = ["id", "area", "prompt", "result", "remarks", "checkedBy", "checkedAt"]
+
+
+class StatusHistorySerializer(serializers.ModelSerializer):
+    oldStatus = serializers.CharField(source="old_status", read_only=True)
+    newStatus = serializers.CharField(source="new_status", read_only=True)
+    changedBy = serializers.EmailField(source="changed_by_email", read_only=True)
+    changedByRole = serializers.CharField(source="changed_by_role", read_only=True)
+
+    class Meta:
+        model = StatusHistory
+        fields = [
+            "id",
+            "oldStatus",
+            "newStatus",
+            "changedBy",
+            "changedByRole",
+            "reason",
+            "context",
+            "created_at",
+        ]
+
+
+class QuoteSelectionSerializer(serializers.ModelSerializer):
+    """The customer's choice, with the snapshot they agreed to."""
+
+    companyName = serializers.CharField(source="company.name", read_only=True)
+    companyCode = serializers.CharField(source="company.code", read_only=True)
+    shipmentId = serializers.CharField(source="shipment_id", read_only=True)
+    quoteId = serializers.CharField(source="quote_id", read_only=True)
+    companyQuoteId = serializers.UUIDField(source="company_quote_id", read_only=True)
+
+    selectedTotalPrice = serializers.FloatField(
+        source="selected_total_price", read_only=True
+    )
+    selectedCurrency = serializers.CharField(source="selected_currency", read_only=True)
+    selectedTransitDays = serializers.IntegerField(
+        source="selected_transit_days", read_only=True
+    )
+    priceChanged = serializers.BooleanField(source="price_changed", read_only=True)
+    isActive = serializers.BooleanField(source="is_active", read_only=True)
+
+    class Meta:
+        model = QuoteSelection
+        fields = [
+            "id",
+            "reference",
+            "shipmentId",
+            "quoteId",
+            "companyQuoteId",
+            "companyName",
+            "companyCode",
+            "customer_email",
+            "selectedTotalPrice",
+            "selectedCurrency",
+            "selectedTransitDays",
+            "priceChanged",
+            "status",
+            "isActive",
+            "created_at",
+        ]
+
+
+class VerificationRequestSerializer(serializers.ModelSerializer):
+    """What a company agent sees in their queue."""
+
+    selection = QuoteSelectionSerializer(read_only=True)
+    companyName = serializers.CharField(source="company.name", read_only=True)
+    assignedAgent = serializers.EmailField(source="assigned_agent_email", read_only=True)
+    responseHours = serializers.FloatField(source="response_hours", read_only=True)
+    isOverdue = serializers.BooleanField(source="is_overdue", read_only=True)
+    slaDueAt = serializers.DateTimeField(source="sla_due_at", read_only=True)
+    openedAt = serializers.DateTimeField(source="opened_at", read_only=True)
+    decidedAt = serializers.DateTimeField(source="decided_at", read_only=True)
+    checks = VerificationCheckSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = VerificationRequest
+        fields = [
+            "id",
+            "reference",
+            "companyName",
+            "assignedAgent",
+            "status",
+            "decision_reason",
+            "responseHours",
+            "isOverdue",
+            "slaDueAt",
+            "openedAt",
+            "decidedAt",
+            "selection",
+            "checks",
             "created_at",
         ]
