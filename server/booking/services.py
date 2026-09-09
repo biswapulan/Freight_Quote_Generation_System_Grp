@@ -6,12 +6,15 @@ company's queue, lays out that company's checklist, records the status move and
 tells the agent. Doing it in one place keeps those from drifting apart.
 """
 
+import logging
 from datetime import timedelta
 
 from django.db import transaction
 from django.utils import timezone
 
 from companies.models import CompanyAgent
+
+logger = logging.getLogger(__name__)
 
 from . import lifecycle
 from .models import (
@@ -40,6 +43,22 @@ CHECKLIST = [
 
 # How long a company has to respond before the request is flagged as overdue.
 DEFAULT_SLA_HOURS = 6.0
+
+
+def safe_notify(send, *args, **kwargs):
+    """Dispatch a notification without letting it undo the work it describes.
+
+    Every decision here runs inside a transaction, so an exception raised while
+    telling somebody about it would roll the decision back: a booking would
+    vanish because the mailer was down. Milestone scenario 13 asks for the
+    workflow to survive a notification failure, so a send that fails is logged
+    and dropped rather than propagated.
+    """
+    try:
+        return send(*args, **kwargs)
+    except Exception:  # noqa: BLE001 - a message must never cost us the record
+        logger.exception("Notification failed; the workflow change stands.")
+        return None
 
 
 def record_status(selection, *, old, new, actor=None, reason="", context=None):
@@ -479,7 +498,8 @@ def notify_customer_of_decision(request_obj, revision=None):
     else:
         return None
 
-    return notify.notify_user(
+    return safe_notify(
+        notify.notify_user,
         selection.customer_id,
         title,
         body,
@@ -519,7 +539,8 @@ def _notify_company(selection, title, body, severity="INFO"):
 
     recipient_id = resolve_user_id(recipient) or recipient
 
-    return notify.notify_user(
+    return safe_notify(
+        notify.notify_user,
         recipient_id,
         title,
         body,
@@ -754,7 +775,8 @@ def confirm_booking(selection, *, actor, note=""):
     from notifications import service as notify
     from companies.access import resolve_user_id
 
-    notify.notify_user(
+    safe_notify(
+        notify.notify_user,
         selection.customer_id,
         f"Booking confirmed: {booking.reference}",
         (
@@ -772,7 +794,8 @@ def confirm_booking(selection, *, actor, note=""):
 
     membership = primary_agent_for(selection.company)
     if membership:
-        notify.notify_user(
+        safe_notify(
+            notify.notify_user,
             resolve_user_id(membership.user_email) or membership.user_email,
             f"Booking confirmed: {booking.reference}",
             f"{selection.shipment.origin} to {selection.shipment.destination} is booked.",
@@ -829,7 +852,8 @@ def cancel_booking(booking, *, actor, reason=""):
     from notifications import service as notify
     from companies.access import resolve_user_id
 
-    notify.notify_user(
+    safe_notify(
+        notify.notify_user,
         booking.customer_id,
         f"Booking cancelled: {booking.reference}",
         f"Your booking with {booking.company.name} was cancelled. Reason: {reason}",
@@ -842,7 +866,8 @@ def cancel_booking(booking, *, actor, reason=""):
 
     membership = primary_agent_for(booking.company)
     if membership:
-        notify.notify_user(
+        safe_notify(
+            notify.notify_user,
             resolve_user_id(membership.user_email) or membership.user_email,
             f"Booking cancelled: {booking.reference}",
             f"Cancelled by {actor.get('email', 'unknown')}. Reason: {reason}",

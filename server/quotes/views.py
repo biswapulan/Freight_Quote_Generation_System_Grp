@@ -404,14 +404,12 @@ class CustomerCarrierSelectionView(APIView):
 
         payload = QuoteDetailSerializer(quote).data
         if selection:
-            payload["selection"] = {
-                "id": str(selection.id),
-                "reference": selection.reference,
-                "status": selection.status,
-                "company": selection.company.name,
-                "selectedTotalPrice": selection.selected_total_price,
-                "selectedCurrency": selection.selected_currency,
-            }
+            # Serialised rather than hand-built, so a selection has one shape
+            # wherever it appears. The hand-built version called the company
+            # "company" while every other endpoint called it "companyName".
+            from booking.serializers import QuoteSelectionSerializer
+
+            payload["selection"] = QuoteSelectionSerializer(selection).data
         if verification:
             payload["verification"] = {
                 "reference": verification.reference,
