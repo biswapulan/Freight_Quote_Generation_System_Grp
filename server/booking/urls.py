@@ -4,6 +4,8 @@ from django.urls import path
 
 from .views import (
     QuoteCompanyOptionsView,
+    VerificationCheckUpdateView,
+    VerificationDecisionView,
     VerificationDetailView,
     VerificationQueueView,
 )
@@ -41,5 +43,28 @@ urlpatterns += [
         "verification-requests/<str:reference>/",
         VerificationDetailView.as_view(),
         name="verification-detail-slash",
+    ),
+]
+
+urlpatterns += [
+    path(
+        "verification-requests/<str:reference>/checks",
+        VerificationCheckUpdateView.as_view(),
+        name="verification-checks",
+    ),
+    path(
+        "verification-requests/<str:reference>/checks/",
+        VerificationCheckUpdateView.as_view(),
+        name="verification-checks-slash",
+    ),
+    path(
+        "verification-requests/<str:reference>/decision",
+        VerificationDecisionView.as_view(),
+        name="verification-decision",
+    ),
+    path(
+        "verification-requests/<str:reference>/decision/",
+        VerificationDecisionView.as_view(),
+        name="verification-decision-slash",
     ),
 ]

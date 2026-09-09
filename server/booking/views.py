@@ -6,19 +6,32 @@ from rest_framework.exceptions import NotFound, PermissionDenied
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from companies.access import can_access_company, is_platform_wide, memberships_for
+from audit import service as audit_service
+from companies.access import (
+    can_access_company,
+    is_manager_of,
+    is_platform_wide,
+    memberships_for,
+)
 from quotes.auth_helper import get_current_user_and_role
 from quotes.models import Quote
 
 from . import lifecycle
-from .models import CompanyQuote, VerificationRequest
+from .models import CompanyQuote, VerificationCheck, VerificationRequest
 from .offer_engine import generate_company_quotes
 from .serializers import (
     CompanyQuoteSerializer,
+    QuoteRevisionSerializer,
     StatusHistorySerializer,
+    VerificationCheckSerializer,
     VerificationRequestSerializer,
 )
-from .services import move_selection
+from .services import (
+    DecisionError,
+    move_selection,
+    notify_customer_of_decision,
+    submit_decision,
+)
 
 STAFF_ROLES = ("admin", "agent", "customs", "customs_officer")
 
@@ -188,4 +201,151 @@ class VerificationDetailView(APIView):
         payload["history"] = StatusHistorySerializer(
             vr.selection.history.all(), many=True
         ).data
+        return Response(payload, status=status.HTTP_200_OK)
+
+
+class VerificationCheckUpdateView(APIView):
+    """POST /verification-requests/<ref>/checks -> record one checklist result.
+
+    The checklist is the evidence behind a decision, so only an agent of the
+    owning company may write to it, and each line records who checked it.
+    """
+
+    authentication_classes = []
+    permission_classes = []
+
+    def post(self, request, reference):
+        actor = _actor(request)
+        vr = VerificationRequest.objects.filter(reference=reference).first()
+        if not vr:
+            raise NotFound("Verification request not found.")
+
+        if not can_access_company(actor["email"], actor["role"], vr.company_id):
+            raise PermissionDenied(
+                "This verification request belongs to another company."
+            )
+
+        area = (request.data.get("area") or "").upper()
+        result = (request.data.get("result") or "").upper()
+        remarks = (request.data.get("remarks") or "").strip()
+
+        check = vr.checks.filter(area=area).first()
+        if not check:
+            return Response(
+                {"error": f"'{area}' is not a checklist area on this request."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        valid = {c[0] for c in VerificationCheck.RESULT_CHOICES}
+        if result not in valid:
+            return Response(
+                {"error": f"result must be one of: {', '.join(sorted(valid))}."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # A failed or flagged line has to say why: it is the evidence the
+        # customer sees behind a rejection or a revision.
+        if result in ("FAIL", "ATTENTION") and not remarks:
+            return Response(
+                {"error": f"Explain why '{check.prompt}' is marked {result}."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        check.result = result
+        check.remarks = remarks
+        check.checked_by_email = actor["email"]
+        check.checked_at = timezone.now()
+        check.save(
+            update_fields=["result", "remarks", "checked_by_email", "checked_at"]
+        )
+
+        checks = list(vr.checks.all())
+        return Response(
+            {
+                "check": VerificationCheckSerializer(check).data,
+                "completed": sum(1 for c in checks if c.result != "PENDING"),
+                "total": len(checks),
+                "blocking": [c.area for c in checks if c.result == "FAIL"],
+            },
+            status=status.HTTP_200_OK,
+        )
+
+
+class VerificationDecisionView(APIView):
+    """POST /verification-requests/<ref>/decision -> the agent's decision.
+
+    Approve, Modify, Reject, Request Info or Escalate, each with a reason that
+    reaches the customer. A modification never overwrites the selected terms:
+    it becomes a revision the customer can accept or decline.
+    """
+
+    authentication_classes = []
+    permission_classes = []
+
+    def post(self, request, reference):
+        actor = _actor(request)
+
+        vr = (
+            VerificationRequest.objects.select_related(
+                "company", "selection", "selection__company_quote"
+            )
+            .filter(reference=reference)
+            .first()
+        )
+        if not vr:
+            raise NotFound("Verification request not found.")
+
+        if not can_access_company(actor["email"], actor["role"], vr.company_id):
+            raise PermissionDenied(
+                "You cannot decide on another company's verification request."
+            )
+
+        action = request.data.get("action")
+        # Only a company manager may clear an escalation, which is the point of
+        # escalating in the first place.
+        if vr.status == lifecycle.ESCALATED and (action or "").upper() in (
+            "APPROVE",
+            "REJECT",
+        ):
+            if not is_manager_of(actor["email"], vr.company_id) and not is_platform_wide(
+                actor["role"]
+            ):
+                raise PermissionDenied(
+                    "This request was escalated and needs a company manager to decide."
+                )
+
+        try:
+            vr, revision = submit_decision(
+                vr,
+                action=action,
+                actor=actor,
+                reason=request.data.get("reason", ""),
+                revision=request.data.get("revision"),
+                requested_information=request.data.get("requested_information"),
+            )
+        except DecisionError as exc:
+            return Response({"error": str(exc)}, status=status.HTTP_409_CONFLICT)
+
+        notify_customer_of_decision(vr, revision)
+
+        audit_service.record(
+            actor_id=actor["id"] or actor["email"],
+            actor_role=actor["role"],
+            actor_email=actor["email"],
+            action=f"VERIFICATION_{(action or '').upper()}",
+            entity_type="VERIFICATION_REQUEST",
+            entity_id=vr.reference,
+            reason=vr.decision_reason,
+            changes={"status": {"to": vr.status}},
+            context={
+                "company": vr.company.code,
+                "selection": vr.selection.reference,
+                "revision": revision.reference if revision else None,
+            },
+        )
+
+        vr.refresh_from_db()
+        payload = VerificationRequestSerializer(vr).data
+        if revision:
+            payload["createdRevision"] = QuoteRevisionSerializer(revision).data
         return Response(payload, status=status.HTTP_200_OK)

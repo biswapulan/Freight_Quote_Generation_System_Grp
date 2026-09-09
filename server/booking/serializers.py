@@ -4,6 +4,7 @@ from rest_framework import serializers
 
 from .models import (
     CompanyQuote,
+    QuoteRevision,
     QuoteSelection,
     StatusHistory,
     VerificationCheck,
@@ -140,6 +141,49 @@ class QuoteSelectionSerializer(serializers.ModelSerializer):
         ]
 
 
+class QuoteRevisionSerializer(serializers.ModelSerializer):
+    """A counter-offer, showing what changed against the selected terms."""
+
+    revisionNumber = serializers.IntegerField(source="revision_number", read_only=True)
+    originalTotalPrice = serializers.FloatField(
+        source="original_total_price", read_only=True
+    )
+    originalTransitDays = serializers.IntegerField(
+        source="original_transit_days", read_only=True
+    )
+    revisedTotalPrice = serializers.FloatField(
+        source="revised_total_price", read_only=True
+    )
+    revisedTransitDays = serializers.IntegerField(
+        source="revised_transit_days", read_only=True
+    )
+    priceDelta = serializers.FloatField(source="price_delta", read_only=True)
+    priceDeltaPct = serializers.FloatField(source="price_delta_pct", read_only=True)
+    transitDelta = serializers.IntegerField(source="transit_delta", read_only=True)
+    createdBy = serializers.EmailField(source="created_by_email", read_only=True)
+
+    class Meta:
+        model = QuoteRevision
+        fields = [
+            "id",
+            "reference",
+            "revisionNumber",
+            "originalTotalPrice",
+            "originalTransitDays",
+            "revisedTotalPrice",
+            "revisedTransitDays",
+            "priceDelta",
+            "priceDeltaPct",
+            "transitDelta",
+            "currency",
+            "reason",
+            "createdBy",
+            "status",
+            "customer_response_note",
+            "created_at",
+        ]
+
+
 class VerificationRequestSerializer(serializers.ModelSerializer):
     """What a company agent sees in their queue."""
 
@@ -152,6 +196,10 @@ class VerificationRequestSerializer(serializers.ModelSerializer):
     openedAt = serializers.DateTimeField(source="opened_at", read_only=True)
     decidedAt = serializers.DateTimeField(source="decided_at", read_only=True)
     checks = VerificationCheckSerializer(many=True, read_only=True)
+    revisions = QuoteRevisionSerializer(many=True, read_only=True)
+    requestedInformation = serializers.JSONField(
+        source="requested_information", read_only=True
+    )
 
     class Meta:
         model = VerificationRequest
@@ -169,5 +217,7 @@ class VerificationRequestSerializer(serializers.ModelSerializer):
             "decidedAt",
             "selection",
             "checks",
+            "revisions",
+            "requestedInformation",
             "created_at",
         ]

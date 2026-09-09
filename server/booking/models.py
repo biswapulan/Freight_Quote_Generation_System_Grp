@@ -218,6 +218,11 @@ class VerificationRequest(models.Model):
         default=lifecycle.PENDING_COMPANY_VERIFICATION,
     )
 
+    # What the agent asked the customer for when the decision was Request Info.
+    # A list rather than a sentence, so the customer's screen can tick items off
+    # and the agent can see what is still outstanding.
+    requested_information = models.JSONField(null=True, blank=True)
+
     # Response time is an M4 analytics requirement, so record the clock.
     opened_at = models.DateTimeField(null=True, blank=True)
     decided_at = models.DateTimeField(null=True, blank=True)
@@ -327,3 +332,97 @@ class StatusHistory(models.Model):
 
     def __str__(self):
         return f"{self.old_status or 'new'} -> {self.new_status}"
+
+
+class QuoteRevision(models.Model):
+    """A company's counter-offer on a selection, kept beside the original.
+
+    M4 forbids overwriting the quote the customer selected. When an agent
+    changes the price or the schedule, the original terms stay on the selection
+    and the new terms live here, so both sides see exactly what changed and the
+    customer can decline and go elsewhere.
+
+    Every revision carries a reason. "No silent changes" is a stated business
+    rule: a price moving without an explanation is the thing this prevents.
+    """
+
+    STATUS_CHOICES = [
+        ("PENDING_CUSTOMER", "Awaiting customer response"),
+        ("ACCEPTED", "Accepted by customer"),
+        ("DECLINED", "Declined by customer"),
+        ("SUPERSEDED", "Replaced by a later revision"),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    reference = models.CharField(max_length=32, unique=True, db_index=True)
+
+    selection = models.ForeignKey(
+        QuoteSelection, on_delete=models.CASCADE, related_name="revisions"
+    )
+    request = models.ForeignKey(
+        VerificationRequest,
+        on_delete=models.CASCADE,
+        related_name="revisions",
+        null=True,
+        blank=True,
+    )
+    revision_number = models.PositiveIntegerField(default=1)
+
+    # ---- What it was ----
+    original_total_price = models.FloatField()
+    original_transit_days = models.IntegerField(null=True, blank=True)
+
+    # ---- What the company is now offering ----
+    revised_total_price = models.FloatField()
+    revised_transit_days = models.IntegerField(null=True, blank=True)
+    revised_base_freight = models.FloatField(null=True, blank=True)
+    revised_fuel_surcharge = models.FloatField(null=True, blank=True)
+    revised_handling_fee = models.FloatField(null=True, blank=True)
+    revised_documentation_fee = models.FloatField(null=True, blank=True)
+    currency = models.CharField(max_length=8, default="INR")
+
+    reason = models.TextField(help_text="Why the company changed the terms.")
+    created_by_email = models.EmailField(blank=True, default="")
+
+    status = models.CharField(
+        max_length=20, choices=STATUS_CHOICES, default="PENDING_CUSTOMER"
+    )
+    customer_responded_at = models.DateTimeField(null=True, blank=True)
+    customer_response_note = models.TextField(blank=True, default="")
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "quote_revisions"
+        ordering = ["-created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["selection", "revision_number"],
+                name="unique_revision_number_per_selection",
+            )
+        ]
+
+    def __str__(self):
+        return f"{self.reference} rev{self.revision_number} [{self.status}]"
+
+    def save(self, *args, **kwargs):
+        if not self.reference:
+            self.reference = f"REV-{uuid.uuid4().hex[:8].upper()}"
+        super().save(*args, **kwargs)
+
+    @property
+    def price_delta(self):
+        return round(self.revised_total_price - self.original_total_price, 2)
+
+    @property
+    def price_delta_pct(self):
+        if not self.original_total_price:
+            return 0.0
+        return round((self.price_delta / self.original_total_price) * 100.0, 2)
+
+    @property
+    def transit_delta(self):
+        if self.revised_transit_days is None or self.original_transit_days is None:
+            return None
+        return self.revised_transit_days - self.original_transit_days
