@@ -15,6 +15,7 @@ from companies.models import CompanyAgent
 
 from . import lifecycle
 from .models import (
+    Booking,
     CompanyQuote,
     QuoteRevision,
     QuoteSelection,
@@ -349,6 +350,17 @@ def submit_decision(request_obj, *, action, actor, reason="", revision=None,
         selection, old=old, new=target, actor=actor, reason=reason, context=context
     )
 
+    # Document section 3 step 14: an approved request becomes a confirmed
+    # booking. The customer already consented by selecting, and by accepting
+    # any revision, so approval is the last gate.
+    if target == lifecycle.APPROVED:
+        confirm_booking(
+            selection,
+            actor={"email": "system", "role": "system"},
+            note=f"Approved by {actor.get('email', 'the company')}.",
+        )
+        selection.refresh_from_db()
+
     return request_obj, created_revision
 
 
@@ -593,6 +605,13 @@ def respond_to_revision(selection, *, decision, actor, note=""):
             reason=f"Revised terms accepted by the customer ({revision.reference}).",
         )
 
+        confirm_booking(
+            selection,
+            actor={"email": "system", "role": "system"},
+            note=f"Revised terms accepted ({revision.reference}).",
+        )
+        selection.refresh_from_db()
+
         _notify_company(
             selection,
             f"Revision accepted on {selection.reference}",
@@ -679,3 +698,159 @@ def provide_requested_information(selection, *, actor, note="", provided=None):
         severity="INFO",
     )
     return selection
+
+
+# --- Booking (document section 3, step 14) ---------------------------------
+
+
+class BookingError(ValueError):
+    """A booking action the workflow will not accept, with the reason."""
+
+
+@transaction.atomic
+def confirm_booking(selection, *, actor, note=""):
+    """Turn an approved selection into a confirmed booking.
+
+    Only an approved selection can become a booking. That is the milestone's
+    success definition: verification and any customer confirmation must have
+    happened first, so a booking can never appear straight off a selection.
+    """
+    existing = getattr(selection, "booking", None)
+    if existing and existing.status == "CONFIRMED":
+        # Confirming twice returns the same booking rather than issuing a
+        # second reference for one shipment.
+        return existing, False
+
+    if selection.status not in (lifecycle.APPROVED, lifecycle.REVISION_ACCEPTED):
+        raise BookingError(
+            f"Only an approved request can be booked. This one is {selection.status}."
+        )
+
+    offer = selection.company_quote
+    accepted_revision = selection.revisions.filter(status="ACCEPTED").first()
+
+    booking = Booking.objects.create(
+        selection=selection,
+        shipment=selection.shipment,
+        quote=selection.quote,
+        company=selection.company,
+        customer_id=selection.customer_id,
+        customer_email=selection.customer_email,
+        agreed_total_price=offer.total_price,
+        agreed_currency=offer.currency,
+        agreed_transit_days=offer.transit_days,
+        was_revised=bool(accepted_revision),
+        status="CONFIRMED",
+    )
+
+    move_selection(
+        selection,
+        lifecycle.BOOKING_CONFIRMED,
+        actor=actor,
+        reason=note or f"Booking {booking.reference} confirmed.",
+        context={"booking": booking.reference, "price": booking.agreed_total_price},
+    )
+
+    from notifications import service as notify
+    from companies.access import resolve_user_id
+
+    notify.notify_user(
+        selection.customer_id,
+        f"Booking confirmed: {booking.reference}",
+        (
+            f"{selection.company.name} has confirmed your shipment for "
+            f"{booking.agreed_currency} {booking.agreed_total_price:,.0f}, "
+            f"{booking.agreed_transit_days} days transit. "
+            f"Quote your reference {booking.reference} in any correspondence."
+        ),
+        category="SHIPMENT",
+        severity="SUCCESS",
+        entity_type="BOOKING",
+        entity_id=booking.reference,
+        link="/dashboard/my-shipments",
+    )
+
+    membership = primary_agent_for(selection.company)
+    if membership:
+        notify.notify_user(
+            resolve_user_id(membership.user_email) or membership.user_email,
+            f"Booking confirmed: {booking.reference}",
+            f"{selection.shipment.origin} to {selection.shipment.destination} is booked.",
+            category="SHIPMENT",
+            severity="SUCCESS",
+            entity_type="BOOKING",
+            entity_id=booking.reference,
+            link="/dashboard/booking-management",
+        )
+
+    return booking, True
+
+
+@transaction.atomic
+def cancel_booking(booking, *, actor, reason=""):
+    """Cancel a confirmed booking. A reason is required and reaches both sides."""
+    reason = (reason or "").strip()
+    if not reason:
+        raise BookingError("A cancellation reason is required.")
+
+    if booking.status == "CANCELLED":
+        raise BookingError(
+            f"{booking.reference} was already cancelled by "
+            f"{booking.cancelled_by_email or 'someone'}."
+        )
+    if booking.status == "COMPLETED":
+        raise BookingError(f"{booking.reference} is completed and cannot be cancelled.")
+
+    booking.status = "CANCELLED"
+    booking.cancelled_at = timezone.now()
+    booking.cancelled_by_email = actor.get("email", "")
+    booking.cancellation_reason = reason
+    booking.save(
+        update_fields=[
+            "status",
+            "cancelled_at",
+            "cancelled_by_email",
+            "cancellation_reason",
+            "updated_at",
+        ]
+    )
+
+    selection = booking.selection
+    move_selection(
+        selection,
+        lifecycle.BOOKING_CANCELLED,
+        actor=actor,
+        reason=reason,
+        context={"booking": booking.reference},
+    )
+    selection.is_active = False
+    selection.save(update_fields=["is_active", "updated_at"])
+
+    from notifications import service as notify
+    from companies.access import resolve_user_id
+
+    notify.notify_user(
+        booking.customer_id,
+        f"Booking cancelled: {booking.reference}",
+        f"Your booking with {booking.company.name} was cancelled. Reason: {reason}",
+        category="SHIPMENT",
+        severity="WARNING",
+        entity_type="BOOKING",
+        entity_id=booking.reference,
+        link="/dashboard/my-shipments",
+    )
+
+    membership = primary_agent_for(booking.company)
+    if membership:
+        notify.notify_user(
+            resolve_user_id(membership.user_email) or membership.user_email,
+            f"Booking cancelled: {booking.reference}",
+            f"Cancelled by {actor.get('email', 'unknown')}. Reason: {reason}",
+            category="SHIPMENT",
+            severity="WARNING",
+            entity_type="BOOKING",
+            entity_id=booking.reference,
+            link="/dashboard/booking-management",
+        )
+
+    return booking

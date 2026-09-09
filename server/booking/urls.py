@@ -3,6 +3,9 @@
 from django.urls import path
 
 from .views import (
+    BookingCancelView,
+    BookingDetailView,
+    BookingListView,
     MySelectionsView,
     ProvideInformationView,
     QuoteCompanyOptionsView,
@@ -100,5 +103,21 @@ urlpatterns += [
         "selections/<str:reference>/information/",
         ProvideInformationView.as_view(),
         name="selection-information-slash",
+    ),
+]
+
+urlpatterns += [
+    path("bookings", BookingListView.as_view(), name="bookings"),
+    path("bookings/", BookingListView.as_view(), name="bookings-slash"),
+    path("bookings/<str:reference>", BookingDetailView.as_view(), name="booking-detail"),
+    path(
+        "bookings/<str:reference>/cancel",
+        BookingCancelView.as_view(),
+        name="booking-cancel",
+    ),
+    path(
+        "bookings/<str:reference>/cancel/",
+        BookingCancelView.as_view(),
+        name="booking-cancel-slash",
     ),
 ]

@@ -3,6 +3,7 @@
 from rest_framework import serializers
 
 from .models import (
+    Booking,
     CompanyQuote,
     QuoteRevision,
     QuoteSelection,
@@ -220,4 +221,61 @@ class VerificationRequestSerializer(serializers.ModelSerializer):
             "revisions",
             "requestedInformation",
             "created_at",
+        ]
+
+
+class BookingSerializer(serializers.ModelSerializer):
+    """A confirmed booking, as the customer and the company both see it."""
+
+    companyName = serializers.CharField(source="company.name", read_only=True)
+    companyCode = serializers.CharField(source="company.code", read_only=True)
+    selectionReference = serializers.CharField(
+        source="selection.reference", read_only=True
+    )
+    shipmentId = serializers.CharField(source="shipment_id", read_only=True)
+    quoteId = serializers.CharField(source="quote_id", read_only=True)
+    origin = serializers.CharField(source="shipment.origin", read_only=True)
+    destination = serializers.CharField(source="shipment.destination", read_only=True)
+    cargoType = serializers.CharField(source="shipment.cargo_type", read_only=True)
+
+    agreedTotalPrice = serializers.FloatField(
+        source="agreed_total_price", read_only=True
+    )
+    agreedCurrency = serializers.CharField(source="agreed_currency", read_only=True)
+    agreedTransitDays = serializers.IntegerField(
+        source="agreed_transit_days", read_only=True
+    )
+    wasRevised = serializers.BooleanField(source="was_revised", read_only=True)
+    isCancellable = serializers.BooleanField(source="is_cancellable", read_only=True)
+    confirmedAt = serializers.DateTimeField(source="confirmed_at", read_only=True)
+    cancelledAt = serializers.DateTimeField(source="cancelled_at", read_only=True)
+    cancelledBy = serializers.EmailField(source="cancelled_by_email", read_only=True)
+    cancellationReason = serializers.CharField(
+        source="cancellation_reason", read_only=True
+    )
+
+    class Meta:
+        model = Booking
+        fields = [
+            "id",
+            "reference",
+            "selectionReference",
+            "shipmentId",
+            "quoteId",
+            "companyName",
+            "companyCode",
+            "origin",
+            "destination",
+            "cargoType",
+            "customer_email",
+            "agreedTotalPrice",
+            "agreedCurrency",
+            "agreedTransitDays",
+            "wasRevised",
+            "status",
+            "isCancellable",
+            "confirmedAt",
+            "cancelledAt",
+            "cancelledBy",
+            "cancellationReason",
         ]

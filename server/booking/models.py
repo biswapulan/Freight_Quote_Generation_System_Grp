@@ -426,3 +426,104 @@ class QuoteRevision(models.Model):
         if self.revised_transit_days is None or self.original_transit_days is None:
             return None
         return self.revised_transit_days - self.original_transit_days
+
+
+class Booking(models.Model):
+    """The confirmed carriage agreement: M4's actual output.
+
+    A selected quote is a request. A verified selection is a promise. This is
+    the point where the shipment becomes real work with a reference the
+    customer can quote at a counter, which is what the milestone means by
+    "a selected quote becomes a real booking only after required company
+    verification and customer confirmation are completed".
+
+    The agreed terms are copied here rather than read through the offer, so a
+    booking still reads correctly years later even if the offer or rate card
+    behind it has changed.
+    """
+
+    STATUS_CHOICES = [
+        ("CONFIRMED", "Confirmed"),
+        ("CANCELLED", "Cancelled"),
+        ("COMPLETED", "Completed"),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    reference = models.CharField(max_length=32, unique=True, db_index=True)
+
+    selection = models.OneToOneField(
+        QuoteSelection, on_delete=models.PROTECT, related_name="booking"
+    )
+    shipment = models.ForeignKey(
+        "quotes.Shipment", on_delete=models.CASCADE, related_name="bookings"
+    )
+    quote = models.ForeignKey(
+        "quotes.Quote", on_delete=models.CASCADE, related_name="bookings"
+    )
+    company = models.ForeignKey(
+        "companies.FreightCompany", on_delete=models.PROTECT, related_name="bookings"
+    )
+
+    customer_id = models.CharField(max_length=64, db_index=True)
+    customer_email = models.EmailField(blank=True, default="")
+
+    # ---- The terms actually agreed, copied at confirmation -----------------
+    agreed_total_price = models.FloatField()
+    agreed_currency = models.CharField(max_length=8, default="INR")
+    agreed_transit_days = models.IntegerField(null=True, blank=True)
+    # True when the price came from a revision rather than the original offer,
+    # so the customer can see at a glance that the terms moved.
+    was_revised = models.BooleanField(default=False)
+
+    status = models.CharField(max_length=16, choices=STATUS_CHOICES, default="CONFIRMED")
+    confirmed_at = models.DateTimeField(default=timezone.now)
+    cancelled_at = models.DateTimeField(null=True, blank=True)
+    cancelled_by_email = models.EmailField(blank=True, default="")
+    cancellation_reason = models.TextField(blank=True, default="")
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "bookings"
+        ordering = ["-confirmed_at"]
+        indexes = [
+            models.Index(fields=["company", "status"]),
+            models.Index(fields=["customer_id", "status"]),
+        ]
+
+    def __str__(self):
+        return f"{self.reference} {self.company.name} [{self.status}]"
+
+    @property
+    def is_cancellable(self):
+        return self.status == "CONFIRMED"
+
+    def save(self, *args, **kwargs):
+        if not self.reference:
+            self.reference = Booking.next_reference()
+        super().save(*args, **kwargs)
+
+    @staticmethod
+    def next_reference():
+        """Sequential, year-scoped reference in the document's BK-YYYY-NNNNN form.
+
+        Sequential rather than random so a customer reading one aloud, or a
+        counter clerk typing it, has a short recognisable code.
+        """
+        year = timezone.now().year
+        prefix = f"BK-{year}-"
+        last = (
+            Booking.objects.filter(reference__startswith=prefix)
+            .order_by("-reference")
+            .values_list("reference", flat=True)
+            .first()
+        )
+        if last:
+            try:
+                nxt = int(last.rsplit("-", 1)[1]) + 1
+            except (IndexError, ValueError):
+                nxt = 10001
+        else:
+            nxt = 10001
+        return f"{prefix}{nxt}"

@@ -48,7 +48,11 @@ STATUS_CHOICES = [
 ]
 
 # States that end the selection's life. Nothing moves out of these.
-TERMINAL = {BOOKING_CONFIRMED, BOOKING_CANCELLED, RESELECT_QUOTE}
+#
+# A confirmed booking is settled but not terminal: either side can still find
+# they cannot proceed, and cancellation is a declared transition out of it.
+# Listing it here contradicted that and made every cancellation fail.
+TERMINAL = {BOOKING_CANCELLED, RESELECT_QUOTE}
 
 ALLOWED_TRANSITIONS = {
     OPTIONS_AVAILABLE: {SELECTED},

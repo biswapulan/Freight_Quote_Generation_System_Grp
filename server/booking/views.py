@@ -18,6 +18,7 @@ from quotes.models import Quote
 
 from . import lifecycle
 from .models import (
+    Booking,
     CompanyQuote,
     QuoteSelection,
     VerificationCheck,
@@ -25,6 +26,7 @@ from .models import (
 )
 from .offer_engine import generate_company_quotes
 from .serializers import (
+    BookingSerializer,
     CompanyQuoteSerializer,
     QuoteRevisionSerializer,
     QuoteSelectionSerializer,
@@ -33,8 +35,10 @@ from .serializers import (
     VerificationRequestSerializer,
 )
 from .services import (
+    BookingError,
     CustomerResponseError,
     DecisionError,
+    cancel_booking,
     move_selection,
     notify_customer_of_decision,
     provide_requested_information,
@@ -510,3 +514,133 @@ class ProvideInformationView(APIView):
         return Response(
             QuoteSelectionSerializer(selection).data, status=status.HTTP_200_OK
         )
+
+
+class BookingListView(APIView):
+    """GET /bookings -> bookings the caller is entitled to see.
+
+    A customer sees their own. A company agent sees their companies'. Admin and
+    customs see the platform. Nobody sees a booking that belongs to neither
+    their customer account nor their company.
+    """
+
+    authentication_classes = []
+    permission_classes = []
+
+    def get(self, request):
+        actor = _actor(request)
+        bookings = Booking.objects.select_related(
+            "company", "shipment", "selection"
+        ).all()
+
+        if is_platform_wide(actor["role"]):
+            pass
+        elif actor["role"] == "agent":
+            company_ids = list(
+                memberships_for(actor["email"]).values_list("company_id", flat=True)
+            )
+            bookings = bookings.filter(company_id__in=company_ids)
+        else:
+            bookings = bookings.filter(customer_id=actor["id"])
+
+        status_filter = request.query_params.get("status")
+        if status_filter:
+            bookings = bookings.filter(status=status_filter.upper())
+
+        bookings = list(bookings[:200])
+        return Response(
+            {
+                "count": len(bookings),
+                "results": BookingSerializer(bookings, many=True).data,
+            },
+            status=status.HTTP_200_OK,
+        )
+
+
+class BookingDetailView(APIView):
+    """GET /bookings/<ref> -> one booking, if it is yours to see."""
+
+    authentication_classes = []
+    permission_classes = []
+
+    def get(self, request, reference):
+        actor = _actor(request)
+        booking = (
+            Booking.objects.select_related("company", "shipment", "selection")
+            .filter(reference=reference)
+            .first()
+        )
+        if not booking:
+            raise NotFound("Booking not found.")
+
+        if not _may_touch_booking(booking, actor):
+            raise PermissionDenied("This booking belongs to someone else.")
+
+        payload = BookingSerializer(booking).data
+        payload["history"] = StatusHistorySerializer(
+            booking.selection.history.all(), many=True
+        ).data
+        return Response(payload, status=status.HTTP_200_OK)
+
+
+class BookingCancelView(APIView):
+    """POST /bookings/<ref>/cancel -> cancel a confirmed booking, with a reason.
+
+    Either side may cancel, because either side can find they cannot proceed,
+    but never a stranger: an unauthorised attempt is refused and audited, which
+    is milestone test scenario 12.
+    """
+
+    authentication_classes = []
+    permission_classes = []
+
+    def post(self, request, reference):
+        actor = _actor(request)
+        booking = (
+            Booking.objects.select_related("company", "selection")
+            .filter(reference=reference)
+            .first()
+        )
+        if not booking:
+            raise NotFound("Booking not found.")
+
+        if not _may_touch_booking(booking, actor):
+            audit_service.record(
+                actor_id=actor["id"] or actor["email"],
+                actor_role=actor["role"],
+                actor_email=actor["email"],
+                action="BOOKING_CANCEL_DENIED",
+                entity_type="BOOKING",
+                entity_id=booking.reference,
+                reason="Caller is neither the customer nor an agent of the company.",
+            )
+            raise PermissionDenied("You cannot change someone else's booking.")
+
+        try:
+            booking = cancel_booking(
+                booking, actor=actor, reason=request.data.get("reason", "")
+            )
+        except (BookingError, lifecycle.InvalidSelectionTransitionError) as exc:
+            return Response({"error": str(exc)}, status=status.HTTP_409_CONFLICT)
+
+        audit_service.record(
+            actor_id=actor["id"] or actor["email"],
+            actor_role=actor["role"],
+            actor_email=actor["email"],
+            action="BOOKING_CANCELLED",
+            entity_type="BOOKING",
+            entity_id=booking.reference,
+            reason=booking.cancellation_reason,
+            changes={"status": {"to": "CANCELLED"}},
+        )
+
+        return Response(BookingSerializer(booking).data, status=status.HTTP_200_OK)
+
+
+def _may_touch_booking(booking, actor):
+    """The customer who owns it, an agent of the carrying company, or staff."""
+    if is_platform_wide(actor["role"]):
+        return True
+    if booking.customer_id == actor["id"]:
+        return True
+    return can_access_company(actor["email"], actor["role"], booking.company_id)
