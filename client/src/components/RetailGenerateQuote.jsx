@@ -1100,8 +1100,7 @@ export default function RetailGenerateQuote() {
       let shipment = null;
       let apiQuote = null;
 
-      // Only attempt remote server if token is a real JWT (not mock demo token)
-      if (token && !token.startsWith("freight_jwt_")) {
+      if (token) {
         try {
           shipment = await createShipment(token, {
             origin: originCity,
@@ -1140,103 +1139,18 @@ export default function RetailGenerateQuote() {
         }
       }
 
-      // If backend was unreachable or token is a demo session, run local intelligent agent engine
+      // Every quote comes from the server. There used to be a local engine
+      // here that invented one when the API call failed: its own QT- id, its
+      // own risk scores and confident telemetry, for a quote no backend had
+      // ever heard of. The customer could not send it for review, because the
+      // carrier step referenced an id the server had never seen.
       if (!apiQuote) {
-        setAgentStage(2);
-        const simShipmentId = shipment?.id || `SH-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
-        log(`[SHIPMENT] Registered ${simShipmentId} with Autonomous AI Orchestrator.`);
-        log(`[ORCHESTRATOR] Dispatching autonomous Route, Dynamic Pricing, Weather, Customs and Risk agents...`);
-
-        await new Promise((r) => setTimeout(r, 450));
-        setAgentStage(3);
-
-        log(`[ROUTE] M1 Route Agent: Selected optimal corridor ${originName} → ${destName} (${calcResult.distanceKm} km, ~${calcResult.transitDays} d transit).`);
-        log(`[PRICING] M2 Pricing Agent: Dynamic freight computed base ₹${calcResult.breakdown.distance_cost.toLocaleString()} + BAF ₹${calcResult.breakdown.fuel_surcharge.toLocaleString()}.`);
-        log(`[WEATHER] M3 Weather Agent: Marine conditions analyzed. Port congestion low to moderate.`);
-        log(`[CUSTOMS] M3 Customs Agent: HS Code ${sanitizedItems[0]?.hs || "8471.30"} approved for ${destCity}. Mandatory documentation recorded.`);
-        log(`[RISK] Composite Risk Index: 18/100 (LOW). Operational safety validated.`);
-
-        const quoteId = `QT-${Math.random().toString(36).slice(2, 10).toUpperCase()}`;
-
-        apiQuote = {
-          id: quoteId,
-          quoteNo: quoteId,
-          shipmentId: simShipmentId,
-          customer_id: user?.id || "customer_1",
-          customer_email: user?.email || form.custEmail || "customer@freightai.com",
-          origin: originCity,
-          destination: destCity,
-          distanceKm: calcResult.distanceKm,
-          estimatedTransitDays: calcResult.transitDays,
-          transportMode: apiMode,
-          containerType: sanitizedItems[0]?.containerType || "40HC",
-          cargoType: sanitizedItems[0]?.desc || cargoType,
-          totalPrice: calcResult.breakdown.total,
-          rulePrice: calcResult.breakdown.subtotal_buy_cost,
-          aiPredictedPrice: calcResult.breakdown.total,
-          recommendedPrice: calcResult.breakdown.total,
-          basePrice: calcResult.breakdown.distance_cost,
-          fuelCharge: calcResult.breakdown.fuel_surcharge,
-          currency: form.currency || "INR",
-          status: "PENDING_REVIEW",
-          weatherRisk: 15,
-          customsRisk: 12,
-          routeRisk: 18,
-          overallRiskScore: 18,
-          overallRisk: "LOW",
-          requiresHumanReview: true,
-          created_at: new Date().toISOString(),
-          analysis: {
-            route: {
-              origin_code: oPort?.code || effectiveOrigin,
-              dest_code: dPort?.code || effectiveDest,
-              distance_km: calcResult.distanceKm,
-              transit_days: calcResult.transitDays,
-              summary: `Corridor verified for ${apiMode.toUpperCase()}`,
-            },
-            pricing: {
-              summary: `Base freight ₹${calcResult.breakdown.distance_cost.toLocaleString()} + surcharges`,
-              total: calcResult.breakdown.total,
-            },
-            weather: {
-              summary: "Corridor conditions clear, minimal port dwell time",
-            },
-            customs: {
-              summary: "HS Code verified, mandatory declarations recorded",
-              status: "APPROVED",
-            },
-            risk: {
-              summary: "Overall Risk 18/100 (Low)",
-              score: 18,
-            },
-          },
-          shipmentDetails: {
-            origin: originCity,
-            destination: destCity,
-            cargoType: sanitizedItems[0]?.desc || cargoType,
-            weight: summaryStats.totalWeight,
-            volume: summaryStats.totalContainers * 20,
-            transportMode: apiMode,
-            containerType: sanitizedItems[0]?.containerType || "40HC",
-            customer_email: user?.email || "customer@freightai.com",
-            status: "ANALYZED",
-          },
-        };
-      } else {
-        const analysis = apiQuote.analysis || {};
-        setAgentStage(3);
-        ["route", "pricing", "weather", "customs", "risk"].forEach((agent) => {
-          const detail = analysis[agent];
-          if (detail?.summary) {
-            log(`[${agent.toUpperCase()}] ${detail.summary} (${detail.agent_duration_ms ?? 0}ms)`);
-          }
-        });
-        if (analysis.degraded_agents?.length) {
-          log(`[DEGRADED] Operating without: ${analysis.degraded_agents.join(", ")}. Rule pricing applied.`);
-        }
-        if (analysis.recommendation?.rationale) {
-          log(`[RECOMMENDATION] ${analysis.recommendation.rationale}`);
-        }
+        setAgentEvaluating(false);
+        setGenerating(false);
+        setQuoteError(
+          "The quote engine did not return a quote. Please try again.",
+        );
+        return;
       }
 
       // Merge the authoritative breakdown into the UI representation

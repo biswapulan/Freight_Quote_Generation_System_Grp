@@ -54,51 +54,6 @@ setErrorMsg("");
 setLoading(false);
 }
 
-const STANDARD_ACCOUNTS = {
-  "customer@freightai.com": {
-    token: "freight_jwt_customer_" + Date.now(),
-    role: "retail",
-    full_name: "Customer Shipper",
-    email: "customer@freightai.com",
-    company_name: "Global Freight Customer",
-  },
-  "admin@freightai.com": {
-    token: "freight_jwt_admin_" + Date.now(),
-    role: "admin",
-    full_name: "Platform Admin",
-    email: "admin@freightai.com",
-    company_name: "FreightAI HQ",
-  },
-  "agent@freightai.com": {
-    token: "freight_jwt_agent_" + Date.now(),
-    role: "agent",
-    full_name: "Freight Agent",
-    email: "agent@freightai.com",
-    company_name: "FreightAI Operations",
-  },
-  "business@freightai.com": {
-    token: "freight_jwt_biz_" + Date.now(),
-    role: "business",
-    full_name: "Business User",
-    email: "business@freightai.com",
-    company_name: "Apex Exports Pvt Ltd",
-  },
-  "retail@freightai.com": {
-    token: "freight_jwt_retail_" + Date.now(),
-    role: "retail",
-    full_name: "Retail Customer",
-    email: "retail@freightai.com",
-    company_name: "",
-  },
-  "customs@freightai.com": {
-    token: "freight_jwt_customs_" + Date.now(),
-    role: "customs",
-    full_name: "Chief Customs Officer",
-    email: "customs@freightai.com",
-    company_name: "Port Customs & Border Authority",
-  },
-};
-
 async function handleLoginSubmit(e) {
 e.preventDefault();
 setErrorMsg("");
@@ -109,21 +64,17 @@ try {
   auth.login(data);
   navigate("/dashboard");
 } catch (err) {
-  const normalizedEmail = (loginData.email || "").toLowerCase().trim();
-  const standardAcc = STANDARD_ACCOUNTS[normalizedEmail];
-
-  if (standardAcc) {
-    auth.login(standardAcc);
-    navigate("/dashboard");
-  } else {
-    const mockUsers = JSON.parse(localStorage.getItem("freightai_mock_users") || "{}");
-    if (mockUsers[normalizedEmail]) {
-      auth.login(mockUsers[normalizedEmail]);
-      navigate("/dashboard");
-    } else {
-      setErrorMsg(err.message || "Invalid email or password");
-    }
-  }
+  // A failed sign-in is a failed sign-in.
+  //
+  // This used to fall through to a table of built-in accounts and log the
+  // caller straight in with a fabricated token, without ever checking the
+  // password. Any request failure was enough, so typing an admin address with
+  // any password at all handed over the Platform Admin portal.
+  setErrorMsg(
+    err?.isNetworkError
+      ? "Can't reach the FreightAI server. Check that the backend is running."
+      : err.message || "Invalid email or password.",
+  );
 } finally {
   setLoading(false);
 }
