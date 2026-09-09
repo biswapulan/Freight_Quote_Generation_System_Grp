@@ -16,10 +16,12 @@ urlpatterns = [
     path('api/login/', LoginView.as_view(), name='api-login-slash'),
     path('api/', include('quotes.urls')),
     path('api/', include('booking.urls')),
+    path('api/', include('companies.urls')),
     path('api/', include('pricing.urls')),
     
     path('api/v1/', include('quotes.urls')),
     path('api/v1/', include('booking.urls')),
+    path('api/v1/', include('companies.urls')),
     path('api/v1/', include('pricing.urls')),
     path('api/v1/', include('weather.urls')),
     path('api/v1/', include('customs.urls')),

@@ -392,3 +392,73 @@ export function cancelBooking(token, reference, reason) {
     timeoutMs: 20000,
   });
 }
+
+// ---------------------------------------------------------------------------
+// M4 administration: companies, agent mappings, monitoring and performance
+// ---------------------------------------------------------------------------
+
+export function listCompanies(token) {
+  return apiRequest("/admin/companies", { token, timeoutMs: 20000 });
+}
+
+export function updateCompany(token, code, patch) {
+  return apiRequest(`/admin/companies/${encodeURIComponent(code)}`, {
+    method: "PATCH",
+    token,
+    body: patch,
+    timeoutMs: 20000,
+  });
+}
+
+export function listCompanyAgents(token, { company } = {}) {
+  return apiRequest(
+    `/admin/company-agents${company ? `?company=${encodeURIComponent(company)}` : ""}`,
+    { token, timeoutMs: 20000 },
+  );
+}
+
+export function createCompanyAgent(token, { companyCode, userEmail, displayName, role }) {
+  return apiRequest("/admin/company-agents", {
+    method: "POST",
+    token,
+    body: {
+      companyCode,
+      userEmail,
+      displayName,
+      role,
+    },
+    timeoutMs: 20000,
+  });
+}
+
+export function updateCompanyAgent(token, agentId, patch) {
+  return apiRequest(`/admin/company-agents/${encodeURIComponent(agentId)}`, {
+    method: "PATCH",
+    token,
+    body: patch,
+    timeoutMs: 20000,
+  });
+}
+
+export function revokeCompanyAgent(token, agentId) {
+  return apiRequest(`/admin/company-agents/${encodeURIComponent(agentId)}`, {
+    method: "DELETE",
+    token,
+    timeoutMs: 20000,
+  });
+}
+
+export function listAllSelections(token, { status, stalled } = {}) {
+  const params = new URLSearchParams();
+  if (status) params.set("status", status);
+  if (stalled) params.set("stalled", "1");
+  const qs = params.toString();
+  return apiRequest(`/admin/selections${qs ? `?${qs}` : ""}`, {
+    token,
+    timeoutMs: 20000,
+  });
+}
+
+export function getCompanyPerformance(token) {
+  return apiRequest("/admin/company-performance", { token, timeoutMs: 20000 });
+}

@@ -644,3 +644,73 @@ def _may_touch_booking(booking, actor):
     if booking.customer_id == actor["id"]:
         return True
     return can_access_company(actor["email"], actor["role"], booking.company_id)
+
+
+class AdminSelectionsView(APIView):
+    """GET /admin/selections -> every customer selection on the platform.
+
+    The admin's view of who chose whom and where each request stopped, which is
+    the milestone's "monitor customer selections" page. Read-only: an
+    administrator watches this workflow rather than acting inside it, because
+    approving on a company's behalf would make the company's verification
+    meaningless.
+    """
+
+    authentication_classes = []
+    permission_classes = []
+
+    def get(self, request):
+        actor = _actor(request)
+        if actor["role"] != "admin":
+            raise PermissionDenied("Only a platform administrator may view this.")
+
+        selections = (
+            QuoteSelection.objects.select_related("company", "company_quote", "shipment")
+            .prefetch_related("revisions")
+            .all()
+        )
+
+        company = request.query_params.get("company")
+        if company:
+            selections = selections.filter(company__code__iexact=company)
+
+        status_filter = request.query_params.get("status")
+        if status_filter:
+            selections = selections.filter(status=status_filter.upper())
+
+        if request.query_params.get("stalled") in ("1", "true", "True"):
+            selections = selections.filter(
+                status__in=sorted(lifecycle.AGENT_ACTIONABLE)
+            )
+
+        selections = list(selections[:300])
+
+        rows = []
+        for sel in selections:
+            row = QuoteSelectionSerializer(sel).data
+            pending = sel.revisions.filter(status="PENDING_CUSTOMER").first()
+            row["pendingRevision"] = (
+                QuoteRevisionSerializer(pending).data if pending else None
+            )
+            row["revisionCount"] = sel.revisions.count()
+            row["awaitingCompany"] = lifecycle.is_agent_actionable(sel.status)
+            row["awaitingCustomer"] = lifecycle.is_customer_actionable(sel.status)
+            rows.append(row)
+
+        # A quick read of where the platform's work is sitting.
+        summary = {
+            "total": len(rows),
+            "awaitingCompany": sum(1 for r in rows if r["awaitingCompany"]),
+            "awaitingCustomer": sum(1 for r in rows if r["awaitingCustomer"]),
+            "booked": sum(1 for r in rows if r["status"] == lifecycle.BOOKING_CONFIRMED),
+            "lost": sum(
+                1
+                for r in rows
+                if r["status"] in (lifecycle.REJECTED, lifecycle.RESELECT_QUOTE)
+            ),
+        }
+
+        return Response(
+            {"count": len(rows), "summary": summary, "results": rows},
+            status=status.HTTP_200_OK,
+        )

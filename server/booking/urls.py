@@ -3,6 +3,7 @@
 from django.urls import path
 
 from .views import (
+    AdminSelectionsView,
     BookingCancelView,
     BookingDetailView,
     BookingListView,
@@ -119,5 +120,14 @@ urlpatterns += [
         "bookings/<str:reference>/cancel/",
         BookingCancelView.as_view(),
         name="booking-cancel-slash",
+    ),
+]
+
+urlpatterns += [
+    path("admin/selections", AdminSelectionsView.as_view(), name="admin-selections"),
+    path(
+        "admin/selections/",
+        AdminSelectionsView.as_view(),
+        name="admin-selections-slash",
     ),
 ]

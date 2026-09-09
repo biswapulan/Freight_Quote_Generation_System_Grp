@@ -28,6 +28,7 @@ import M3IntelligenceDashboard from "./M3IntelligenceDashboard";
 import CustomsOfficerPortal from "./CustomsOfficerPortal";
 import CompanyAgentPortal from "./CompanyAgentPortal";
 import CustomerSelections from "./CustomerSelections";
+import AdminCompanyDesk from "./AdminCompanyDesk";
 import AIAgentMonitor from "./AIAgentMonitor";
 import NotificationsCenter from "./NotificationsCenter";
 import DocumentsCenter from "./DocumentsCenter";
@@ -99,6 +100,11 @@ const ADMIN_SECTIONS = [
   "Roles & Permissions",
   "All Shipments",
   "All Quotes",
+  "Companies",
+  "Company Agents",
+  "Selected Quotes",
+  "Verification Monitor",
+  "Company Performance",
   "AI Pricing Monitor",
   "AI Agent Monitor",
   "Risk Intelligence",
@@ -313,6 +319,16 @@ export default function DashboardShell() {
               <AdminMasterData />
             ) : activeItem.slug === "all-shipments" ? (
               <AgentShipmentDispatch />
+            ) : activeItem.slug === "companies" ? (
+              <AdminCompanyDesk initialTab="companies" />
+            ) : activeItem.slug === "company-agents" ? (
+              <AdminCompanyDesk initialTab="agents" />
+            ) : activeItem.slug === "selected-quotes" ? (
+              <AdminCompanyDesk initialTab="selections" />
+            ) : activeItem.slug === "verification-monitor" ? (
+              <AdminCompanyDesk initialTab="monitor" />
+            ) : activeItem.slug === "company-performance" ? (
+              <AdminCompanyDesk initialTab="performance" />
             ) : activeItem.slug === "all-quotes" ? (
               <AgentQuoteDesk />
             ) : activeItem.slug === "routes" ? (
