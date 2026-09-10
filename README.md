@@ -39,18 +39,23 @@ flowchart TD
     C3 --> D
     
     D --> E{"Risk & Compliance Policy Gate"}
-    E -- "Low/Medium Risk & Valid Docs" --> F["Instant Quote Issued (Status: ISSUED / APPROVED)"]
+    E -- "Low/Medium Risk & Valid Docs" --> F["Company Quote Options"]
     E -- "High Risk / Missing Docs / Arms" --> G["Hold Quote (Status: NEEDS_APPROVAL / PENDING_OFFICER_SIGNOFF)"]
     
     G --> H["Customs Officer & Agent Desk (Document Verification & Digital Sign-off)"]
     H -- "Officer Approved" --> F
-    
-    F --> I["Database Audit Trail, Shipment Dispatch & Tracking"]
+    F --> I["Customer Selects One Company"]
+    I --> J["Selected Company Agent Verifies"]
+    J -- "Approve" --> K["Booking Confirmed"]
+    J -- "Modify / Request Info" --> L["Customer Responds"]
+    L --> J
+    J -- "Reject" --> M["Customer Selects Another Quote"]
+    K --> N["Database Audit Trail, Notifications & Shipment Tracking"]
 ```
 
 ---
 
-## 🚀 The 3-Milestone Project Roadmap
+## 🚀 The 4-Milestone Project Roadmap
 
 ### 📦 Milestone 1 — Rule-Based Pricing Engine & Core Authentication
 
@@ -104,6 +109,47 @@ flowchart TD
 #### 4. 🤖 Machine Learning Pricing Model & Benchmarking (`server/pricing/ml_service.py`, `ml/`)
 * Trained a **Gradient Boosted Regression Model** on 5,000 historical freight rate records (`freight_pricing_training_dataset_5000.xlsx`).
 * Achieves **$R^2 > 0.85$**, low MAE/RMSE, and provides real-time spot rate prediction APIs alongside a **Rule-vs-ML Pricing Comparison Card**.
+
+### 🚢 Milestone 4 — Company Selection, Verification & Booking Workflow
+
+> **Core Objective**: Convert an AI-generated quote option into a verified real-world booking through company-level agent review, customer consent, audit history, and controlled status transitions.
+
+#### M4 End-to-End Process
+
+1. M1-M3 produce multiple company-specific quote options for a shipment.
+2. The customer compares price, transit time, service, risk, and quote validity.
+3. The customer selects one company quote; the system stores a commercial snapshot.
+4. The selected company's authorized agent receives a verification request. Other companies cannot access it.
+5. The agent reviews shipment details, capacity, route, schedule, documents, commercial terms, risk context, and expiry.
+6. The agent approves, modifies, rejects, requests information, or escalates the request.
+7. A modification requires a reason and creates a revision without overwriting the original quote.
+8. The customer accepts or rejects a revision, or supplies the requested information.
+9. An approved request creates a booking reference; a rejection allows the customer to select another quote.
+10. Notifications, status history, and audit records preserve the complete workflow.
+
+#### M4 Status Lifecycle
+
+```text
+QUOTE_OPTIONS_AVAILABLE -> QUOTE_SELECTED -> PENDING_COMPANY_VERIFICATION
+-> UNDER_VERIFICATION -> APPROVED -> BOOKING_CONFIRMED
+
+UNDER_VERIFICATION -> REVISION_PENDING_CUSTOMER -> REVISION_ACCEPTED -> APPROVED
+UNDER_VERIFICATION -> AWAITING_CUSTOMER_INFO -> UNDER_VERIFICATION
+UNDER_VERIFICATION -> REJECTED -> RESELECT_QUOTE
+```
+
+#### M4 Roles
+
+| Role | Responsibility | Data Access |
+|---|---|---|
+| Customer | Compare and select quotes, respond to revisions, upload information, view bookings | Own shipments and selections |
+| Company Agent | Verify capacity, route, documents, risk, and commercial terms | Only assigned company requests |
+| Platform Admin | Manage companies and agents, monitor selections, verification, bookings, performance, and audit logs | Platform-wide |
+| AI Services | Provide pricing, risk, weather, and customs context | Backend intelligence only; no final booking approval |
+
+#### M4 Data Model
+
+`CompanyQuote` stores each provider's offer. `QuoteSelection` stores the customer's choice and frozen commercial terms. `VerificationRequest` owns the selected company's review queue. `VerificationCheck`, `QuoteRevision`, `Booking`, `StatusHistory`, and `Notification` preserve checklist results, revisions, final confirmation, auditability, and workflow alerts.
 
 ---
 
@@ -182,6 +228,12 @@ Freight_Quote_Generation_System_Grp/
 │   │   ├── serializers.py
 │   │   ├── permissions.py
 │   │   └── mongo.py
+│   ├── booking/                                # Milestone 4: Selection, verification & booking workflow
+│   │   ├── lifecycle.py                         # M4 state machine and allowed transitions
+│   │   ├── models.py                            # Company offers, selections, verification, revisions, bookings
+│   │   ├── services.py                          # Selection, decision, revision and booking services
+│   │   ├── views.py                             # M4 workflow API endpoints
+│   │   └── urls.py
 │   ├── pricing/                                # Rule Engine & ML Service Integration
 │   │   ├── engine.py                           # Baseline Pricing Engine
 │   │   ├── ml_service.py                       # ML Model Inference Handler
@@ -216,6 +268,7 @@ Freight_Quote_Generation_System_Grp/
 │       ├── test_m3_phase4_shipment_risk.py
 │       ├── test_m3_phase5_ml_pricing.py
 │       ├── test_m3_phase6_e2e_resiliency.py
+│       ├── test_m4_booking_scenarios.py         # 22 company selection and booking scenarios
 │       └── test_mentor_freight_system.py
 └── ml/                                         # Machine Learning Pipelines & Datasets
     ├── data/
@@ -250,6 +303,14 @@ Freight_Quote_Generation_System_Grp/
 | **ML Pricing**| `POST` | `/api/pricing/ml-predict/` | Predict freight spot rate using Gradient Boost model | Authenticated |
 | **Admin** | `GET/PATCH` | `/api/admin/rate-config/` | View/Edit global pricing base rates & multipliers | Admin Only |
 | **Admin** | `GET/PATCH` | `/api/admin/users/` | List and update user roles / status | Admin Only |
+| **M4 Company Quotes** | `GET` | `/api/quotes/<id>/company-quotes` | List company-specific offers for a quote | Authenticated |
+| **M4 Selections** | `GET` | `/api/selections/my` | List the customer's selected quotes | Authenticated |
+| **M4 Verification** | `GET` | `/api/verification-requests` | List the caller's company verification queue | Company Agent |
+| **M4 Checklist** | `POST` | `/api/verification-requests/<reference>/checks` | Record a verification checklist result | Company Agent |
+| **M4 Decision** | `POST` | `/api/verification-requests/<reference>/decision` | Approve, modify, reject, request information, or escalate | Company Agent |
+| **M4 Revision** | `POST` | `/api/selections/<reference>/revision-response` | Accept or reject a revised offer | Customer |
+| **M4 Booking** | `GET` | `/api/bookings` | List bookings visible to the caller | Authenticated |
+| **M4 Booking** | `GET` | `/api/bookings/<reference>` | View a confirmed booking | Authenticated |
 
 ---
 
@@ -282,6 +343,7 @@ tests/test_m2_pricing.py ....                                            [100%]
 
 * **50 International Customs Benchmark (`test_50_customs_scenarios.py`)**: 50/50 scenarios passed with 100% accuracy across 10 global trade jurisdictions.
 * **Resiliency & Fallback (`test_m3_phase6_e2e_resiliency.py`)**: Validated Open-Meteo offline API fallback and arms munitions blocking (`HS 930200`).
+* **M4 Booking Workflow (`test_m4_booking_scenarios.py`)**: Validated 22 scenarios covering quote selection, expiry, company isolation, agent decisions, revisions, missing information, cancellation, notification failure, SLA overdue handling, and booking confirmation.
 
 ---
 
