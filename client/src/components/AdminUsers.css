@@ -32,6 +32,12 @@
   border: 1px solid #bae6fd;
 }
 
+.badge-role-customs {
+  background: #e0e7ff;
+  color: #4f46e5;
+  border: 1px solid #c7d2fe;
+}
+
 /* ==========================================================================
    Admin Provision User Modal with Blurred Backdrop
    ========================================================================== */

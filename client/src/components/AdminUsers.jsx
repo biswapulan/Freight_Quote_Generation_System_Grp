@@ -5,8 +5,46 @@ import { useAuth } from "../context/AuthContext";
 import { listUsers, createUser, updateUser, deactivateUser } from "../api/admin";
 import "./AdminUsers.css";
 
-const ROLE_LABELS = { admin: "Admin", agent: "Freight Agent", business: "Business", retail: "Retail" };
-const ROLE_OPTIONS = ["admin", "agent", "business", "retail"];
+const ROLE_LABELS = { admin: "Admin", agent: "Freight Agent", business: "Business", retail: "Retail", customs: "Customs Officer" };
+const ROLE_OPTIONS = ["admin", "agent", "business", "retail", "customs"];
+
+// Older records store customs accounts as "customs_officer".
+const roleOf = (u) => (u.role === "customs_officer" ? "customs" : u.role);
+
+// Each admin sidebar page lists only its own roles. "Customers" covers both
+// retail and business, matching how the rest of the app labels them.
+const SCOPES = {
+  users: {
+    roles: ["admin"],
+    title: "Platform Users",
+    subtitle: "Administrator accounts with access to platform governance",
+    noun: "User",
+  },
+  customers: {
+    roles: ["retail", "business"],
+    title: "Customers",
+    subtitle: "Retail and business accounts that request quotes and book shipments",
+    noun: "Customer",
+  },
+  "freight-agents": {
+    roles: ["agent"],
+    title: "Freight Agents",
+    subtitle: "Forwarding agencies that price, verify and dispatch shipments",
+    noun: "Freight Agent",
+  },
+  "customs-officers": {
+    roles: ["customs"],
+    title: "Customs Officers",
+    subtitle: "Officers who review trade documents and clear shipments",
+    noun: "Customs Officer",
+  },
+  "roles-and-permissions": {
+    roles: ROLE_OPTIONS,
+    title: "System User Governance & RBAC",
+    subtitle: "Manage platform accounts, create & approve freight agencies & business accounts, toggle roles & access",
+    noun: "User",
+  },
+};
 
 const EMPTY_FORM = { full_name: "", email: "", password: "", role: "admin", company_name: "" };
 
@@ -47,8 +85,15 @@ const MOCK_ADMIN_USERS = [
   },
 ];
 
-export default function AdminUsers() {
+export default function AdminUsers({ scope = "roles-and-permissions" }) {
   const { token, user: currentUser } = useAuth();
+  const cfg = SCOPES[scope] || SCOPES["roles-and-permissions"];
+  const scopeRoles = cfg.roles;
+  const blankForm = { ...EMPTY_FORM, role: scopeRoles[0] };
+  const scopeLabel =
+    scopeRoles.length === ROLE_OPTIONS.length
+      ? `Across all ${ROLE_OPTIONS.length} account roles`
+      : `${scopeRoles.map((r) => ROLE_LABELS[r]).join(" & ")} accounts`;
 
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -60,7 +105,7 @@ export default function AdminUsers() {
   const [statusFilter, setStatusFilter] = useState("");
 
   const [showCreate, setShowCreate] = useState(false);
-  const [createForm, setCreateForm] = useState(EMPTY_FORM);
+  const [createForm, setCreateForm] = useState(blankForm);
   const [creating, setCreating] = useState(false);
 
   const [editingId, setEditingId] = useState(null);
@@ -109,21 +154,26 @@ export default function AdminUsers() {
     loadUsers();
   }, [token]);
 
+  const scopedUsers = useMemo(
+    () => users.filter((u) => scopeRoles.includes(roleOf(u))),
+    [users, scopeRoles]
+  );
+
   const filteredUsers = useMemo(() => {
     const q = search.trim().toLowerCase();
-    return users.filter((u) => {
+    return scopedUsers.filter((u) => {
       const matchesSearch =
         !q ||
         u.full_name?.toLowerCase().includes(q) ||
         u.email?.toLowerCase().includes(q) ||
         u.company_name?.toLowerCase().includes(q);
-      const matchesRole = !roleFilter || u.role === roleFilter;
+      const matchesRole = !roleFilter || roleOf(u) === roleFilter;
       const matchesStatus =
         !statusFilter ||
         (statusFilter === "active" ? u.is_active !== false : u.is_active === false);
       return matchesSearch && matchesRole && matchesStatus;
     });
-  }, [users, search, roleFilter, statusFilter]);
+  }, [scopedUsers, search, roleFilter, statusFilter]);
 
   function handleFilterSubmit(e) {
     e.preventDefault();
@@ -143,7 +193,7 @@ export default function AdminUsers() {
         return updated;
       });
       setSuccessMsg(`User ${newUser.full_name} (${newUser.role}) created successfully.`);
-      setCreateForm(EMPTY_FORM);
+      setCreateForm(blankForm);
       setShowCreate(false);
     } catch {
       // Offline fallback: provision user in local state immediately
@@ -162,7 +212,7 @@ export default function AdminUsers() {
         return updated;
       });
       setSuccessMsg(`User ${offlineUser.full_name} (${offlineUser.role}) provisioned successfully.`);
-      setCreateForm(EMPTY_FORM);
+      setCreateForm(blankForm);
       setShowCreate(false);
     } finally {
       setCreating(false);
@@ -171,7 +221,7 @@ export default function AdminUsers() {
 
   function startEditing(u) {
     setEditingId(u.id);
-    setEditRole(u.role);
+    setEditRole(roleOf(u));
     setError("");
     setSuccessMsg("");
   }
@@ -236,20 +286,20 @@ export default function AdminUsers() {
   }
 
   const kpis = useMemo(() => {
-    const totalUsers = users.length;
-    const activeAgents = users.filter((u) => u.role === "agent" && u.is_active !== false).length;
-    const businessAccounts = users.filter((u) => u.role === "business" && u.is_active !== false).length;
-    const retailAccounts = users.filter((u) => u.role === "retail" && u.is_active !== false).length;
-    return { totalUsers, activeAgents, businessAccounts, retailAccounts };
-  }, [users]);
+    const monthAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
+    const total = scopedUsers.length;
+    const active = scopedUsers.filter((u) => u.is_active !== false).length;
+    const recent = scopedUsers.filter((u) => u.created_at && new Date(u.created_at).getTime() >= monthAgo).length;
+    return { total, active, inactive: total - active, recent };
+  }, [scopedUsers]);
 
   return (
     <div className="agent-overview">
       {/* Header Banner */}
       <div className="agent-header-banner">
         <div className="agent-title-block">
-          <h1>System User Governance & RBAC</h1>
-          <p>Manage platform accounts, create & approve freight agencies & business accounts, toggle roles & access</p>
+          <h1>{cfg.title}</h1>
+          <p>{cfg.subtitle}</p>
         </div>
         <div className="agent-badge-tag">
           <span className="agent-badge-dot" />
@@ -257,49 +307,49 @@ export default function AdminUsers() {
         </div>
       </div>
 
-      {/* KPI Cards Grid */}
+      {/* KPI Cards Grid — counts cover only this page's roles */}
       <div className="agent-kpi-grid">
         <div className="agent-kpi-card">
           <div className="agent-kpi-top">
-            <span className="agent-kpi-label">Total Registered Users</span>
+            <span className="agent-kpi-label">Total {cfg.noun}s</span>
             <div className="agent-kpi-icon icon-cyan"><FaUsers /></div>
           </div>
-          <div className="agent-kpi-value">{loading ? "..." : kpis.totalUsers}</div>
-          <div className="agent-kpi-sub">Across all 4 account roles</div>
+          <div className="agent-kpi-value">{loading ? "..." : kpis.total}</div>
+          <div className="agent-kpi-sub">{scopeLabel}</div>
         </div>
 
         <div className="agent-kpi-card">
           <div className="agent-kpi-top">
-            <span className="agent-kpi-label">Active Freight Agents</span>
-            <div className="agent-kpi-icon icon-amber"><FaUserTie /></div>
+            <span className="agent-kpi-label">Active</span>
+            <div className="agent-kpi-icon icon-teal"><FaUserCheck /></div>
           </div>
-          <div className="agent-kpi-value">{loading ? "..." : kpis.activeAgents}</div>
-          <div className="agent-kpi-sub">Forwarding agencies</div>
+          <div className="agent-kpi-value">{loading ? "..." : kpis.active}</div>
+          <div className="agent-kpi-sub">Currently able to sign in</div>
         </div>
 
         <div className="agent-kpi-card">
           <div className="agent-kpi-top">
-            <span className="agent-kpi-label">Business Accounts</span>
-            <div className="agent-kpi-icon icon-teal"><FaBuilding /></div>
+            <span className="agent-kpi-label">Inactive</span>
+            <div className="agent-kpi-icon icon-amber"><FaUserShield /></div>
           </div>
-          <div className="agent-kpi-value">{loading ? "..." : kpis.businessAccounts}</div>
-          <div className="agent-kpi-sub">Enterprise & SMB accounts</div>
+          <div className="agent-kpi-value">{loading ? "..." : kpis.inactive}</div>
+          <div className="agent-kpi-sub">Deactivated accounts</div>
         </div>
 
         <div className="agent-kpi-card">
           <div className="agent-kpi-top">
-            <span className="agent-kpi-label">Retail Customers</span>
-            <div className="agent-kpi-icon icon-purple"><FaUserCheck /></div>
+            <span className="agent-kpi-label">New This Month</span>
+            <div className="agent-kpi-icon icon-purple"><FaUserTie /></div>
           </div>
-          <div className="agent-kpi-value">{loading ? "..." : kpis.retailAccounts}</div>
-          <div className="agent-kpi-sub">Self-registered retail accounts</div>
+          <div className="agent-kpi-value">{loading ? "..." : kpis.recent}</div>
+          <div className="agent-kpi-sub">Joined in the last 30 days</div>
         </div>
       </div>
 
       {/* Main Panel Card */}
       <div className="agent-panel-card">
         <div className="agent-panel-header" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <h2 className="agent-panel-title">User Accounts Directory</h2>
+          <h2 className="agent-panel-title">{cfg.noun} Accounts Directory</h2>
           <div style={{ display: "flex", gap: "10px" }}>
             <button
               type="button"
@@ -307,7 +357,7 @@ export default function AdminUsers() {
               style={{ padding: "8px 16px", fontSize: "13px" }}
               onClick={() => setShowCreate((v) => !v)}
             >
-              <FaPlus style={{ marginRight: "4px" }} /> {showCreate ? "Cancel" : "Add New User"}
+              <FaPlus style={{ marginRight: "4px" }} /> {showCreate ? "Cancel" : `Add New ${cfg.noun}`}
             </button>
             <Link to="/dashboard/rate-config" className="agent-btn-sm" style={{ textDecoration: "none" }}>
               Rate Configuration &rarr;
@@ -332,12 +382,14 @@ export default function AdminUsers() {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
-          <select className="desk-select" style={{ width: "160px" }} value={roleFilter} onChange={(e) => setRoleFilter(e.target.value)}>
-            <option value="">All Roles</option>
-            {ROLE_OPTIONS.map((r) => (
-              <option key={r} value={r}>{ROLE_LABELS[r]}</option>
-            ))}
-          </select>
+          {scopeRoles.length > 1 && (
+            <select className="desk-select" style={{ width: "160px" }} value={roleFilter} onChange={(e) => setRoleFilter(e.target.value)}>
+              <option value="">All Roles</option>
+              {scopeRoles.map((r) => (
+                <option key={r} value={r}>{ROLE_LABELS[r]}</option>
+              ))}
+            </select>
+          )}
           <select className="desk-select" style={{ width: "140px" }} value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
             <option value="">All Statuses</option>
             <option value="active">Active</option>
@@ -411,9 +463,10 @@ export default function AdminUsers() {
                     <select
                       className="desk-select"
                       value={createForm.role}
+                      disabled={scopeRoles.length === 1}
                       onChange={(e) => setCreateForm((f) => ({ ...f, role: e.target.value }))}
                     >
-                      {ROLE_OPTIONS.map((r) => (
+                      {scopeRoles.map((r) => (
                         <option key={r} value={r}>{ROLE_LABELS[r]}</option>
                       ))}
                     </select>
@@ -466,6 +519,13 @@ export default function AdminUsers() {
               </tr>
             </thead>
             <tbody>
+              {!loading && filteredUsers.length === 0 && (
+                <tr>
+                  <td colSpan={5} style={{ textAlign: "center", color: "#64748b", padding: "28px 0" }}>
+                    No {cfg.noun.toLowerCase()} accounts found.
+                  </td>
+                </tr>
+              )}
               {filteredUsers.map((u) => {
                 const isSelf = currentUser && (
                   (currentUser.id && currentUser.id === u.id) ||
@@ -509,8 +569,8 @@ export default function AdminUsers() {
                           <button type="button" className="agent-btn-sm" onClick={cancelEditing}>X</button>
                         </div>
                       ) : (
-                        <span className={`badge-role-tag badge-role-${u.role}`}>
-                          {ROLE_LABELS[u.role] || u.role}
+                        <span className={`badge-role-tag badge-role-${roleOf(u)}`}>
+                          {ROLE_LABELS[roleOf(u)] || u.role}
                         </span>
                       )}
                     </td>

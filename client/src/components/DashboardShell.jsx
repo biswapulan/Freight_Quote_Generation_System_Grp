@@ -29,6 +29,7 @@ import CustomsOfficerPortal from "./CustomsOfficerPortal";
 import CompanyAgentPortal from "./CompanyAgentPortal";
 import CustomerSelections from "./CustomerSelections";
 import AdminCompanyDesk from "./AdminCompanyDesk";
+import AdminOperations from "./AdminOperations";
 import AIAgentMonitor from "./AIAgentMonitor";
 import NotificationsCenter from "./NotificationsCenter";
 import DocumentsCenter from "./DocumentsCenter";
@@ -320,11 +321,11 @@ export default function DashboardShell() {
             ) : activeItem.slug === "customs-portal" ? (
               <CustomsOfficerPortal />
             ) : activeItem.slug === "users" || activeItem.slug === "customers" || activeItem.slug === "freight-agents" || activeItem.slug === "customs-officers" || activeItem.slug === "roles-and-permissions" ? (
-              <AdminUsers />
+              <AdminUsers key={activeItem.slug} scope={activeItem.slug} />
             ) : activeItem.slug === "master-data" || activeItem.slug === "locations" || activeItem.slug === "container-types" || activeItem.slug === "cargo-categories" ? (
               <AdminMasterData />
             ) : activeItem.slug === "all-shipments" ? (
-              <AgentShipmentDispatch />
+              <AdminOperations view="shipments" />
             ) : activeItem.slug === "companies" ? (
               <AdminCompanyDesk initialTab="companies" />
             ) : activeItem.slug === "company-agents" ? (
@@ -336,7 +337,7 @@ export default function DashboardShell() {
             ) : activeItem.slug === "company-performance" ? (
               <AdminCompanyDesk initialTab="performance" />
             ) : activeItem.slug === "all-quotes" ? (
-              <AgentQuoteDesk />
+              <AdminOperations view="quotes" />
             ) : activeItem.slug === "routes" ? (
               <RetailRoutes />
             ) : activeItem.slug === "port-congestion" ? (
