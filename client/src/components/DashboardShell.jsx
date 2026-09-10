@@ -157,13 +157,19 @@ function useLiveClock() {
 }
 
 export default function DashboardShell() {
-  const { user, login, logout } = useAuth();
+  const { user, loading, login, logout } = useAuth();
   const navigate = useNavigate();
   const { section } = useParams();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const now = useLiveClock();
 
-  if (!user) return null;
+  if (!user) {
+    return loading ? (
+      <div className="route-loading">Loading dashboard...</div>
+    ) : (
+      <Navigate to="/login" replace />
+    );
+  }
 
   // Role comes from the authenticated account only.
   //

@@ -1,10 +1,17 @@
 from django.conf import settings
 from django.conf.urls.static import static
 from django.contrib import admin
+from django.http import JsonResponse
 from django.urls import include, path
 from accounts.views import LoginView
 
+
+def health_check(request):
+    return JsonResponse({'service': 'FreightAI API', 'status': 'ok'})
+
+
 urlpatterns = [
+    path('', health_check, name='health-check'),
     # Mentor Specification Root Paths & API Views (Placed before admin.site to capture /admin/quotes)
     path('login', LoginView.as_view(), name='root-login'),
     path('login/', LoginView.as_view(), name='root-login-slash'),

@@ -172,7 +172,7 @@ ALLOW_HEADER_ROLE_AUTH = config('ALLOW_HEADER_ROLE_AUTH', default=False, cast=bo
 # Allow the local React/Vite dev server to call this API.
 CORS_ALLOWED_ORIGINS = csv_config(
     'CORS_ALLOWED_ORIGINS',
-    default='http://localhost:5173',
+    default='http://localhost:5173,http://localhost:5174,http://127.0.0.1:5173,http://127.0.0.1:5174',
 )
 
 CSRF_TRUSTED_ORIGINS = csv_config('CSRF_TRUSTED_ORIGINS')
