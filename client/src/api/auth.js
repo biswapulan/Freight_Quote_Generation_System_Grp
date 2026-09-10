@@ -8,6 +8,25 @@ const API_BASE_URL =
 
 const AUTH_URL = `${API_BASE_URL.replace(/\/$/, "")}/auth`;
 
+// The live backend is on Render's free tier, which sleeps after a quiet spell
+// and takes up to a minute to wake. Signing in has to outlast that.
+const COLD_START_TIMEOUT_MS = 75000;
+
+let wakeRequest = null;
+
+/**
+ * Nudge the backend awake as soon as the site loads, so it is usually ready by
+ * the time someone has typed their password. The reply is never read; the
+ * request arriving is what wakes the server.
+ */
+export function wakeServer() {
+  if (!wakeRequest) {
+    const root = API_BASE_URL.replace(/\/api\/?$/, "/");
+    wakeRequest = fetch(root, { mode: "no-cors", cache: "no-store" }).catch(() => null);
+  }
+  return wakeRequest;
+}
+
 /**
  * Shared request helper for the auth endpoints.
  *
@@ -68,11 +87,11 @@ export function signup({ fullName, email, password, role, companyName, gstNumber
     role,
     company_name: companyName,
     gst_number: gstNumber,
-  });
+  }, { timeoutMs: COLD_START_TIMEOUT_MS });
 }
 
 export function login({ email, password }) {
-  return request("/login/", { email, password });
+  return request("/login/", { email, password }, { timeoutMs: COLD_START_TIMEOUT_MS });
 }
 
 export function forgotPassword({ email }) {

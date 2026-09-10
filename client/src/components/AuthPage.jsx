@@ -18,6 +18,7 @@ const [mode, setMode] = useState(
 
 const [showPassword, setShowPassword] = useState(false);
 const [loading, setLoading] = useState(false);
+const [slowLogin, setSlowLogin] = useState(false);
 const [errorMsg, setErrorMsg] = useState("");
 
 const [loginData, setLoginData] = useState({ email: "", password: "" });
@@ -58,6 +59,9 @@ async function handleLoginSubmit(e) {
 e.preventDefault();
 setErrorMsg("");
 setLoading(true);
+// A sleeping server takes up to a minute to answer. Say so, rather than leave
+// a spinner that looks stuck.
+const slowTimer = setTimeout(() => setSlowLogin(true), 5000);
 
 try {
   const data = await loginRequest(loginData);
@@ -76,6 +80,8 @@ try {
       : err.message || "Invalid email or password.",
   );
 } finally {
+  clearTimeout(slowTimer);
+  setSlowLogin(false);
   setLoading(false);
 }
 }
@@ -237,8 +243,13 @@ Forgot password?
 </div>
 
 <button type="submit" className="primary-btn" disabled={loading} aria-busy={loading}>
-{loading ? <><FaSpinner className="button-loader" /> Logging in...</> : "Log In"}
+{loading ? <><FaSpinner className="button-loader" /> {slowLogin ? "Waking up the server..." : "Logging in..."}</> : "Log In"}
 </button>
+{loading && slowLogin && (
+  <p style={{ margin: "8px 0 0", fontSize: 13, color: "#64748b", textAlign: "center" }}>
+    The server sleeps when nobody has used it for a while and can take up to a minute to wake.
+  </p>
+)}
 
 <div className="demo-accounts-helper">
   <div className="demo-helper-header">

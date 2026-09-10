@@ -18,6 +18,7 @@ import ErrorBoundary from "./components/ErrorBoundary";
 import M3IntelligenceDashboard from "./components/M3IntelligenceDashboard";
 import QuoteDetailView from "./components/QuoteDetailView";
 import { LocationProvider } from "./context/LocationContext";
+import { wakeServer } from "./api/auth";
 
 const INITIAL_LOAD_MS = 600;
 
@@ -27,6 +28,9 @@ function App() {
   const [cookiesResolved, setCookiesResolved] = useState(false);
 
   useEffect(() => {
+    // Start waking the backend while the visitor is still reading the page,
+    // so it is ready by the time they log in.
+    wakeServer();
     const timer = setTimeout(() => setLoading(false), INITIAL_LOAD_MS);
     return () => clearTimeout(timer);
   }, []);
