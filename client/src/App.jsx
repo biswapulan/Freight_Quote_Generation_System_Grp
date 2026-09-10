@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Routes, Route } from "react-router-dom";
+import { Routes, Route, useLocation } from "react-router-dom";
 import ProfessionalLanding from "./components/ProfessionalLanding";
 import AuthPage from "./components/AuthPage";
 import DashboardShell from "./components/DashboardShell";
@@ -14,6 +14,7 @@ import ShipmentPage from "./components/ShipmentPage";
 import ContactPage from "./components/ContactPage";
 import PageLoader from "./components/PageLoader";
 import CookieConsent from "./components/CookieConsent";
+import ErrorBoundary from "./components/ErrorBoundary";
 import M3IntelligenceDashboard from "./components/M3IntelligenceDashboard";
 import QuoteDetailView from "./components/QuoteDetailView";
 import { LocationProvider } from "./context/LocationContext";
@@ -21,6 +22,7 @@ import { LocationProvider } from "./context/LocationContext";
 const INITIAL_LOAD_MS = 600;
 
 function App() {
+  const location = useLocation();
   const [loading, setLoading] = useState(true);
   const [cookiesResolved, setCookiesResolved] = useState(false);
 
@@ -51,6 +53,9 @@ function App() {
             : undefined
         }
       >
+      {/* A crash in one page shows its error here instead of blanking the
+          whole site; going to another page clears it. */}
+      <ErrorBoundary resetKey={location.pathname}>
       <Routes>
         <Route path="/" element={<ProfessionalLanding />} />
         <Route path="/login" element={<AuthPage />} />
@@ -124,6 +129,7 @@ function App() {
           }
         />
       </Routes>
+      </ErrorBoundary>
       </div>
     </LocationProvider>
   );

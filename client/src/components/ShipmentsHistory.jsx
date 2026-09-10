@@ -177,7 +177,7 @@ export default function ShipmentsHistory() {
               ) : (
                 filtered.map((q) => (
                   <tr key={q.id}>
-                    <td className="shp-mono">#{q.id.slice(-6).toUpperCase()}</td>
+                    <td className="shp-mono">#{String(q.id).slice(-6).toUpperCase()}</td>
                     <td>{q.origin} → {q.destination}</td>
                     <td>{MODE_LABELS[q.mode] || q.mode}</td>
                     <td>{q.weight_kg} kg / {q.volume_m3} m³</td>

@@ -114,9 +114,12 @@ export function calculateGeoDistanceKm(lat1, lon1, lat2, lon2) {
 export function resolveAddressCoordinates(addr) {
   if (!addr) return null;
 
-  // 1. Direct coordinates if already attached
-  if (addr.lat && addr.lng) {
-    return { lat: Number(addr.lat), lng: Number(addr.lng) };
+  // 1. Direct coordinates if already attached. Only real numbers count: a
+  // NaN here reaches Leaflet, which throws and blanks the quote page.
+  const lat = Number(addr.lat);
+  const lng = Number(addr.lng);
+  if (addr.lat && addr.lng && Number.isFinite(lat) && Number.isFinite(lng)) {
+    return { lat, lng };
   }
 
   // 2. City name matching

@@ -1346,7 +1346,7 @@ export default function CustomsOfficerPortal({ initialTab = "pending-reviews" })
                     <tr key={s.id}>
                       <td>
                         <span className="cop-clearance-cert">
-                          {s.clearanceCertNo || `CC-IN-2026-${s.id.slice(-4)}`}
+                          {s.clearanceCertNo || `CC-IN-2026-${String(s.id).slice(-4)}`}
                         </span>
                       </td>
                       <td>
@@ -1376,7 +1376,7 @@ export default function CustomsOfficerPortal({ initialTab = "pending-reviews" })
                           onClick={() =>
                             alert(
                               `Official Customs Clearance Certificate for ${s.id}:\n\nCertificate No: ${
-                                s.clearanceCertNo || `CC-IN-2026-${s.id.slice(-4)}`
+                                s.clearanceCertNo || `CC-IN-2026-${String(s.id).slice(-4)}`
                               }\nShipper: ${s.customer}\nAssigned Officer: ${s.assignedOfficer}\nStatus: APPROVED & CLEARED FOR EXPORT`
                             )
                           }

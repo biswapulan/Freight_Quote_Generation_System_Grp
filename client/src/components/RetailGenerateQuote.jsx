@@ -392,6 +392,9 @@ const initialFormState = {
 function dayAfter(date) {
   if (!date) return "";
   const nextDate = new Date(`${date}T00:00:00Z`);
+  // A half-typed date parses as Invalid Date, and toISOString() on that throws
+  // during render, which blanks the whole page.
+  if (Number.isNaN(nextDate.getTime())) return "";
   nextDate.setUTCDate(nextDate.getUTCDate() + 1);
   return nextDate.toISOString().slice(0, 10);
 }
@@ -954,7 +957,14 @@ export default function RetailGenerateQuote() {
     }
 
     if (bounds.length >= 2) {
-      map.fitBounds(L.latLngBounds(bounds), { padding: [35, 35] });
+      // The map is only a visual aid. Leaflet throws when it cannot fit the
+      // bounds (a hidden container, a bad coordinate), and an error thrown in
+      // an effect takes the whole quote form down with it.
+      try {
+        map.fitBounds(L.latLngBounds(bounds), { padding: [35, 35] });
+      } catch (err) {
+        console.warn("Route map could not be fitted:", err);
+      }
     }
   }, [oPort, dPort, selectedPickupObj, selectedDeliveryObj, pickupProximity, deliveryProximity]);
 
@@ -1756,7 +1766,7 @@ export default function RetailGenerateQuote() {
               <>
                 <div className="est-total-label">AGENT-DETERMINED ESTIMATE</div>
                 <div className="est-total-price">{money(generatedQuote.breakdown?.total || 0)}</div>
-                <div className="rate-badge">◆ CERTIFIED BY QUOTE AGENT ({`QT-${generatedQuote.id.slice(-8).toUpperCase()}`})</div>
+                <div className="rate-badge">◆ CERTIFIED BY QUOTE AGENT ({`QT-${String(generatedQuote.id).slice(-8).toUpperCase()}`})</div>
                 <button type="button" className="btn-generate" onClick={() => setShowQuoteModal(true)} style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", gap: "8px" }}>
                   <Eye size={16} /> View Full Quotation Offer
                 </button>
@@ -2387,7 +2397,7 @@ export default function RetailGenerateQuote() {
             <div className="pdf-doc-meta">
               <div className="pdf-doc-badge">OFFICIAL FREIGHT RATE ESTIMATE</div>
               <div className="pdf-doc-ref">
-                <strong>Quote Ref:</strong> {generatedQuote ? `QT-${generatedQuote.id.slice(-8).toUpperCase()}` : "QT-OFFICIAL"}
+                <strong>Quote Ref:</strong> {generatedQuote?.id ? `QT-${String(generatedQuote.id).slice(-8).toUpperCase()}` : "QT-OFFICIAL"}
               </div>
               <div className="pdf-doc-date">
                 <strong>Date of Issue:</strong> {new Date().toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}
