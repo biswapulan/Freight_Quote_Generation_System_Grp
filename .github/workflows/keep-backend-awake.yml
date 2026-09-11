@@ -1,11 +1,11 @@
 # Render's free tier puts the backend to sleep after 15 minutes without a
-# request, and the next visitor then waits up to a minute for it to wake.
-# This pings it on a schedule so it never goes quiet for that long.
+# request, and the next visitor then waits over a minute for it to wake.
 #
-# GitHub can start scheduled runs several minutes late when it is busy, so
-# this runs every 5 minutes, the shortest interval GitHub allows, leaving room
-# inside Render's 15-minute window. Run it by hand from the Actions tab with
-# "Run workflow" to check it works.
+# The server keeps itself awake by pinging its own public address (see
+# server/server/keep_awake.py). This workflow is the backup that wakes it if
+# it ever does fall asleep, after a crash say. GitHub starts scheduled runs
+# late or drops them when it is busy, which is why this is not the main
+# mechanism. Run it by hand from the Actions tab with "Run workflow".
 name: Keep backend awake
 
 on:

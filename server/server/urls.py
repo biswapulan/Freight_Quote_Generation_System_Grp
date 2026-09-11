@@ -1,3 +1,5 @@
+from datetime import datetime, timezone
+
 from django.conf import settings
 from django.conf.urls.static import static
 from django.contrib import admin
@@ -5,9 +7,13 @@ from django.http import JsonResponse
 from django.urls import include, path
 from accounts.views import LoginView
 
+# When this server process started. Reported by the health check so anyone can
+# see whether the live server stayed up or was restarted after falling asleep.
+STARTED_AT = datetime.now(timezone.utc).isoformat(timespec='seconds')
+
 
 def health_check(request):
-    return JsonResponse({'service': 'FreightAI API', 'status': 'ok'})
+    return JsonResponse({'service': 'FreightAI API', 'status': 'ok', 'up_since': STARTED_AT})
 
 
 urlpatterns = [
