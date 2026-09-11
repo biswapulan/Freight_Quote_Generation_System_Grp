@@ -72,6 +72,7 @@ const STATUS_TONE = {
 const TABS = [
   { key: "incoming", label: "Incoming requests" },
   { key: "verifying", label: "Being checked" },
+  { key: "manager", label: "With manager" },
   { key: "waiting", label: "Waiting on customer" },
   { key: "settled", label: "Approved & rejected" },
   { key: "bookings", label: "Bookings" },
@@ -99,6 +100,8 @@ export default function CompanyAgentPortal({ initialTab = "incoming" }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState(null);
+  // Companies the signed-in agent manages; escalations there are theirs to decide.
+  const [managerOf, setManagerOf] = useState([]);
 
   const [openRef, setOpenRef] = useState(null);
   const [detail, setDetail] = useState(null);
@@ -122,6 +125,7 @@ export default function CompanyAgentPortal({ initialTab = "incoming" }) {
         listBookings(token).catch(() => ({ results: [] })),
       ]);
       setRequests(reqData.results || []);
+      setManagerOf(reqData.viewer?.managerOf || []);
       setBookings(bookData.results || []);
     } catch (err) {
       setError(err.message || "Could not load your queue.");
@@ -142,9 +146,9 @@ export default function CompanyAgentPortal({ initialTab = "incoming" }) {
     const incoming = requests.filter(
       (r) => r.status === "PENDING_COMPANY_VERIFICATION",
     );
-    const verifying = requests.filter(
-      (r) => r.status === "UNDER_VERIFICATION" || r.status === "ESCALATED",
-    );
+    const verifying = requests.filter((r) => r.status === "UNDER_VERIFICATION");
+    // Escalated requests wait for a manager, so they get a list of their own.
+    const manager = requests.filter((r) => r.status === "ESCALATED");
     const waiting = requests.filter((r) =>
       ["AWAITING_CUSTOMER_INFO", "REVISION_PENDING_CUSTOMER"].includes(r.status),
     );
@@ -152,7 +156,7 @@ export default function CompanyAgentPortal({ initialTab = "incoming" }) {
       ["APPROVED", "REJECTED", "REVISION_ACCEPTED", "BOOKING_CONFIRMED",
        "BOOKING_CANCELLED", "RESELECT_QUOTE"].includes(r.status),
     );
-    return { incoming, verifying, waiting, settled };
+    return { incoming, verifying, manager, waiting, settled };
   }, [requests]);
 
   const stats = useMemo(() => {
@@ -281,7 +285,10 @@ export default function CompanyAgentPortal({ initialTab = "incoming" }) {
       resetComposer();
       setNotice({
         type: "success",
-        text: `Recorded as ${STATUS_LABELS[updated.status] || updated.status}. The customer has been told.`,
+        text:
+          updated.status === "ESCALATED" && decisionAction !== "ESCALATE"
+            ? "This needs a manager, so it has gone to your company's manager for approval. The customer has been told it is under review."
+            : `Recorded as ${STATUS_LABELS[updated.status] || updated.status}. The customer has been told.`,
       });
       load();
     } catch (err) {
@@ -296,6 +303,8 @@ export default function CompanyAgentPortal({ initialTab = "incoming" }) {
       ? buckets.incoming
       : activeTab === "verifying"
       ? buckets.verifying
+      : activeTab === "manager"
+      ? buckets.manager
       : activeTab === "waiting"
       ? buckets.waiting
       : activeTab === "settled"
@@ -351,7 +360,7 @@ export default function CompanyAgentPortal({ initialTab = "incoming" }) {
               className={`cap-tab${activeTab === t.key ? " active" : ""}`}
               onClick={() => setActiveTab(t.key)}
             >
-              {t.label}
+              {t.key === "manager" && managerOf.length ? "Needs your approval" : t.label}
               <span className="cap-tab-count">{count}</span>
             </button>
           );
@@ -368,6 +377,10 @@ export default function CompanyAgentPortal({ initialTab = "incoming" }) {
           emptyLabel={
             activeTab === "incoming"
               ? "No new requests. When a customer picks your company, it lands here."
+              : activeTab === "manager"
+              ? managerOf.length
+                ? "Nothing is waiting for your approval."
+                : "No requests are with a manager. High-value and high-risk approvals go here."
               : "Nothing in this list right now."
           }
         />
@@ -555,7 +568,16 @@ function RequestDetail(props) {
   const checks = detail?.checks || [];
   const done = checks.filter((c) => c.result !== "PENDING").length;
   const blocking = checks.filter((c) => c.result === "FAIL");
-  const decided = Boolean(detail?.decidedAt);
+  // Whether the request is still open comes from its status, not from whether
+  // anyone has decided before: an escalation is a decision, but the manager
+  // still has to act on it.
+  const actionable = ["PENDING_COMPANY_VERIFICATION", "UNDER_VERIFICATION", "ESCALATED"].includes(
+    detail?.status,
+  );
+  const decided = !actionable;
+  const escalated = detail?.status === "ESCALATED";
+  const canCheck = detail?.canCheck ?? actionable;
+  const canDecide = detail?.canDecide ?? actionable;
 
   return (
     <div className="cap-modal-backdrop" onClick={onClose}>
@@ -591,6 +613,8 @@ function RequestDetail(props) {
             </section>
 
             <AiAnalysis insights={detail.aiInsights} />
+
+            <DocumentsOnFile documents={detail.documents} />
 
             {detail.requestedInformation?.length > 0 && (
               <div className="cap-note info">
@@ -645,7 +669,7 @@ function RequestDetail(props) {
                         key={opt.value}
                         type="button"
                         className={`cap-check-btn ${opt.tone}${c.result === opt.value ? " on" : ""}`}
-                        disabled={busy || decided}
+                        disabled={busy || !canCheck}
                         onClick={() => onCheck(c.area, opt.value)}
                       >
                         {opt.label}
@@ -669,9 +693,35 @@ function RequestDetail(props) {
                   </span>
                 </div>
               </div>
+            ) : !canDecide ? (
+              <div className="cap-note info">
+                <ShieldCheck size={15} />
+                <div>
+                  {escalated ? (
+                    <>
+                      <strong>Waiting for a {detail.companyName} manager.</strong>{" "}
+                      {detail.decision_reason}
+                      <span className="cap-sub-line">
+                        A manager approves, revises or rejects it. You can still record checks.
+                      </span>
+                    </>
+                  ) : (
+                    <strong>You can view this request but not decide it.</strong>
+                  )}
+                </div>
+              </div>
             ) : (
               <section className="cap-decide">
                 <h3>Your decision</h3>
+                {escalated && (
+                  <div className="cap-note warn">
+                    <ShieldCheck size={15} />
+                    <div>
+                      <strong>Escalated to you for manager approval.</strong>{" "}
+                      {detail.decision_reason}
+                    </div>
+                  </div>
+                )}
                 <div className="cap-actions">
                   {[
                     ["APPROVE", "Approve", "ok"],
@@ -679,7 +729,10 @@ function RequestDetail(props) {
                     ["REQUEST_INFO", "Request info", "info"],
                     ["ESCALATE", "Escalate", "info"],
                     ["REJECT", "Reject", "bad"],
-                  ].map(([value, label, tone]) => (
+                  ]
+                    // A manager settles an escalation; it cannot be escalated again.
+                    .filter(([value]) => !escalated || ["APPROVE", "MODIFY", "REJECT"].includes(value))
+                    .map(([value, label, tone]) => (
                     <button
                       key={value}
                       type="button"
@@ -875,6 +928,43 @@ function AiAnalysis({ insights }) {
         <ul className="cap-ai-alerts">
           {insights.alerts.map((alert) => (
             <li key={alert}>{alert}</li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
+const DOC_TONE = { VERIFIED: "ok", REJECTED: "bad" };
+
+/** The paperwork behind the DOCUMENTS check: what the customer has uploaded. */
+function DocumentsOnFile({ documents }) {
+  if (!documents) return null;
+  return (
+    <section className="cap-docs">
+      <h3>
+        <FileText size={14} /> Documents on file
+      </h3>
+      {documents.length === 0 ? (
+        <p className="cap-muted">
+          The customer has not uploaded any documents for this shipment yet.
+        </p>
+      ) : (
+        <ul>
+          {documents.map((doc) => (
+            <li key={doc.id}>
+              <span className="cap-doc-type">{doc.documentType}</span>
+              {doc.fileUrl ? (
+                <a href={doc.fileUrl} target="_blank" rel="noreferrer">
+                  {doc.fileName}
+                </a>
+              ) : (
+                <span>{doc.fileName}</span>
+              )}
+              <span className={`cap-pill ${DOC_TONE[doc.status] || "waiting"}`}>
+                {(doc.status || "pending").toLowerCase()}
+              </span>
+            </li>
           ))}
         </ul>
       )}

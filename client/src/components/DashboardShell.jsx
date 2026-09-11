@@ -67,6 +67,7 @@ const AGENT_SECTIONS = [
   "Dashboard",
   "Incoming Requests",
   "Pending Verification",
+  "Manager Approvals",
   "Booking Management",
   "Shipment Requests",
   "All Shipments",
@@ -357,6 +358,8 @@ export default function DashboardShell() {
               <CompanyAgentPortal initialTab="incoming" />
             ) : activeItem.slug === "pending-verification" ? (
               <CompanyAgentPortal initialTab="verifying" />
+            ) : activeItem.slug === "manager-approvals" ? (
+              <CompanyAgentPortal initialTab="manager" />
             ) : activeItem.slug === "booking-management" ? (
               <CompanyAgentPortal initialTab="bookings" />
             ) : activeItem.slug === "dashboard" ? (

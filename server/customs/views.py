@@ -388,6 +388,73 @@ class CustomsSignOffView(APIView):
         }
 
 
+# Customs and the administrator review every shipment's papers.
+DOCUMENT_REVIEW_ROLES = ("admin", "customs", "customs_officer")
+
+
+def _document_caller(request):
+    """Who is asking, or (None, "", "") for an anonymous request."""
+    from rest_framework.exceptions import AuthenticationFailed
+
+    from quotes.auth_helper import get_current_user_and_role
+
+    try:
+        user_id, role, email = get_current_user_and_role(request)
+    except AuthenticationFailed:
+        return None, "", ""
+    return user_id, (role or "").lower(), email or ""
+
+
+def _visible_documents(user_id, role, email):
+    """The trade documents this caller may see.
+
+    Customs and the administrator see every shipment's. A customer sees their
+    own shipments'. A company agent sees the papers for shipments whose customer
+    chose their company, or that were assigned to them, and nothing a competitor
+    is handling: the M4 isolation rule applied to documents. Anyone else sees
+    none.
+    """
+    from django.db.models import Q
+
+    from quotes.models import Quote, Shipment
+
+    documents = ShipmentDocument.objects.all()
+    if role in DOCUMENT_REVIEW_ROLES:
+        return documents
+    if role == "agent":
+        from booking.models import QuoteSelection
+        from companies.access import company_ids_for
+
+        chosen = list(
+            QuoteSelection.objects.filter(
+                company_id__in=company_ids_for(email)
+            ).values_list("shipment_id", flat=True)
+        )
+        assigned = []
+        if email:
+            assigned = list(
+                Quote.objects.filter(assigned_agent_email__iexact=email).values_list(
+                    "shipment_id", flat=True
+                )
+            )
+        return documents.filter(Q(shipment_id__in=chosen) | Q(shipment_id__in=assigned))
+    if user_id:
+        own = list(Shipment.objects.filter(customer_id=user_id).values_list("id", flat=True))
+        return documents.filter(shipment_id__in=own)
+    return documents.none()
+
+
+def _may_add_documents(user_id, role, shipment_id):
+    """The shipment's own customer, or customs and the administrator."""
+    from quotes.models import Shipment
+
+    if role in DOCUMENT_REVIEW_ROLES:
+        return True
+    return bool(user_id) and Shipment.objects.filter(
+        id=shipment_id, customer_id=user_id
+    ).exists()
+
+
 class DocumentUploadView(APIView):
     """Upload or register compliance documents against a checklist item.
 
@@ -415,6 +482,13 @@ class DocumentUploadView(APIView):
 
         if not shipment_id:
             return Response({"error": "shipment_id is required"}, status=status.HTTP_400_BAD_REQUEST)
+
+        user_id, role, _email = _document_caller(request)
+        if not _may_add_documents(user_id, role, shipment_id):
+            return Response(
+                {"error": "You can only add documents to your own shipments."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
 
         upload = request.FILES.get("file")
         if upload:
@@ -503,7 +577,7 @@ class DocumentUploadView(APIView):
 
 
 class ShipmentDocumentListView(APIView):
-    """GET /customs/documents/?shipment_id=... -> documents on file for a shipment."""
+    """GET /customs/documents/?shipment_id=... -> the documents the caller may see."""
 
     # The M1-M3 service endpoints resolve the caller through
     # quotes.auth_helper rather than DRF's Mongo-backed authenticator, which
@@ -514,7 +588,7 @@ class ShipmentDocumentListView(APIView):
 
     def get(self, request):
         shipment_id = request.query_params.get("shipment_id")
-        qs = ShipmentDocument.objects.all()
+        qs = _visible_documents(*_document_caller(request))
         if shipment_id:
             qs = qs.filter(shipment_id=shipment_id)
 
@@ -548,7 +622,7 @@ class DocumentDeleteView(APIView):
 
         user_id, role, email = get_current_user_and_role(request)
         role = (role or "").lower()
-        is_staff = role in ("admin", "customs", "customs_officer", "agent")
+        is_staff = role in DOCUMENT_REVIEW_ROLES
 
         doc = ShipmentDocument.objects.filter(id=document_id).first()
         if not doc:
@@ -627,6 +701,13 @@ class DocumentVerifyView(APIView):
 
     def post(self, request, document_id):
         from audit import service as audit_service
+
+        _user_id, role, _email = _document_caller(request)
+        if role not in DOCUMENT_REVIEW_ROLES:
+            return Response(
+                {"error": "Only customs or the administrator may verify documents."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
 
         doc = ShipmentDocument.objects.filter(id=document_id).first()
         if not doc:

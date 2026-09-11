@@ -219,6 +219,28 @@ class VerificationRequestSerializer(serializers.ModelSerializer):
             insights["offerAdjustmentPct"] = round((factor - 1.0) * 100.0, 1) if factor else None
         return insights
 
+    documents = serializers.SerializerMethodField()
+
+    def get_documents(self, obj):
+        # The DOCUMENTS check asks whether the paperwork is present, so the
+        # agent sees what the customer has uploaded for this shipment.
+        from customs.models import ShipmentDocument
+
+        docs = ShipmentDocument.objects.filter(
+            shipment_id=obj.selection.shipment_id
+        ).order_by("-uploaded_at")
+        return [
+            {
+                "id": str(doc.id),
+                "documentType": doc.document_type,
+                "fileName": doc.file_name,
+                "fileUrl": doc.file_url,
+                "status": doc.verification_status,
+                "uploadedAt": doc.uploaded_at,
+            }
+            for doc in docs
+        ]
+
     class Meta:
         model = VerificationRequest
         fields = [
@@ -238,6 +260,7 @@ class VerificationRequestSerializer(serializers.ModelSerializer):
             "revisions",
             "requestedInformation",
             "aiInsights",
+            "documents",
             "created_at",
         ]
 

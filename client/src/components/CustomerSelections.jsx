@@ -16,6 +16,7 @@ import {
   listMySelections,
   provideSelectionInformation,
   respondToRevision,
+  uploadShipmentDocument,
 } from "../api/workflow";
 import "./CustomerSelections.css";
 
@@ -66,6 +67,16 @@ const TONE = {
   ESCALATED: "warn",
 };
 
+// The names customs uses for the papers a shipment needs, so an attachment
+// lines up with the checklist item it answers.
+const DOC_TYPES = [
+  "Commercial Invoice",
+  "Packing List",
+  "Bill of Lading / Sea Waybill (B/L)",
+  "Certificate of Origin (COO)",
+  "Other supporting document",
+];
+
 function money(amount, currency) {
   const value = Number(amount || 0);
   return `${currency === "INR" ? "₹ " : `${currency || ""} `}${value.toLocaleString("en-IN", { maximumFractionDigits: 0 })}`;
@@ -83,6 +94,13 @@ export default function CustomerSelections() {
   const [revisionFor, setRevisionFor] = useState(null);
   const [infoFor, setInfoFor] = useState(null);
   const [note, setNote] = useState("");
+  const [files, setFiles] = useState([]);
+  const [docType, setDocType] = useState(DOC_TYPES[0]);
+
+  function closeInfo() {
+    setInfoFor(null);
+    setFiles([]);
+  }
 
   const load = useCallback(async () => {
     if (!token) return;
@@ -141,20 +159,35 @@ export default function CustomerSelections() {
 
   async function sendInformation() {
     if (!infoFor || busy) return;
-    if (!note.trim()) {
-      setNotice({ type: "error", text: "Describe what you are providing." });
+    if (!note.trim() && !files.length) {
+      setNotice({ type: "error", text: "Attach a file or describe what you are providing." });
       return;
     }
     setBusy(infoFor.reference);
     try {
+      // Files go onto the shipment first, where the company's agent sees them
+      // in their request window; the response then names them.
+      const names = [];
+      for (const file of files) {
+        await uploadShipmentDocument(token, {
+          shipmentId: infoFor.shipmentId,
+          documentType: docType,
+          file,
+        });
+        names.push(file.name);
+      }
+      const attached = names.length ? `Attached ${docType}: ${names.join(", ")}.` : "";
       await provideSelectionInformation(token, infoFor.reference, {
-        note: note.trim(),
+        note: [note.trim(), attached].filter(Boolean).join(" "),
+        provided: names,
       });
       setNotice({
         type: "success",
-        text: "Sent. The company will pick your request back up.",
+        text: names.length
+          ? `Sent with ${names.length} file${names.length === 1 ? "" : "s"}. The company will pick your request back up.`
+          : "Sent. The company will pick your request back up.",
       });
-      setInfoFor(null);
+      closeInfo();
       setNote("");
       await load();
     } catch (err) {
@@ -386,11 +419,12 @@ export default function CustomerSelections() {
       {infoFor && (
         <Modal
           title={`${infoFor.companyName} needs more information`}
-          onClose={() => setInfoFor(null)}
+          onClose={closeInfo}
         >
           <p className="csel-modal-text">
-            Describe what you are supplying. Upload any files in Documents first, then
-            tell them here. Your request goes straight back to their desk.
+            Attach the documents they asked for, or describe what you are supplying.
+            The company&apos;s agent sees the files straight away, and your request goes
+            back to their desk.
           </p>
           <label className="csel-field">
             Your response
@@ -398,11 +432,33 @@ export default function CustomerSelections() {
               rows={4}
               value={note}
               onChange={(e) => setNote(e.target.value)}
-              placeholder="e.g. Uploaded the commercial invoice and packing list to Documents."
+              placeholder="e.g. Commercial invoice and packing list attached."
             />
           </label>
+          <label className="csel-field">
+            Attach documents (optional)
+            <select value={docType} onChange={(e) => setDocType(e.target.value)}>
+              {DOC_TYPES.map((type) => (
+                <option key={type} value={type}>
+                  {type}
+                </option>
+              ))}
+            </select>
+            <input
+              type="file"
+              multiple
+              accept=".pdf,.png,.jpg,.jpeg,.tif,.tiff,.webp"
+              onChange={(e) => setFiles(Array.from(e.target.files || []))}
+            />
+          </label>
+          {files.length > 0 && (
+            <p className="csel-modal-text">
+              {files.length} file{files.length === 1 ? "" : "s"} ready:{" "}
+              {files.map((f) => f.name).join(", ")}
+            </p>
+          )}
           <div className="csel-modal-actions">
-            <button type="button" className="csel-secondary" onClick={() => setInfoFor(null)}>
+            <button type="button" className="csel-secondary" onClick={closeInfo}>
               Cancel
             </button>
             <button

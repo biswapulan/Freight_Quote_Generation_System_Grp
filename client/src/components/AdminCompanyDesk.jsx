@@ -134,6 +134,24 @@ export default function AdminCompanyDesk({ initialTab = "companies" }) {
     }
   }
 
+  async function saveRule(company, { threshold, highRisk }) {
+    setBusy(true);
+    try {
+      await updateCompany(token, company.code, {
+        managerApprovalThreshold: threshold === "" || threshold == null ? null : Number(threshold),
+        managerApprovalHighRisk: highRisk,
+      });
+      setNotice({ type: "success", text: `${company.name}'s manager sign-off rule is saved.` });
+      await load();
+      return true;
+    } catch (err) {
+      setNotice({ type: "error", text: err.message || "Could not save that rule." });
+      return false;
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function addAgent(e) {
     e.preventDefault();
     if (!newAgent.companyCode || !newAgent.userEmail) {
@@ -240,7 +258,7 @@ export default function AdminCompanyDesk({ initialTab = "companies" }) {
       {loading ? (
         <div className="acd-empty">Loading...</div>
       ) : tab === "companies" ? (
-        <Companies companies={companies} busy={busy} onToggle={toggleCompany} />
+        <Companies companies={companies} busy={busy} onToggle={toggleCompany} onRule={saveRule} />
       ) : tab === "agents" ? (
         <Agents
           agents={agents}
@@ -263,7 +281,7 @@ export default function AdminCompanyDesk({ initialTab = "companies" }) {
   );
 }
 
-function Companies({ companies, busy, onToggle }) {
+function Companies({ companies, busy, onToggle, onRule }) {
   if (!companies.length)
     return <div className="acd-empty">No freight companies registered yet.</div>;
 
@@ -277,6 +295,7 @@ function Companies({ companies, busy, onToggle }) {
             <th>Rate card</th>
             <th>On time</th>
             <th>Agents</th>
+            <th>Manager sign-off</th>
             <th>Status</th>
             <th />
           </tr>
@@ -299,6 +318,9 @@ function Companies({ companies, busy, onToggle }) {
                 <td className="acd-muted">{pct(c.onTimePerformance)}</td>
                 <td className="acd-muted">{c.agentCount}</td>
                 <td>
+                  <ManagerRule company={c} busy={busy} onSave={onRule} />
+                </td>
+                <td>
                   <span className={`acd-pill ${c.status === "ACTIVE" ? "ok" : "bad"}`}>
                     {c.status}
                   </span>
@@ -320,8 +342,80 @@ function Companies({ companies, busy, onToggle }) {
       </table>
       <p className="acd-foot">
         A suspended company stops being offered on new enquiries. Requests it has
-        already accepted are unaffected.
+        already accepted are unaffected. Above a company&apos;s sign-off value, or for a
+        high-risk shipment when it asks for that, an agent&apos;s approval goes to one of
+        its managers instead.
       </p>
+    </div>
+  );
+}
+
+/** A company's manager sign-off rule, edited in place. */
+function ManagerRule({ company, busy, onSave }) {
+  const [editing, setEditing] = useState(false);
+  const [threshold, setThreshold] = useState(company.managerApprovalThreshold ?? "");
+  const [highRisk, setHighRisk] = useState(Boolean(company.managerApprovalHighRisk));
+
+  const parts = [
+    company.managerApprovalThreshold != null
+      ? `Above ₹${Number(company.managerApprovalThreshold).toLocaleString("en-IN")}`
+      : null,
+    company.managerApprovalHighRisk ? "High-risk shipments" : null,
+  ].filter(Boolean);
+
+  if (!editing) {
+    return (
+      <div>
+        <span>{parts.length ? parts.join(" · ") : "Not required"}</span>
+        <span className="acd-sub-line" style={company.managerCount ? undefined : { color: "#b45309" }}>
+          {company.managerCount
+            ? `${company.managerCount} manager${company.managerCount === 1 ? "" : "s"}`
+            : "No manager assigned"}
+        </span>
+        <button
+          type="button"
+          className="acd-btn"
+          style={{ marginTop: 4 }}
+          disabled={busy}
+          onClick={() => setEditing(true)}
+        >
+          Edit
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ display: "grid", gap: 6, minWidth: 180 }}>
+      <label className="acd-muted" style={{ display: "grid", gap: 3, fontSize: 12 }}>
+        Approve above (₹)
+        <input
+          type="number"
+          min={0}
+          value={threshold}
+          placeholder="No limit"
+          onChange={(e) => setThreshold(e.target.value)}
+        />
+      </label>
+      <label className="acd-muted" style={{ display: "flex", gap: 6, alignItems: "center", fontSize: 12 }}>
+        <input type="checkbox" checked={highRisk} onChange={(e) => setHighRisk(e.target.checked)} />
+        High-risk shipments
+      </label>
+      <div style={{ display: "flex", gap: 6 }}>
+        <button
+          type="button"
+          className="acd-btn"
+          disabled={busy}
+          onClick={async () => {
+            if (await onSave(company, { threshold, highRisk })) setEditing(false);
+          }}
+        >
+          Save
+        </button>
+        <button type="button" className="acd-btn" onClick={() => setEditing(false)}>
+          Cancel
+        </button>
+      </div>
     </div>
   );
 }

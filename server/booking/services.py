@@ -76,16 +76,22 @@ def record_status(selection, *, old, new, actor=None, reason="", context=None):
 
 
 def primary_agent_for(company):
-    """The membership that should receive this company's work.
+    """The membership that should receive this company's routine work.
 
-    Managers first, then the longest-standing agent, so a request always lands
-    with somebody rather than sitting in an unassigned pile.
+    Agents first, the longest-standing one, because managers are there for the
+    cases agents escalate to them. A company with only managers still gets its
+    work, so a request never sits in an unassigned pile.
     """
     return (
         CompanyAgent.objects.filter(company=company, is_active=True)
-        .order_by("-role", "created_at")
+        .order_by("role", "created_at")
         .first()
     )
+
+
+def managers_for(company):
+    """The company's active managers, who decide escalated requests."""
+    return CompanyAgent.objects.filter(company=company, is_active=True, role="MANAGER")
 
 
 @transaction.atomic
@@ -257,6 +263,41 @@ class DecisionError(ValueError):
     """A decision the workflow will not accept, with a reason for the agent."""
 
 
+def manager_approval_reason(request_obj, actor, *, amount=None):
+    """Why this commitment needs a company manager, or "" if the agent may make it.
+
+    The company decides what counts as special (M4 roles: "optional approval
+    for special/high-value cases"): a value above which a manager must approve,
+    and whether high-risk shipments need one. A manager is never stopped, nor
+    is a request already with a manager. A company with no active manager is
+    not stopped either, because escalating would strand the request.
+    """
+    if request_obj.status == lifecycle.ESCALATED:
+        return ""
+    company = request_obj.company
+    managers = managers_for(company)
+    if not managers.exists():
+        return ""
+    if managers.filter(user_email__iexact=actor.get("email", "")).exists():
+        return ""
+
+    selection = request_obj.selection
+    value = amount if amount is not None else selection.selected_total_price
+    limit = company.manager_approval_threshold
+    currency = selection.selected_currency
+    if limit and value and value > limit:
+        return (
+            f"{currency} {value:,.0f} is above {company.name}'s manager approval "
+            f"limit of {currency} {limit:,.0f}."
+        )
+
+    offer = selection.company_quote
+    risk = ((offer.risk_level if offer else "") or "").upper()
+    if company.manager_approval_high_risk and risk in ("HIGH", "CRITICAL"):
+        return f"The shipment is assessed {risk} risk."
+    return ""
+
+
 @transaction.atomic
 def submit_decision(request_obj, *, action, actor, reason="", revision=None,
                     requested_information=None):
@@ -303,6 +344,25 @@ def submit_decision(request_obj, *, action, actor, reason="", revision=None,
             actor=actor,
             reason=f"Opened by {actor.get('email', 'agent')} to decide.",
         )
+
+    # Special and high-value cases need a company manager (M4 roles). An agent's
+    # approval of one goes to a manager instead of becoming a booking, and an
+    # agent may not reach the same commitment through a revision either.
+    if action in (ACTION_APPROVE, ACTION_MODIFY):
+        amount = None
+        if action == ACTION_MODIFY:
+            try:
+                amount = float((revision or {}).get("total_price"))
+            except (TypeError, ValueError):
+                amount = None  # _create_revision reports the missing price
+        needs_manager = manager_approval_reason(request_obj, actor, amount=amount)
+        if needs_manager and action == ACTION_APPROVE:
+            action = ACTION_ESCALATE
+            reason = f"{needs_manager} The agent recommends approval: {reason}"
+        elif needs_manager:
+            raise DecisionError(
+                f"{needs_manager} Escalate it so a manager can revise or approve it."
+            )
 
     target = ACTION_TARGETS[action]
     try:
@@ -509,6 +569,28 @@ def notify_customer_of_decision(request_obj, revision=None):
         entity_id=str(selection.id),
         link="/dashboard/my-quotes",
     )
+
+
+def notify_managers_of_escalation(request_obj):
+    """Tell the company's managers a request is waiting for their decision."""
+    from companies.access import resolve_user_id
+    from notifications import service as notify
+
+    for manager in managers_for(request_obj.company):
+        recipient = manager.user_id or resolve_user_id(manager.user_email)
+        if not recipient:
+            continue
+        safe_notify(
+            notify.notify_user,
+            recipient,
+            f"Manager approval needed: {request_obj.reference}",
+            request_obj.decision_reason,
+            category="QUOTE",
+            severity="WARNING",
+            entity_type="VERIFICATION_REQUEST",
+            entity_id=request_obj.reference,
+            link="/dashboard/manager-approvals",
+        )
 
 
 # --- Customer responses (document section 3, steps 12-13) -------------------

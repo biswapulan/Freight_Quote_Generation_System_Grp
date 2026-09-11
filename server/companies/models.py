@@ -58,6 +58,17 @@ class FreightCompany(models.Model):
         null=True, blank=True, help_text="Typical agent verification turnaround."
     )
 
+    # Manager sign-off (M4 roles: "optional approval for special/high-value
+    # cases"). An agent approves most requests alone; above this value, or for
+    # a high-risk shipment when the company asks for it, the approval goes to
+    # one of the company's managers instead. Empty means no value limit.
+    manager_approval_threshold = models.FloatField(
+        null=True, blank=True, help_text="Offers above this total (INR) need a manager."
+    )
+    manager_approval_high_risk = models.BooleanField(
+        default=False, help_text="HIGH and CRITICAL risk shipments need a manager."
+    )
+
     status = models.CharField(max_length=16, choices=STATUS_CHOICES, default="ACTIVE")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

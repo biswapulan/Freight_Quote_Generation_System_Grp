@@ -136,16 +136,20 @@ QUOTE_OPTIONS_AVAILABLE -> QUOTE_SELECTED -> PENDING_COMPANY_VERIFICATION
 UNDER_VERIFICATION -> REVISION_PENDING_CUSTOMER -> REVISION_ACCEPTED -> APPROVED
 UNDER_VERIFICATION -> AWAITING_CUSTOMER_INFO -> UNDER_VERIFICATION
 UNDER_VERIFICATION -> REJECTED -> RESELECT_QUOTE
+UNDER_VERIFICATION -> ESCALATED -> APPROVED / REVISION_PENDING_CUSTOMER / REJECTED (a company manager decides)
 ```
 
 #### M4 Roles
 
 | Role | Responsibility | Data Access |
 |---|---|---|
-| Customer | Compare and select quotes, respond to revisions, upload information, view bookings | Own shipments and selections |
-| Company Agent | Verify capacity, route, documents, risk, and commercial terms | Only assigned company requests |
-| Platform Admin | Manage companies and agents, monitor selections, verification, bookings, performance, and audit logs | Platform-wide |
+| Customer | Compare and select quotes, respond to revisions, attach documents when a company asks for information, view bookings | Own shipments, selections, and documents |
+| Company Agent | Verify capacity, route, documents, risk, and commercial terms; approve, revise, reject, request information, or escalate | Only their company's requests, and documents for shipments that chose it |
+| Company Manager | Decide escalated requests. An agent's approval above the company's sign-off value, or of a high-risk shipment, goes to a manager automatically | Own company |
+| Platform Admin | Manage companies, agents, and each company's manager sign-off rule; monitor selections, verification, bookings, performance, and audit logs | Platform-wide, but views company requests without deciding them |
 | AI Services | Provide pricing, risk, weather, and customs context | Backend intelligence only; no final booking approval |
+
+Customs officers review trade documents on their own desk and have no access to company verification requests.
 
 #### M4 Data Model
 

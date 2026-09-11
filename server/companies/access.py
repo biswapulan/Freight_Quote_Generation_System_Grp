@@ -13,8 +13,11 @@ from django.core.exceptions import ValidationError
 
 from .models import CompanyAgent, FreightCompany
 
-# Roles that see the whole platform regardless of company membership.
-PLATFORM_WIDE_ROLES = ("admin", "customs", "customs_officer")
+# The platform administrator sees every company's work so they can monitor it,
+# but never acts inside it: approving on a company's behalf would make its
+# verification meaningless. Customs officers review trade documents, not company
+# bookings, so M4 work is not theirs to see at all.
+PLATFORM_WIDE_ROLES = ("admin",)
 
 
 def memberships_for(email, *, active_only=True):
@@ -40,13 +43,20 @@ def is_platform_wide(role):
     return (role or "").lower() in PLATFORM_WIDE_ROLES
 
 
-def can_access_company(email, role, company_id):
-    """May this caller act on work belonging to the given company?"""
-    if is_platform_wide(role):
-        return True
-    if not company_id:
+def can_act_for_company(email, role, company_id):
+    """May this caller act on the company's work: check, decide, cancel?
+
+    Only the company's own active agents. Nobody else, the administrator
+    included, may record a decision in a company's name.
+    """
+    if (role or "").lower() != "agent" or not company_id:
         return False
     return memberships_for(email).filter(company_id=company_id).exists()
+
+
+def can_view_company_work(email, role, company_id):
+    """May this caller see the company's work? Its agents, and the admin."""
+    return is_platform_wide(role) or can_act_for_company(email, role, company_id)
 
 
 def is_manager_of(email, company_id):

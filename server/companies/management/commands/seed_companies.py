@@ -24,6 +24,10 @@ COMPANIES = [
         "contact_email": "ops@maersk.example",
         "on_time_performance": 94.0,
         "average_response_hours": 4.0,
+        # Agents approve alone up to this value; above it, or for a high-risk
+        # shipment, the approval goes to the company's manager.
+        "manager_approval_threshold": 200000.0,
+        "manager_approval_high_risk": True,
         # Premium line haul, low fixed cost, fastest schedule.
         "rate_card": {
             "base_booking_fee": 8000.0,
@@ -40,8 +44,13 @@ COMPANIES = [
             {
                 "email": "agent.apex@freightai.com",
                 "name": "John - Apex Global Logistics",
+                "role": "AGENT",
+            },
+            {
+                "email": "manager.apex@freightai.com",
+                "name": "Priya - Maersk Operations Manager",
                 "role": "MANAGER",
-            }
+            },
         ],
     },
     {
@@ -54,6 +63,8 @@ COMPANIES = [
         "contact_email": "ops@cma-cgm.example",
         "on_time_performance": 88.0,
         "average_response_hours": 6.0,
+        "manager_approval_threshold": 175000.0,
+        "manager_approval_high_risk": True,
         # Cheapest per km but slower and with higher fixed charges, so it wins
         # on long lanes and loses on short ones.
         "rate_card": {
@@ -72,7 +83,12 @@ COMPANIES = [
                 "email": "agent.pacific@freightai.com",
                 "name": "Sarah - Pacific Ocean Forwarders",
                 "role": "AGENT",
-            }
+            },
+            {
+                "email": "manager.pacific@freightai.com",
+                "name": "Arjun - CMA CGM Operations Manager",
+                "role": "MANAGER",
+            },
         ],
     },
     {
@@ -85,6 +101,8 @@ COMPANIES = [
         "contact_email": "ops@hapag-lloyd.example",
         "on_time_performance": 91.0,
         "average_response_hours": 5.0,
+        "manager_approval_threshold": 190000.0,
+        "manager_approval_high_risk": True,
         # Weight-sensitive: competitive on light cargo, expensive on heavy.
         "rate_card": {
             "base_booking_fee": 6000.0,
@@ -102,7 +120,12 @@ COMPANIES = [
                 "email": "agent.orient@freightai.com",
                 "name": "David - Orient Marine Line",
                 "role": "AGENT",
-            }
+            },
+            {
+                "email": "manager.orient@freightai.com",
+                "name": "Meera - Hapag-Lloyd Operations Manager",
+                "role": "MANAGER",
+            },
         ],
     },
 ]

@@ -106,16 +106,24 @@ class TestMilestone3Phase3CustomsRAG:
         assert val_res.status_code == 201
         item_id = val_res.data["checklist_items"][0]["id"]
 
-        # Upload document against first item
+        document = {
+            "shipment_id": "SHP-DOC-01",
+            "checklist_item_id": item_id,
+            "document_type": "COMMERCIAL_INVOICE",
+            "file_name": "invoice_1001.pdf",
+        }
+
+        # Nobody may attach papers to a shipment without saying who they are.
+        anonymous = client.post("/api/v1/customs/documents/upload/", document, format="json")
+        assert anonymous.status_code == 403
+
+        # Customs may register a document against any shipment it is checking.
         upload_res = client.post(
             "/api/v1/customs/documents/upload/",
-            {
-                "shipment_id": "SHP-DOC-01",
-                "checklist_item_id": item_id,
-                "document_type": "COMMERCIAL_INVOICE",
-                "file_name": "invoice_1001.pdf",
-            },
+            document,
             format="json",
+            HTTP_X_CUSTOMER_ID="OFFICER-DOC-01",
+            HTTP_X_USER_ROLE="customs",
         )
         assert upload_res.status_code == 201
         assert upload_res.data["document"]["verification_status"] == "VERIFIED"

@@ -8,7 +8,8 @@ from rest_framework.views import APIView
 
 from audit import service as audit_service
 from companies.access import (
-    can_access_company,
+    can_act_for_company,
+    can_view_company_work,
     is_manager_of,
     is_platform_wide,
     memberships_for,
@@ -41,17 +42,32 @@ from .services import (
     cancel_booking,
     move_selection,
     notify_customer_of_decision,
+    notify_managers_of_escalation,
     provide_requested_information,
     respond_to_revision,
     submit_decision,
 )
 
-STAFF_ROLES = ("admin", "agent", "customs", "customs_officer")
+# M4 is the companies' workflow: their agents act in it and the administrator
+# monitors it. Customs officers have their own desk for trade documents.
+STAFF_ROLES = ("admin", "agent")
 
 
 def _actor(request):
     user_id, role, email = get_current_user_and_role(request)
     return {"id": user_id, "role": (role or "").lower(), "email": email or ""}
+
+
+def _viewer_rights(vr, actor):
+    """What the caller may do with this request, so screens need not guess."""
+    member = can_act_for_company(actor["email"], actor["role"], vr.company_id)
+    manager = member and is_manager_of(actor["email"], vr.company_id)
+    actionable = vr.status in lifecycle.AGENT_ACTIONABLE
+    return {
+        "viewerIsManager": manager,
+        "canCheck": member and actionable,
+        "canDecide": member and actionable and (vr.status != lifecycle.ESCALATED or manager),
+    }
 
 
 class QuoteCompanyOptionsView(APIView):
@@ -92,11 +108,11 @@ class QuoteCompanyOptionsView(APIView):
             CompanyQuote.objects.bulk_update(lapsed, ["status"])
 
         # A company agent comparing offers sees only their own company's, so a
-        # competitor's pricing is never exposed through this endpoint.
-        if actor["role"] == "agent" and not is_platform_wide(actor["role"]):
+        # competitor's pricing is never exposed through this endpoint. An agent
+        # with no company sees none, rather than every company's.
+        if actor["role"] == "agent":
             own = set(memberships_for(actor["email"]).values_list("company_id", flat=True))
-            if own:
-                offers = [o for o in offers if o.company_id in own]
+            offers = [o for o in offers if o.company_id in own]
 
         return Response(
             {
@@ -126,7 +142,17 @@ class VerificationQueueView(APIView):
         role = actor["role"]
 
         if role not in STAFF_ROLES:
-            raise PermissionDenied("Only company agents and staff may view this queue.")
+            raise PermissionDenied(
+                "Only company agents and the platform administrator may view this queue."
+            )
+
+        # Which companies the caller manages, so the desk can show a manager
+        # the escalations waiting for them.
+        viewer = {
+            "managerOf": sorted(
+                {m.company.name for m in memberships_for(actor["email"]).filter(role="MANAGER")}
+            )
+        }
 
         requests = VerificationRequest.objects.select_related(
             "company", "selection", "selection__company", "selection__shipment"
@@ -140,7 +166,12 @@ class VerificationQueueView(APIView):
                 # An agent with no company membership has no queue, rather than
                 # falling back to the whole platform.
                 return Response(
-                    {"count": 0, "results": [], "detail": "No company membership."},
+                    {
+                        "count": 0,
+                        "results": [],
+                        "detail": "No company membership.",
+                        "viewer": viewer,
+                    },
                     status=status.HTTP_200_OK,
                 )
             requests = requests.filter(company_id__in=company_ids)
@@ -157,6 +188,7 @@ class VerificationQueueView(APIView):
             {
                 "count": len(requests),
                 "results": VerificationRequestSerializer(requests, many=True).data,
+                "viewer": viewer,
             },
             status=status.HTTP_200_OK,
         )
@@ -186,11 +218,13 @@ class VerificationDetailView(APIView):
         if not vr:
             raise NotFound("Verification request not found.")
 
-        is_owner_agent = can_access_company(actor["email"], actor["role"], vr.company_id)
+        is_owner_agent = can_act_for_company(actor["email"], actor["role"], vr.company_id)
         is_the_customer = vr.selection.customer_id == actor["id"]
+        monitors = is_platform_wide(actor["role"])
 
-        if not is_owner_agent and not is_the_customer:
-            # Milestone test scenario 3: another company's agent is refused.
+        if not (is_owner_agent or is_the_customer or monitors):
+            # Milestone test scenario 3: another company's agent is refused, and
+            # so is anyone else who is neither party nor the administrator.
             raise PermissionDenied(
                 "This verification request belongs to another company."
             )
@@ -214,6 +248,7 @@ class VerificationDetailView(APIView):
         payload["history"] = StatusHistorySerializer(
             vr.selection.history.all(), many=True
         ).data
+        payload.update(_viewer_rights(vr, actor))
         return Response(payload, status=status.HTTP_200_OK)
 
 
@@ -233,12 +268,12 @@ class VerificationCheckUpdateView(APIView):
         if not vr:
             raise NotFound("Verification request not found.")
 
-        if not can_access_company(actor["email"], actor["role"], vr.company_id):
+        if not can_act_for_company(actor["email"], actor["role"], vr.company_id):
             raise PermissionDenied(
                 "This verification request belongs to another company."
             )
 
-        area = (request.data.get("area") or "").upper()
+        area =(request.data.get("area") or "").upper()
         result = (request.data.get("result") or "").upper()
         remarks = (request.data.get("remarks") or "").strip()
 
@@ -308,24 +343,20 @@ class VerificationDecisionView(APIView):
         if not vr:
             raise NotFound("Verification request not found.")
 
-        if not can_access_company(actor["email"], actor["role"], vr.company_id):
+        if not can_act_for_company(actor["email"], actor["role"], vr.company_id):
             raise PermissionDenied(
                 "You cannot decide on another company's verification request."
             )
 
         action = request.data.get("action")
-        # Only a company manager may clear an escalation, which is the point of
-        # escalating in the first place.
-        if vr.status == lifecycle.ESCALATED and (action or "").upper() in (
-            "APPROVE",
-            "REJECT",
+        # Once escalated, the request is a manager's to decide, whichever way:
+        # approving, revising or rejecting. That is the point of escalating.
+        if vr.status == lifecycle.ESCALATED and not is_manager_of(
+            actor["email"], vr.company_id
         ):
-            if not is_manager_of(actor["email"], vr.company_id) and not is_platform_wide(
-                actor["role"]
-            ):
-                raise PermissionDenied(
-                    "This request was escalated and needs a company manager to decide."
-                )
+            raise PermissionDenied(
+                "This request was escalated and needs a company manager to decide."
+            )
 
         try:
             vr, revision = submit_decision(
@@ -340,6 +371,8 @@ class VerificationDecisionView(APIView):
             return Response({"error": str(exc)}, status=status.HTTP_409_CONFLICT)
 
         notify_customer_of_decision(vr, revision)
+        if vr.status == lifecycle.ESCALATED:
+            notify_managers_of_escalation(vr)
 
         audit_service.record(
             actor_id=actor["id"] or actor["email"],
@@ -361,11 +394,16 @@ class VerificationDecisionView(APIView):
         payload = VerificationRequestSerializer(vr).data
         if revision:
             payload["createdRevision"] = QuoteRevisionSerializer(revision).data
+        payload.update(_viewer_rights(vr, actor))
         return Response(payload, status=status.HTTP_200_OK)
 
 
-def _selection_for_customer(reference, actor):
-    """Fetch a selection the caller is entitled to act on."""
+def _selection_for_customer(reference, actor, *, allow_admin=False):
+    """Fetch a selection the caller is entitled to see, or to act on.
+
+    The administrator may look at any selection to monitor it, but accepting a
+    revision or answering a company's questions is the customer's alone.
+    """
     selection = (
         QuoteSelection.objects.select_related(
             "company", "company_quote", "shipment", "quote"
@@ -378,7 +416,7 @@ def _selection_for_customer(reference, actor):
         raise NotFound("Selection not found.")
 
     is_owner = selection.customer_id == actor["id"]
-    if not is_owner and not is_platform_wide(actor["role"]):
+    if not is_owner and not (allow_admin and is_platform_wide(actor["role"])):
         raise PermissionDenied("This selection belongs to another customer.")
     return selection
 
@@ -424,7 +462,7 @@ class SelectionDetailView(APIView):
 
     def get(self, request, reference):
         actor = _actor(request)
-        selection = _selection_for_customer(reference, actor)
+        selection = _selection_for_customer(reference, actor, allow_admin=True)
 
         payload = QuoteSelectionSerializer(selection).data
         payload["revisions"] = QuoteRevisionSerializer(
@@ -519,9 +557,9 @@ class ProvideInformationView(APIView):
 class BookingListView(APIView):
     """GET /bookings -> bookings the caller is entitled to see.
 
-    A customer sees their own. A company agent sees their companies'. Admin and
-    customs see the platform. Nobody sees a booking that belongs to neither
-    their customer account nor their company.
+    A customer sees their own. A company agent sees their companies'. The
+    administrator sees the platform. Nobody else sees a booking that belongs to
+    neither their customer account nor their company.
     """
 
     authentication_classes = []
@@ -573,7 +611,7 @@ class BookingDetailView(APIView):
         if not booking:
             raise NotFound("Booking not found.")
 
-        if not _may_touch_booking(booking, actor):
+        if not _may_view_booking(booking, actor):
             raise PermissionDenied("This booking belongs to someone else.")
 
         payload = BookingSerializer(booking).data
@@ -604,7 +642,7 @@ class BookingCancelView(APIView):
         if not booking:
             raise NotFound("Booking not found.")
 
-        if not _may_touch_booking(booking, actor):
+        if not _may_cancel_booking(booking, actor):
             audit_service.record(
                 actor_id=actor["id"] or actor["email"],
                 actor_role=actor["role"],
@@ -637,13 +675,18 @@ class BookingCancelView(APIView):
         return Response(BookingSerializer(booking).data, status=status.HTTP_200_OK)
 
 
-def _may_touch_booking(booking, actor):
-    """The customer who owns it, an agent of the carrying company, or staff."""
-    if is_platform_wide(actor["role"]):
-        return True
+def _may_view_booking(booking, actor):
+    """The customer who owns it, the carrying company's agents, or the admin."""
     if booking.customer_id == actor["id"]:
         return True
-    return can_access_company(actor["email"], actor["role"], booking.company_id)
+    return can_view_company_work(actor["email"], actor["role"], booking.company_id)
+
+
+def _may_cancel_booking(booking, actor):
+    """Either party to the booking. The administrator monitors; they do not cancel."""
+    if booking.customer_id == actor["id"]:
+        return True
+    return can_act_for_company(actor["email"], actor["role"], booking.company_id)
 
 
 class AdminSelectionsView(APIView):

@@ -82,6 +82,13 @@ class FreightCompanySerializer(serializers.ModelSerializer):
         source="contact_email", required=False, allow_blank=True
     )
     isBookable = serializers.BooleanField(source="is_bookable", read_only=True)
+    managerApprovalThreshold = serializers.FloatField(
+        source="manager_approval_threshold", required=False, allow_null=True
+    )
+    managerApprovalHighRisk = serializers.BooleanField(
+        source="manager_approval_high_risk", required=False
+    )
+    managerCount = serializers.SerializerMethodField()
 
     class Meta:
         model = FreightCompany
@@ -99,9 +106,17 @@ class FreightCompanySerializer(serializers.ModelSerializer):
             "status",
             "isBookable",
             "agentCount",
+            "managerCount",
+            "managerApprovalThreshold",
+            "managerApprovalHighRisk",
             "rateCards",
             "created_at",
         ]
 
     def get_agentCount(self, obj):
         return obj.agents.filter(is_active=True).count()
+
+    def get_managerCount(self, obj):
+        # A sign-off rule does nothing at a company with no manager, so the
+        # administrator needs to see which companies have none.
+        return obj.agents.filter(is_active=True, role="MANAGER").count()

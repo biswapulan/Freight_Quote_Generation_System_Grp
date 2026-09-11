@@ -64,6 +64,27 @@ DEMO_USERS = [
         "full_name": "David — Orient Marine Line",
         "company_name": "Orient Marine Line (Hapag-Lloyd)",
     },
+    # ---- Company managers ------------------------------------------------
+    # Each company has a manager as well as an agent: routine requests go to
+    # the agent, and special or high-value ones are escalated to the manager.
+    {
+        "email": "manager.apex@freightai.com",
+        "role": "agent",
+        "full_name": "Priya — Maersk Operations Manager",
+        "company_name": "Apex Global Logistics (Maersk)",
+    },
+    {
+        "email": "manager.pacific@freightai.com",
+        "role": "agent",
+        "full_name": "Arjun — CMA CGM Operations Manager",
+        "company_name": "Pacific Ocean Forwarders (CMA CGM)",
+    },
+    {
+        "email": "manager.orient@freightai.com",
+        "role": "agent",
+        "full_name": "Meera — Hapag-Lloyd Operations Manager",
+        "company_name": "Orient Marine Line (Hapag-Lloyd)",
+    },
 ]
 
 class Command(BaseCommand):
