@@ -548,7 +548,9 @@ export default function RetailShipmentsHistory({ viewMode = "quotes" }) {
                     <td className="q-no">
                       <span className="bl-track-code">{q.m4?.bookingReference || q.quoteNo}</span>
                       <span className="bl-ref-sub">
-                        {q.m4?.bookingReference ? `Quote ${q.quoteNo}` : `Shipment ${q.shipmentId || "—"}`}
+                        {q.m4?.bookingReference
+                          ? `Quote ${q.quoteNo} · Shipment ${q.shipmentId || "—"}`
+                          : `Shipment ${q.shipmentId || "—"}`}
                       </span>
                     </td>
                     <td>
@@ -608,7 +610,10 @@ export default function RetailShipmentsHistory({ viewMode = "quotes" }) {
                 /* Quotations Specific Table Rows */
                 filtered.map((q) => (
                   <tr key={q.quoteNo || q.id}>
-                    <td className="q-no">{q.quoteNo}</td>
+                    <td className="q-no">
+                      {q.quoteNo}
+                      {q.shipmentId && <span className="bl-ref-sub">Shipment {q.shipmentId}</span>}
+                    </td>
                     <td>
                       <span className="q-cust-name">{q.customerName}</span>
                       <span className="q-cust-city">{q.customerCity}</span>

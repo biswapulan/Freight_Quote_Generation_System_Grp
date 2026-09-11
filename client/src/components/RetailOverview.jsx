@@ -362,7 +362,7 @@ export default function RetailOverview() {
         <div className="ov-card ov-activity-card">
           <div className="ov-card-head">
             <span className="ov-card-title">Recent activity</span>
-            <Link to="/dashboard/shipments-history" className="ov-card-sub">View all</Link>
+            <Link to="/dashboard/my-quotes" className="ov-card-sub">View all</Link>
           </div>
           <div className="ov-activity-list">
             {recentActivity.length === 0 ? (
