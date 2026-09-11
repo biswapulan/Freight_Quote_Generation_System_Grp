@@ -445,6 +445,15 @@ const LINE_BASIS = {
   fuel: "Fuel surcharge on the line haul",
 };
 
+/** "ETA 26 Sept · 14 days" from the ready date, so customers compare arrival, not just duration. */
+function etaLabel(readyDate, transitDays) {
+  const days = Number(transitDays);
+  const eta = readyDate ? new Date(`${readyDate}T00:00:00`) : null;
+  if (!days || !eta || Number.isNaN(eta.getTime())) return `${transitDays} days transit`;
+  eta.setDate(eta.getDate() + days);
+  return `ETA ${eta.toLocaleDateString("en-IN", { day: "numeric", month: "short" })} · ${days} days`;
+}
+
 function hasAiPrice(insights) {
   return insights?.recommendedPrice != null && insights?.standardPrice != null;
 }
@@ -594,6 +603,9 @@ export default function RetailGenerateQuote() {
   const [confirming, setConfirming] = useState(false);
   const [showQuoteModal, setShowQuoteModal] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
+  // What the server recorded when the quote was sent: the selection, its
+  // status and the agent it went to.
+  const [sentInfo, setSentInfo] = useState(null);
   // Final step of the enquiry: pick a carrier, then send the quote for review.
   const [showRouteModal, setShowRouteModal] = useState(false);
   const [routeOptions, setRouteOptions] = useState([]);
@@ -1433,11 +1445,12 @@ export default function RetailGenerateQuote() {
       // Record the carrier on the server. This is what routes the quote into
       // the queue of the agent who services that carrier, so it has to succeed
       // before we tell the customer their quote is under review.
-      await selectQuoteCarrier(token, bookingRef, {
+      const sent = await selectQuoteCarrier(token, bookingRef, {
         companyQuoteId: chosenRoute.id,
         carrier: chosenRoute.carrier,
         transitDays: chosenRoute.transitDays,
       });
+      setSentInfo(sent || null);
 
       selectQuoteRoute(bookingRef, chosenRoute);
       setShowRouteModal(false);
@@ -2493,7 +2506,7 @@ export default function RetailGenerateQuote() {
                         ₹ {Number(opt.price).toLocaleString("en-IN")}
                       </strong>
                       <span className="rq-route-transit">
-                        {opt.transitDays} days transit
+                        {etaLabel(form.readyDate, opt.transitDays)}
                       </span>
                     </span>
                   </button>
@@ -2549,6 +2562,35 @@ export default function RetailGenerateQuote() {
               <strong>{chosenRoute?.carrier}</strong> and is now with our freight agent. You can
               check its status any time under <strong>My Quotes</strong> in the sidebar.
             </p>
+
+            {sentInfo?.selection && (
+              <div
+                style={{
+                  background: "#f8fafc",
+                  border: "1px dashed #cbd5e1",
+                  borderRadius: 10,
+                  padding: "10px 14px",
+                  margin: "0 0 18px",
+                  fontSize: 13,
+                  color: "#334155",
+                  textAlign: "left",
+                  lineHeight: 1.7,
+                }}
+              >
+                <div>
+                  <strong>Selection:</strong> {sentInfo.selection.reference} ·{" "}
+                  {sentInfo.selection.companyName || chosenRoute?.carrier}
+                </div>
+                <div>
+                  <strong>Status:</strong> {sentInfo.selection.status}
+                </div>
+                {sentInfo.verification?.assignedAgent && (
+                  <div>
+                    <strong>Agent notified:</strong> {sentInfo.verification.assignedAgent}
+                  </div>
+                )}
+              </div>
+            )}
 
             <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
               <button

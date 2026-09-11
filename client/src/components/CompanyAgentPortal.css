@@ -191,6 +191,25 @@
 .cap-risk.high,
 .cap-risk.critical { background:#fee2e2; color:#b91c1c; }
 
+/* Shipment, route and commercial terms: what each group of checks is about */
+.cap-block { margin-bottom:16px; }
+.cap-block h3,
+.cap-docs h3 { flex-wrap:wrap; }
+.cap-block h3 { display:flex; align-items:center; gap:6px; margin:0 0 8px; font-size:14px; color:#0f172a; }
+.cap-block .cap-facts { margin-bottom:0; }
+.cap-block-hint {
+  margin-left:auto; font-size:10.5px; font-weight:700; letter-spacing:.05em;
+  text-transform:uppercase; color:#94a3b8;
+}
+.cap-required { list-style:none; margin:0 0 10px; padding:0; display:flex; flex-wrap:wrap; gap:6px; }
+.cap-required li {
+  display:flex; align-items:center; gap:5px; padding:4px 10px; border-radius:999px;
+  font-size:12px; font-weight:600;
+}
+.cap-required li em { font-style:normal; font-weight:500; opacity:.8; }
+.cap-required li.on  { background:#dcfce7; color:#15803d; }
+.cap-required li.off { background:#fef3c7; color:#b45309; }
+
 /* Documents the customer has uploaded for this shipment */
 .cap-docs { margin-bottom:18px; }
 .cap-docs h3 { display:flex; align-items:center; gap:6px; margin:0 0 8px; font-size:14px; color:#0f172a; }

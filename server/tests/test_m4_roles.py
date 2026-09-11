@@ -261,6 +261,29 @@ class TestM4Roles:
         assert response.status_code == 200
         assert Booking.objects.filter(selection__reference=selection["reference"]).exists()
 
+    # -- What the agent sees when they open a request (process step 7) ---------
+
+    def test_the_agent_sees_what_each_check_is_about(self):
+        shipment_id, _, verification = self._selected()
+        ref = verification["reference"]
+        detail = self.client.get(f"/api/verification-requests/{ref}", **self.agent_b).data
+
+        # Operational: cargo, equipment and route.
+        assert detail["shipment"]["origin"] == SHIPMENT["origin"]
+        assert detail["shipment"]["containerType"] == SHIPMENT["containerType"]
+        assert detail["shipment"]["weightKg"] == SHIPMENT["weight"]
+        # Commercial: the price build-up and its validity.
+        assert detail["offer"]["fuelSurcharge"] > 0
+        assert detail["offer"]["validUntil"]
+        # Documents: what customs requires, and what is on file.
+        required = {d["name"]: d["onFile"] for d in detail["requiredDocuments"]}
+        assert required.get("Commercial Invoice") is False
+
+        self._upload(shipment_id, self.customer)
+        detail = self.client.get(f"/api/verification-requests/{ref}", **self.agent_b).data
+        required = {d["name"]: d["onFile"] for d in detail["requiredDocuments"]}
+        assert required["Commercial Invoice"] is True
+
     # -- Documents ------------------------------------------------------------
 
     def _upload(self, shipment_id, who):

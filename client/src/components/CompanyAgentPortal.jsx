@@ -612,9 +612,13 @@ function RequestDetail(props) {
               />
             </section>
 
+            <ShipmentDetails shipment={detail.shipment} />
+
+            <CommercialTerms offer={detail.offer} />
+
             <AiAnalysis insights={detail.aiInsights} />
 
-            <DocumentsOnFile documents={detail.documents} />
+            <DocumentsOnFile documents={detail.documents} required={detail.requiredDocuments} />
 
             {detail.requestedInformation?.length > 0 && (
               <div className="cap-note info">
@@ -935,16 +939,95 @@ function AiAnalysis({ insights }) {
   );
 }
 
+/** What the operational checks are about: the cargo, equipment and route. */
+function ShipmentDetails({ shipment }) {
+  if (!shipment) return null;
+  const km =
+    shipment.distanceKm != null
+      ? `${Math.round(shipment.distanceKm).toLocaleString("en-IN")} km`
+      : null;
+  const join = (...parts) => parts.filter(Boolean).join(" · ");
+  return (
+    <section className="cap-block">
+      <h3>
+        <Ship size={14} /> Shipment &amp; route
+        <span className="cap-block-hint">Operational checks</span>
+      </h3>
+      <div className="cap-facts">
+        <Fact label="Lane" value={`${shipment.origin} → ${shipment.destination}`} />
+        <Fact
+          label="Route"
+          value={join(
+            shipment.routePath,
+            km,
+            shipment.plannedTransitDays ? `${shipment.plannedTransitDays} days planned` : null,
+          )}
+        />
+        <Fact label="Mode & equipment" value={join(shipment.transportMode, shipment.containerType)} />
+        <Fact label="Cargo" value={join(shipment.cargoType, shipment.hsCode && `HS ${shipment.hsCode}`)} />
+        <Fact
+          label="Weight & volume"
+          value={`${Number(shipment.weightKg || 0).toLocaleString("en-IN")} kg · ${shipment.volumeCbm ?? "—"} m³`}
+        />
+      </div>
+    </section>
+  );
+}
+
+/** What the commercial checks are about: the price build-up and its validity. */
+function CommercialTerms({ offer }) {
+  if (!offer) return null;
+  const currency = offer.currency;
+  const validUntil = offer.validUntil ? new Date(offer.validUntil) : null;
+  return (
+    <section className="cap-block">
+      <h3>
+        <FileText size={14} /> Commercial terms
+        <span className="cap-block-hint">Commercial checks</span>
+      </h3>
+      <div className="cap-facts">
+        <Fact label="Base freight" value={money(offer.baseFreight, currency)} />
+        <Fact label="Fuel surcharge" value={money(offer.fuelSurcharge, currency)} />
+        <Fact label="Handling" value={money(offer.handlingFee, currency)} />
+        <Fact label="Documentation" value={money(offer.documentationFee, currency)} />
+        <Fact label="Offer total" value={money(offer.totalPrice, currency)} />
+        <Fact
+          label="Valid until"
+          value={
+            validUntil
+              ? `${validUntil.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}${
+                  offer.isExpired ? " · EXPIRED" : ""
+                }`
+              : null
+          }
+        />
+      </div>
+    </section>
+  );
+}
+
 const DOC_TONE = { VERIFIED: "ok", REJECTED: "bad" };
 
-/** The paperwork behind the DOCUMENTS check: what the customer has uploaded. */
-function DocumentsOnFile({ documents }) {
+/** What the DOCUMENTS check is about: what customs requires, and what is on file. */
+function DocumentsOnFile({ documents, required }) {
   if (!documents) return null;
   return (
     <section className="cap-docs">
       <h3>
-        <FileText size={14} /> Documents on file
+        <FileText size={14} /> Documents
+        <span className="cap-block-hint">Document checks</span>
       </h3>
+      {required?.length > 0 && (
+        <ul className="cap-required">
+          {required.map((doc) => (
+            <li key={doc.name} className={doc.onFile ? "on" : "off"}>
+              {doc.onFile ? <CheckCircle2 size={13} /> : <AlertTriangle size={13} />}
+              <span>{doc.name}</span>
+              <em>{doc.onFile ? "on file" : "missing"}</em>
+            </li>
+          ))}
+        </ul>
+      )}
       {documents.length === 0 ? (
         <p className="cap-muted">
           The customer has not uploaded any documents for this shipment yet.

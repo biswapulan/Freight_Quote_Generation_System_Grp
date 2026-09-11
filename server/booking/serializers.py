@@ -193,6 +193,8 @@ class VerificationRequestSerializer(serializers.ModelSerializer):
     """What a company agent sees in their queue."""
 
     selection = QuoteSelectionSerializer(read_only=True)
+    # The offer's price build-up and validity: what the commercial checks are about.
+    offer = CompanyQuoteSerializer(source="selection.company_quote", read_only=True)
     companyName = serializers.CharField(source="company.name", read_only=True)
     assignedAgent = serializers.EmailField(source="assigned_agent_email", read_only=True)
     responseHours = serializers.FloatField(source="response_hours", read_only=True)
@@ -241,6 +243,60 @@ class VerificationRequestSerializer(serializers.ModelSerializer):
             for doc in docs
         ]
 
+    shipment = serializers.SerializerMethodField()
+
+    def get_shipment(self, obj):
+        # What the operational checks are about: the cargo, the equipment and
+        # the route the company is being asked to carry it on.
+        shipment = obj.selection.shipment
+        quote = obj.selection.quote
+        return {
+            "origin": shipment.origin,
+            "destination": shipment.destination,
+            "cargoType": shipment.cargo_type,
+            "weightKg": shipment.weight,
+            "volumeCbm": shipment.volume,
+            "transportMode": shipment.transport_mode,
+            "containerType": shipment.container_type,
+            "hsCode": shipment.hs_code,
+            "routePath": quote.route_path if quote else "",
+            "distanceKm": quote.distance if quote else None,
+            "plannedTransitDays": quote.estimated_transit_days if quote else None,
+        }
+
+    requiredDocuments = serializers.SerializerMethodField()
+
+    def get_requiredDocuments(self, obj):
+        """The papers customs requires on this lane, and whether each is on file."""
+        from customs.models import ShipmentDocument
+
+        quote = obj.selection.quote
+        customs = ((quote.analysis or {}).get("customs") or {}) if quote else {}
+        names = [
+            item.get("item_name")
+            for item in customs.get("checklist_items") or []
+            if item.get("item_name")
+        ] or list(customs.get("missing_documents") or [])
+
+        def key(text):
+            return "".join(ch for ch in (text or "").lower() if ch.isalnum())
+
+        # Customers name uploads in their own words ("Bill of Lading" for
+        # "Bill of Lading / Sea Waybill (B/L)"), so match loosely.
+        uploaded = [
+            key(t)
+            for t in ShipmentDocument.objects.filter(
+                shipment_id=obj.selection.shipment_id
+            ).values_list("document_type", flat=True)
+        ]
+        return [
+            {
+                "name": name,
+                "onFile": any(u and (u in key(name) or key(name) in u) for u in uploaded),
+            }
+            for name in names
+        ]
+
     class Meta:
         model = VerificationRequest
         fields = [
@@ -261,6 +317,9 @@ class VerificationRequestSerializer(serializers.ModelSerializer):
             "requestedInformation",
             "aiInsights",
             "documents",
+            "offer",
+            "shipment",
+            "requiredDocuments",
             "created_at",
         ]
 

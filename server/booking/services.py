@@ -526,9 +526,11 @@ def notify_customer_of_decision(request_obj, revision=None):
 
     if status_now == lifecycle.APPROVED:
         title = f"{company} approved your shipment"
+        # Approval confirms the booking in the same step, so there is nothing
+        # left for the customer to do but note the reference.
         body = (
-            f"Your selected quote {ref} has been verified and approved. "
-            "Confirm the booking to secure the space."
+            f"Your selected quote {ref} has been verified and approved, and your "
+            "booking is confirmed. The booking reference is under Selected Quotes."
         )
         severity = "SUCCESS"
     elif status_now == lifecycle.REVISION_PENDING_CUSTOMER and revision:
@@ -567,7 +569,8 @@ def notify_customer_of_decision(request_obj, revision=None):
         severity=severity,
         entity_type="QUOTE_SELECTION",
         entity_id=str(selection.id),
-        link="/dashboard/my-quotes",
+        # Where the customer accepts a revision or answers a request.
+        link="/dashboard/selected-quotes",
     )
 
 
