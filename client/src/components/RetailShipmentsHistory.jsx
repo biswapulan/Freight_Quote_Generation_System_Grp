@@ -33,6 +33,7 @@ import {
   normalizeShipmentStatus,
   getShipmentStatusFromQuoteStatus,
   decideQuoteInStore,
+  formatMoney,
   isRouteConfirmed,
 } from "../utils/quoteWorkflow";
 import { listShipmentDocuments, uploadShipmentDocument } from "../api/workflow";
@@ -42,6 +43,38 @@ import "./RetailShipmentsHistory.css";
 
 const MODE_CLASS = { ocean_fcl: "ocean-fcl", air: "air-freight", ocean_lcl: "ocean-lcl", ocean: "ocean-fcl" };
 const STATUS_CLASS = { Draft: "draft", Issued: "issued", Booked: "booked", "No routing": "norouting" };
+
+// The company workflow (M4) behind a quote, in the words Selected Quotes uses.
+const M4_STAGE = {
+  QUOTE_SELECTED: "Sent to company",
+  PENDING_COMPANY_VERIFICATION: "Sent to company",
+  UNDER_VERIFICATION: "Being checked",
+  AWAITING_CUSTOMER_INFO: "Needs your information",
+  ESCALATED: "With the company's manager",
+  REVISION_PENDING_CUSTOMER: "Revised offer for you",
+  REVISION_ACCEPTED: "Revision accepted",
+  APPROVED: "Approved",
+  BOOKING_CONFIRMED: "Booked",
+  BOOKING_CANCELLED: "Booking cancelled",
+  REJECTED: "Declined by the company",
+  RESELECT_QUOTE: "Closed, choose another company",
+};
+
+// Stages where the company, not the customer, has the next move.
+const M4_WITH_COMPANY = new Set([
+  "QUOTE_SELECTED",
+  "PENDING_COMPANY_VERIFICATION",
+  "UNDER_VERIFICATION",
+  "ESCALATED",
+]);
+
+/** One line tying a quote to its company workflow: "Maersk · Booked · BK-2026-10009". */
+function m4Line(m4) {
+  if (!m4) return "";
+  return [m4.companyName, M4_STAGE[m4.status] || m4.status, m4.bookingReference]
+    .filter(Boolean)
+    .join(" · ");
+}
 
 export default function RetailShipmentsHistory({ viewMode = "quotes" }) {
   const { quotations, loading, error, reloadQuotes } = useRetailQuotes();
@@ -262,18 +295,20 @@ export default function RetailShipmentsHistory({ viewMode = "quotes" }) {
     }
     const filenamePrefix = isShipmentMode ? "freightai_cargo_shipments" : "freightai_quotations";
     const headers = isShipmentMode
-      ? ["B/L Tracking No", "Consignee", "Port Origin", "Port Destination", "Vessel", "Cargo Basis", "Transit Time", "Status", "Date"]
+      ? ["Booking", "Quote", "Shipment", "Consignee", "Origin", "Destination", "Carrier", "Cargo Basis", "Transit Time", "Status", "Date"]
       : ["Quote No", "Customer", "City", "Lane", "Mode", "Basis", "Transit", "Total", "Status", "Created Date"];
     
     const rows = filtered.map((q) => isShipmentMode ? [
-      `BL-${(q.quoteNo || "").replace("QT-", "")}`,
+      q.m4?.bookingReference || "",
+      q.quoteNo || "",
+      q.shipmentId || "",
       q.customerName || "",
       q.origin || "",
       q.destination || "",
-      "MSC Paloma V.24",
+      q.m4?.companyName || q.selectedCarrier || "",
       q.basis || "",
       q.transit || "",
-      q.status || "",
+      q.m4 ? M4_STAGE[q.m4.status] || q.m4.status : q.status || "",
       q.created || ""
     ] : [
       q.quoteNo || "",
@@ -308,7 +343,17 @@ export default function RetailShipmentsHistory({ viewMode = "quotes" }) {
   const bookedCount = quotations.filter(
     (q) => normalizeWorkflowStatus(q.status) === "ACCEPTED",
   ).length;
-  const routesAnalysed = confirmedQuotations.length > 0 ? confirmedQuotations.length * 3 + 4 : 0;
+  // Every figure below comes from the quotes and their company workflow. The
+  // cards used to show "routes analysed" (confirmed quotes x 3 + 4), a fixed
+  // 100% customs compliance and a fixed 14.5-day average transit.
+  const withCompany = confirmedQuotations.filter((q) => M4_WITH_COMPANY.has(q.m4?.status)).length;
+  const confirmedShipments = quotations.filter((q) => normalizeWorkflowStatus(q.status) === "ACCEPTED");
+  const companyBookings = confirmedShipments.filter((q) => q.m4?.bookingReference).length;
+  const cancelledBookings = quotations.filter((q) => q.m4?.bookingStatus === "CANCELLED").length;
+  const withTransit = confirmedShipments.filter((q) => Number(q.transitDays) > 0);
+  const averageTransit = withTransit.length
+    ? (withTransit.reduce((sum, q) => sum + Number(q.transitDays), 0) / withTransit.length).toFixed(1)
+    : null;
 
   return (
     <div className="dashboard-view">
@@ -336,24 +381,24 @@ export default function RetailShipmentsHistory({ viewMode = "quotes" }) {
         {isShipmentMode ? (
           <>
             <div className="kpi-card">
-              <div className="kpi-title">Active Transits</div>
+              <div className="kpi-title">Confirmed shipments</div>
               <div className="kpi-value">{bookedCount}</div>
-              <div className="kpi-sub green">In maritime route</div>
+              <div className="kpi-sub green">Accepted and booked</div>
             </div>
             <div className="kpi-card">
-              <div className="kpi-title">Customs Compliance</div>
-              <div className="kpi-value">100%</div>
-              <div className="kpi-sub green">All documents approved</div>
+              <div className="kpi-title">Booked with a company</div>
+              <div className="kpi-value">{companyBookings}</div>
+              <div className="kpi-sub slate">Verified by the carrier</div>
             </div>
             <div className="kpi-card">
-              <div className="kpi-title">Average Sea Transit</div>
-              <div className="kpi-value">14.5 d</div>
-              <div className="kpi-sub slate">On-schedule velocity</div>
+              <div className="kpi-title">Average transit</div>
+              <div className="kpi-value">{averageTransit ? `${averageTransit} d` : "—"}</div>
+              <div className="kpi-sub slate">Across confirmed shipments</div>
             </div>
             <div className="kpi-card">
-              <div className="kpi-title">Confirmed Orders</div>
-              <div className="kpi-value">{bookedCount}</div>
-              <div className="kpi-sub green">B/L issued & moving</div>
+              <div className="kpi-title">Cancelled bookings</div>
+              <div className="kpi-value">{cancelledBookings}</div>
+              <div className="kpi-sub slate">Cancelled after booking</div>
             </div>
           </>
         ) : (
@@ -369,9 +414,9 @@ export default function RetailShipmentsHistory({ viewMode = "quotes" }) {
               <div className="kpi-sub slate">Carrier route confirmed</div>
             </div>
             <div className="kpi-card">
-              <div className="kpi-title">Routes analysed</div>
-              <div className="kpi-value">{routesAnalysed}</div>
-              <div className="kpi-sub slate">Multi-modal options evaluated</div>
+              <div className="kpi-title">With a company</div>
+              <div className="kpi-value">{withCompany}</div>
+              <div className="kpi-sub slate">Being verified right now</div>
             </div>
             <div className="kpi-card">
               <div className="kpi-title">Booked shipments</div>
@@ -451,11 +496,11 @@ export default function RetailShipmentsHistory({ viewMode = "quotes" }) {
             <thead>
               {isShipmentMode ? (
                 <tr>
-                  <th>TRACKING / B/L</th>
-                  <th>LANE & VESSEL</th>
+                  <th>BOOKING</th>
+                  <th>LANE & CARRIER</th>
                   <th>CONTAINER / BASIS</th>
-                  <th>TRANSIT PROGRESS</th>
-                  <th>ESTIMATED ETA</th>
+                  <th>COMPANY WORKFLOW</th>
+                  <th>TRANSIT</th>
                   <th>STATUS</th>
                   <th>ACTIONS</th>
                 </tr>
@@ -498,36 +543,35 @@ export default function RetailShipmentsHistory({ viewMode = "quotes" }) {
                 </tr>
               ) : isShipmentMode ? (
                 /* Shipment Specific Table Rows */
-                filtered.map((q, idx) => (
+                filtered.map((q) => (
                   <tr key={q.quoteNo || q.id}>
                     <td className="q-no">
-                      <span className="bl-track-code">{`BL-${(q.quoteNo || "").replace("QT-", "")}`}</span>
-                      <span className="bl-ref-sub">Ref: {q.quoteNo}</span>
+                      <span className="bl-track-code">{q.m4?.bookingReference || q.quoteNo}</span>
+                      <span className="bl-ref-sub">
+                        {q.m4?.bookingReference ? `Quote ${q.quoteNo}` : `Shipment ${q.shipmentId || "—"}`}
+                      </span>
                     </td>
                     <td>
                       <span className="lane-code">{q.laneCode}</span>
-                      <span className="lane-sub">Vessel: {idx % 2 === 0 ? "MSC Paloma V.24" : "Maersk Voyager"}</span>
+                      <span className="lane-sub">Carrier: {q.m4?.companyName || q.selectedCarrier || "—"}</span>
                     </td>
                     <td>
                       <span className="font-semibold text-slate-800">{q.basis}</span>
-                      <span className="bl-ref-sub">Container: {idx % 2 === 0 ? "MSCU-884920-1" : "MAEU-440192-9"}</span>
+                      <span className="bl-ref-sub">Container: {q.containerType || "—"}</span>
                     </td>
                     <td>
-                      <div className="ship-progress-cell">
-                        <div className="ship-progress-bar">
-                          <div
-                            className="ship-progress-fill"
-                            style={{ width: normalizeWorkflowStatus(q.status) === "ACCEPTED" ? "65%" : "25%" }}
-                          ></div>
-                        </div>
-                        <span className="ship-progress-label">
-                          {normalizeWorkflowStatus(q.status) === "ACCEPTED" ? "Booking confirmed · Awaiting dispatch" : "Depot Gate-In"}
-                        </span>
-                      </div>
+                      <span className="font-semibold text-slate-800">
+                        {q.m4 ? M4_STAGE[q.m4.status] || q.m4.status : "Accepted quote"}
+                      </span>
+                      <span className="bl-ref-sub">
+                        {q.m4
+                          ? [q.m4.selectionReference, q.m4.verificationReference].filter(Boolean).join(" · ")
+                          : `Shipment ${q.shipmentId || "—"}`}
+                      </span>
                     </td>
                     <td>
                       <span className="font-semibold text-slate-800">{q.transit}</span>
-                      <span className="bl-ref-sub">ETA: On schedule</span>
+                      <span className="bl-ref-sub">Planned transit</span>
                     </td>
                     <td>
                       {(() => {
@@ -602,6 +646,11 @@ export default function RetailShipmentsHistory({ viewMode = "quotes" }) {
                           </span>
                         );
                       })()}
+                      {q.m4 && (
+                        <span className="lane-sub" style={{ display: "block", marginTop: 4 }}>
+                          {m4Line(q.m4)}
+                        </span>
+                      )}
                     </td>
                     <td style={{ color: "#64748b", fontSize: 12 }}>{q.created}</td>
                     <td style={{ display: "flex", gap: "6px", alignItems: "center", paddingTop: "14px" }}>
@@ -626,7 +675,8 @@ export default function RetailShipmentsHistory({ viewMode = "quotes" }) {
 
         <div className="table-footer">
           <span className="tf-info">
-            Showing 1–{filtered.length} of {quotations.length}
+            {/* Counted against the list this page shows, not every quote on file. */}
+            Showing {filtered.length ? `1–${filtered.length}` : 0} of {baseList.length}
           </span>
           <div className="pagination-btns">
             <button type="button" className="btn-page">&larr; Prev</button>
@@ -781,48 +831,41 @@ export default function RetailShipmentsHistory({ viewMode = "quotes" }) {
                 </div>
               </div>
 
-              {/* Live Cargo Milestone Telemetry Stepper for Booked Shipments */}
-              {(isShipmentMode || normalizeWorkflowStatus(selectedQuote.status) === "ACCEPTED") && (
+              {/* Every id from quote to booking, from the company workflow. This
+                  was a "live telemetry" panel with an invented vessel and
+                  milestones that no system had ever recorded. */}
+              {selectedQuote.m4 && (
                 <div className="rsh-tracking-stepper-wrap">
                   <div className="rsh-stepper-head">
                     <div className="rsh-stepper-title">
                       <Ship size={16} className="text-orange-500" />
-                      <strong>Live Cargo Milestone Telemetry</strong>
+                      <strong>Company verification &amp; booking</strong>
                     </div>
-                    <span className="rsh-stepper-eta">ETA: {selectedQuote.transit || "14d"} · On Schedule</span>
+                    <span className="rsh-stepper-eta">{m4Line(selectedQuote.m4)}</span>
                   </div>
                   <div className="rsh-milestone-steps">
-                    <div className="rsh-step completed">
-                      <div className="rsh-step-marker"><Check size={12} /></div>
-                      <div className="rsh-step-info">
-                        <span className="rsh-step-title">1. Gate-In & Laden</span>
-                        <span className="rsh-step-sub">Port CFS · Completed</span>
-                      </div>
-                    </div>
-                    <div className="rsh-step-connector completed"></div>
-                    <div className="rsh-step completed">
-                      <div className="rsh-step-marker"><Check size={12} /></div>
-                      <div className="rsh-step-info">
-                        <span className="rsh-step-title">2. Customs Cleared</span>
-                        <span className="rsh-step-sub">Export Passed · 0 Flags</span>
-                      </div>
-                    </div>
-                    <div className="rsh-step-connector active"></div>
-                    <div className="rsh-step active">
-                      <div className="rsh-step-marker"><Ship size={12} /></div>
-                      <div className="rsh-step-info">
-                        <span className="rsh-step-title">3. Sea Transit</span>
-                        <span className="rsh-step-sub">MSC Paloma V.24 · Moving</span>
-                      </div>
-                    </div>
-                    <div className="rsh-step-connector"></div>
-                    <div className="rsh-step">
-                      <div className="rsh-step-marker">4</div>
-                      <div className="rsh-step-info">
-                        <span className="rsh-step-title">4. Port Berth</span>
-                        <span className="rsh-step-sub">Discharge · Scheduled</span>
-                      </div>
-                    </div>
+                    {[
+                      ["Quote", selectedQuote.quoteNo, normalizeWorkflowStatus(selectedQuote.status)],
+                      ["Shipment", selectedQuote.shipmentId, selectedQuote.shipmentStatus],
+                      ["Selection", selectedQuote.m4.selectionReference, selectedQuote.m4.status],
+                      ["Verification", selectedQuote.m4.verificationReference, selectedQuote.m4.verificationStatus],
+                      ["Booking", selectedQuote.m4.bookingReference, selectedQuote.m4.bookingStatus],
+                    ].flatMap(([label, ref, state], i) => {
+                      const step = (
+                        <div key={label} className={`rsh-step${ref ? " completed" : ""}`}>
+                          <div className="rsh-step-marker">{ref ? <Check size={12} /> : i + 1}</div>
+                          <div className="rsh-step-info">
+                            <span className="rsh-step-title">{label}</span>
+                            <span className="rsh-step-sub">
+                              {ref ? `${ref} · ${String(state || "").replaceAll("_", " ").toLowerCase()}` : "Not yet"}
+                            </span>
+                          </div>
+                        </div>
+                      );
+                      return i === 0
+                        ? [step]
+                        : [<div key={`${label}-line`} className={`rsh-step-connector${ref ? " completed" : ""}`} />, step];
+                    })}
                   </div>
                 </div>
               )}
@@ -839,33 +882,42 @@ export default function RetailShipmentsHistory({ viewMode = "quotes" }) {
                   <div className="rsh-spec-rows">
                     <div className="rsh-spec-row">
                       <span className="rsh-spec-lbl">Customer Name</span>
-                      <span className="rsh-spec-val highlight">{selectedQuote.customerName || "Anand Verma"}</span>
+                      <span className="rsh-spec-val highlight">{selectedQuote.customerName || "—"}</span>
                     </div>
                     <div className="rsh-spec-row">
-                      <span className="rsh-spec-lbl">City / Region</span>
-                      <span className="rsh-spec-val">{selectedQuote.customerCity || "Chennai, India"}</span>
+                      <span className="rsh-spec-lbl">Lane</span>
+                      <span className="rsh-spec-val">{selectedQuote.laneSub || "—"}</span>
                     </div>
                     <div className="rsh-spec-row">
                       <span className="rsh-spec-lbl">Cargo Basis</span>
-                      <span className="rsh-spec-val font-semibold">{selectedQuote.basis || "12,500 kg / 1 × 40HC"}</span>
+                      <span className="rsh-spec-val font-semibold">{selectedQuote.basis || "—"}</span>
                     </div>
                     <div className="rsh-spec-row">
                       <span className="rsh-spec-lbl">Freight Mode</span>
                       <span className="rsh-spec-val">{selectedQuote.modeLabel || "Ocean Freight"}</span>
                     </div>
                     <div className="rsh-spec-row">
-                      <span className="rsh-spec-lbl">Booking Date</span>
+                      <span className="rsh-spec-lbl">Quote date</span>
                       <span className="rsh-spec-val">{selectedQuote.created || "Today"}</span>
                     </div>
                   </div>
 
-                  <div className="rsh-compliance-callout">
-                    <ShieldCheck size={16} className="text-emerald-600" />
-                    <div>
-                      <strong>AI Customs & Risk Cleared</strong>
-                      <p>MCDA risk score 18/100 · Open-Meteo route clear · 0 trade restrictions.</p>
+                  {/* The quote's own risk scores. This was a fixed "risk 18/100,
+                      cleared" message shown on every quote. */}
+                  {selectedQuote.overallRiskScore != null && (
+                    <div className="rsh-compliance-callout">
+                      <ShieldCheck size={16} className="text-emerald-600" />
+                      <div>
+                        <strong>AI risk assessment: {selectedQuote.overallRisk || "assessed"}</strong>
+                        <p>
+                          Overall {Math.round(selectedQuote.overallRiskScore)}/100 · weather{" "}
+                          {Math.round(selectedQuote.weatherRiskScore ?? 0)} · customs{" "}
+                          {Math.round(selectedQuote.customsRiskScore ?? 0)} · route{" "}
+                          {Math.round(selectedQuote.routeRiskScore ?? 0)}
+                        </p>
+                      </div>
                     </div>
-                  </div>
+                  )}
                 </div>
 
                 {/* Column 2: Commercial Pricing Breakdown */}
@@ -875,36 +927,56 @@ export default function RetailShipmentsHistory({ viewMode = "quotes" }) {
                     <h4>Commercial Pricing Breakdown</h4>
                   </div>
                   
-                  <div className="rsh-fee-breakdown">
-                    <div className="rsh-fee-row">
-                      <span>Base Freight Handling</span>
-                      <span>{selectedQuote.breakdown?.base_handling_fee ? `₹ ${Number(selectedQuote.breakdown.base_handling_fee).toLocaleString("en-IN")}` : "₹ 14,500"}</span>
-                    </div>
-                    <div className="rsh-fee-row">
-                      <span>Sea Distance Transit Fee</span>
-                      <span>{selectedQuote.breakdown?.distance_cost ? `₹ ${Number(selectedQuote.breakdown.distance_cost).toLocaleString("en-IN")}` : "₹ 1,15,000"}</span>
-                    </div>
-                    <div className="rsh-fee-row">
-                      <span>Bunker Fuel Surcharge (BAF)</span>
-                      <span>{selectedQuote.breakdown?.fuel_surcharge ? `₹ ${Number(selectedQuote.breakdown.fuel_surcharge).toLocaleString("en-IN")}` : "₹ 19,000"}</span>
-                    </div>
-                    {selectedQuote.breakdown?.container_cost && (
-                      <div className="rsh-fee-row">
-                        <span>Equipment Multiplier</span>
-                        <span>₹ {Number(selectedQuote.breakdown.container_cost).toLocaleString("en-IN")}</span>
+                  {(() => {
+                    // The chosen company's offer when there is one, otherwise the
+                    // platform's rule-based quote, each in its own currency. This
+                    // fell back to invented rupee figures, and set a company's
+                    // rupee total beside the platform's dollar charges.
+                    const m4 = selectedQuote.m4;
+                    const currency = m4?.currency || selectedQuote.currency;
+                    const lines = m4?.offer
+                      ? [
+                          ["Base freight", m4.offer.baseFreight],
+                          ["Fuel surcharge", m4.offer.fuelSurcharge],
+                          ["Handling", m4.offer.handlingFee],
+                          ["Documentation", m4.offer.documentationFee],
+                        ]
+                      : [
+                          ["Base charge", selectedQuote.baseRate],
+                          ["Distance charge", selectedQuote.distanceCharge],
+                          ["Weight charge", selectedQuote.weightCharge],
+                          ["Fuel surcharge", selectedQuote.fuelSurcharge],
+                        ];
+                    const total = m4 ? m4.agreedTotal ?? m4.selectedTotal : selectedQuote.totalNum;
+                    return (
+                      <div className="rsh-fee-breakdown">
+                        {lines.map(([label, amount]) => (
+                          <div className="rsh-fee-row" key={label}>
+                            <span>{label}</span>
+                            <span>{formatMoney(amount, currency)}</span>
+                          </div>
+                        ))}
+                        {m4?.wasRevised && (
+                          <div className="rsh-fee-row">
+                            <span>Offer before revision</span>
+                            <span>{formatMoney(m4.selectedTotal, currency)}</span>
+                          </div>
+                        )}
+                        <div className="rsh-fee-divider"></div>
+                        <div className="rsh-fee-total-row">
+                          <div>
+                            <span className="rsh-total-label">
+                              {m4?.agreedTotal != null ? "Agreed total" : m4 ? `${m4.companyName} offer` : "Total quote"}
+                            </span>
+                            <span className="rsh-total-sub">
+                              {m4 ? `${m4.companyName}'s rate card at the AI market rate` : "Platform rule-based pricing"}
+                            </span>
+                          </div>
+                          <div className="rsh-total-val">{formatMoney(total, currency)}</div>
+                        </div>
                       </div>
-                    )}
-                    <div className="rsh-fee-divider"></div>
-                    <div className="rsh-fee-total-row">
-                      <div>
-                        <span className="rsh-total-label">Total Indicative Freight</span>
-                        <span className="rsh-total-sub">All port surcharges & taxes included</span>
-                      </div>
-                      <div className="rsh-total-val">
-                        {selectedQuote.totalFormatted || `₹ ${Number(selectedQuote.totalNum || 148500).toLocaleString("en-IN")}`}
-                      </div>
-                    </div>
-                  </div>
+                    );
+                  })()}
                 </div>
 
                 {/* Trade & Customs Documents Panel */}
@@ -1123,6 +1195,22 @@ export default function RetailShipmentsHistory({ viewMode = "quotes" }) {
                   <Printer size={14} /> Print Summary
                 </button>
                 {(() => {
+                  if (selectedQuote.m4) {
+                    const booked = selectedQuote.m4.status === "BOOKING_CONFIRMED";
+                    return (
+                      <span
+                        className="rsh-footer-notice-pill"
+                        style={{
+                          background: booked ? "#ecfdf5" : "#fef3c7",
+                          color: booked ? "#059669" : "#92400e",
+                          border: `1px solid ${booked ? "#a7f3d0" : "#fde68a"}`,
+                        }}
+                      >
+                        {booked ? <CheckCircle2 size={14} color="#059669" /> : <ShieldCheck size={14} color="#d97706" />}{" "}
+                        {m4Line(selectedQuote.m4)}
+                      </span>
+                    );
+                  }
                   const norm = normalizeWorkflowStatus(selectedQuote.status);
                   if (norm === "PENDING_REVIEW") {
                     return (
@@ -1174,6 +1262,21 @@ export default function RetailShipmentsHistory({ viewMode = "quotes" }) {
                 {(() => {
                   const norm = normalizeWorkflowStatus(selectedQuote.status);
                   const qId = selectedQuote.quoteNo || selectedQuote.id;
+
+                  // A company's verification decides this quote now, and the
+                  // customer answers it in Selected Quotes. The accept button
+                  // below would book it without the company ever verifying it.
+                  if (selectedQuote.m4) {
+                    return (
+                      <Link
+                        to="/dashboard/selected-quotes"
+                        className="btn-orange-primary"
+                        onClick={() => setSelectedQuote(null)}
+                      >
+                        Open in Selected Quotes
+                      </Link>
+                    );
+                  }
 
                   if (norm === "SENT") {
                     return (

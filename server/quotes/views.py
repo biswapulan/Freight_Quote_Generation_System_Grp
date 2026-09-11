@@ -420,6 +420,36 @@ class CustomerCarrierSelectionView(APIView):
         return Response(payload, status=status.HTTP_200_OK)
 
 
+def _m4_conflict(quote):
+    """Refuse a legacy review or decision on a quote a company is handling.
+
+    Once the customer picks a company, its M4 verification decides the outcome
+    and the quote's status follows it. A second decision path here let the
+    quote say one thing and the booking another: an accept on a quote that
+    read SENT booked the shipment without the company ever verifying it.
+    """
+    from booking.models import QuoteSelection
+
+    selection = (
+        QuoteSelection.objects.filter(quote=quote)
+        .select_related("company")
+        .order_by("-created_at")
+        .first()
+    )
+    if selection is None:
+        return None
+    return Response(
+        {
+            "error": (
+                f"This quote is being handled by {selection.company.name} through "
+                f"company verification ({selection.reference}). Follow it in "
+                "Selected Quotes."
+            )
+        },
+        status=status.HTTP_409_CONFLICT,
+    )
+
+
 class CustomerQuoteDecisionView(APIView):
     """POST /quotes/<id>/decision -> customer accepts or rejects (PDF step 12)."""
 
@@ -438,6 +468,10 @@ class CustomerQuoteDecisionView(APIView):
             raise PermissionDenied(
                 "Access denied: You cannot decide on another customer's quote."
             )
+
+        conflict = _m4_conflict(quote)
+        if conflict:
+            return conflict
 
         decision = (request.data.get("decision") or request.data.get("status") or "").upper()
         if decision not in ("ACCEPTED", "REJECTED"):
@@ -582,6 +616,10 @@ class QuoteReviewView(APIView):
             quote = Quote.objects.select_related("shipment").get(id=quote_id)
         except Quote.DoesNotExist:
             raise NotFound("Quote not found.")
+
+        conflict = _m4_conflict(quote)
+        if conflict:
+            return conflict
 
         action = (request.data.get("action") or "").lower().strip()
         if action not in self.ACTIONS:
@@ -831,6 +869,10 @@ class AdminQuoteStatusUpdateView(APIView):
         except Quote.DoesNotExist:
             raise NotFound("Quote not found.")
 
+        conflict = _m4_conflict(quote)
+        if conflict:
+            return conflict
+
         new_status = (request.data.get("status") or "").upper()
         notes = request.data.get("admin_notes", request.data.get("notes", ""))
 
@@ -887,6 +929,10 @@ class AdminQuoteApproveView(APIView):
             quote = Quote.objects.select_related("shipment").get(id=quote_id)
         except Quote.DoesNotExist:
             raise NotFound("Quote not found.")
+
+        conflict = _m4_conflict(quote)
+        if conflict:
+            return conflict
 
         try:
             lifecycle.apply_quote_status(

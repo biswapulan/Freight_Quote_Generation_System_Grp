@@ -305,6 +305,10 @@ export function mapApiQuote(apiQuote) {
           routeConfirmed: true,
         }
       : {}),
+
+    // The company workflow behind this quote (M4): its selection, verification
+    // request and booking, so every screen can show the same ids.
+    m4: apiQuote.m4 || null,
   };
 }
 
@@ -483,6 +487,10 @@ export function selectQuoteRoute(quoteId, routeOption) {
 
 /** Has the customer picked a carrier on the Recommendations screen yet? */
 export function isRouteConfirmed(quoteId, fallbackQuote) {
+  // The server is the authority on whether a carrier was chosen. This read
+  // only the route data this browser saved, so a quote sent from another
+  // browser, or before the data was cleared, never reached My Quotes.
+  if (fallbackQuote?.m4 || fallbackQuote?.selectedCarrier) return true;
   return Boolean(getQuoteRouteData(quoteId, fallbackQuote)?.routeConfirmed);
 }
 

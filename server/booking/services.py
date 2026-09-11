@@ -62,9 +62,9 @@ def safe_notify(send, *args, **kwargs):
 
 
 def record_status(selection, *, old, new, actor=None, reason="", context=None):
-    """Write one line of the selection's audit trail."""
+    """Write one line of the selection's audit trail, and mirror it onto the quote."""
     actor = actor or {}
-    return StatusHistory.objects.create(
+    entry = StatusHistory.objects.create(
         selection=selection,
         old_status=old or "",
         new_status=new,
@@ -73,6 +73,84 @@ def record_status(selection, *, old, new, actor=None, reason="", context=None):
         reason=reason or "",
         context=context,
     )
+    mirror_onto_quote(selection, new, actor=actor)
+    return entry
+
+
+# How a selection's progress reads on the quote and shipment it came from. My
+# Quotes and My Shipments show those two records, and nothing updated them
+# once a company was chosen: a quote the company had verified and booked still
+# said PENDING_REVIEW, and its shipment QUOTED.
+QUOTE_STATUS_FOR = {
+    lifecycle.SELECTED: "PENDING_REVIEW",
+    lifecycle.PENDING_COMPANY_VERIFICATION: "PENDING_REVIEW",
+    lifecycle.UNDER_VERIFICATION: "PENDING_REVIEW",
+    lifecycle.AWAITING_CUSTOMER_INFO: "PENDING_REVIEW",
+    lifecycle.ESCALATED: "PENDING_REVIEW",
+    # A revised offer is with the customer to accept or decline.
+    lifecycle.REVISION_PENDING_CUSTOMER: "SENT",
+    lifecycle.REVISION_ACCEPTED: "APPROVED",
+    lifecycle.APPROVED: "APPROVED",
+    lifecycle.BOOKING_CONFIRMED: "ACCEPTED",
+    lifecycle.REJECTED: "REJECTED",
+    lifecycle.RESELECT_QUOTE: "REJECTED",
+    lifecycle.BOOKING_CANCELLED: "REJECTED",
+}
+
+# The shipment stays open while a company may still carry it, and closes the
+# way the customer's own acceptance of a quote closes it.
+SHIPMENT_STATUS_FOR = {
+    lifecycle.BOOKING_CONFIRMED: "CLOSED",
+    lifecycle.BOOKING_CANCELLED: "CANCELLED",
+}
+
+
+def mirror_onto_quote(selection, status, *, actor=None):
+    """Make the quote and shipment say what the customer's selection says.
+
+    Only the live selection speaks for a quote; one the customer has walked
+    away from does not, unless nothing has replaced it. The quote's own
+    transition graph is bypassed on purpose: the M4 state machine has already
+    validated this move, and the legacy graph has no way back from REJECTED
+    for a customer who picks another company after a rejection.
+    """
+    from audit import service as audit_service
+
+    replaced = (
+        QuoteSelection.objects.filter(quote_id=selection.quote_id, is_active=True)
+        .exclude(pk=selection.pk)
+        .exists()
+    )
+    if replaced:
+        return
+
+    quote = selection.quote
+    actor = actor or {}
+    targets = (
+        (quote, QUOTE_STATUS_FOR.get(status), "QUOTE", audit_service.QUOTE_STATUS_CHANGED),
+        (
+            quote.shipment,
+            SHIPMENT_STATUS_FOR.get(status, "QUOTED"),
+            "SHIPMENT",
+            audit_service.SHIPMENT_STATUS_CHANGED,
+        ),
+    )
+    for record, target, kind, action in targets:
+        if not target or record.status == target:
+            continue
+        previous = record.status
+        record.status = target
+        record.save(update_fields=["status", "updated_at"])
+        audit_service.record(
+            actor_id=actor.get("id") or actor.get("email") or "system",
+            actor_role=actor.get("role") or "system",
+            actor_email=actor.get("email", ""),
+            action=action,
+            entity_type=kind,
+            entity_id=record.id,
+            reason=f"Follows {selection.reference} ({status}).",
+            changes={"status": {"from": previous, "to": target}},
+        )
 
 
 def primary_agent_for(company):

@@ -95,6 +95,50 @@ class QuoteSerializer(serializers.ModelSerializer):
     def get_aiInsights(self, obj):
         return ai_insights(obj)
 
+    # ---- M4: the company selection, verification and booking it led to ----
+    # My Quotes shows the quote, Selected Quotes the selection and the agent the
+    # request, each under its own id. This ties them together on the quote.
+    m4 = serializers.SerializerMethodField()
+
+    def get_m4(self, obj):
+        from booking.models import QuoteSelection
+
+        selections = QuoteSelection.objects.filter(quote=obj).select_related(
+            "company", "company_quote"
+        )
+        selection = (
+            selections.filter(is_active=True).order_by("-created_at").first()
+            or selections.order_by("-created_at").first()
+        )
+        if selection is None:
+            return None
+
+        request = getattr(selection, "verification", None)
+        booking = getattr(selection, "booking", None)
+        offer = selection.company_quote
+        return {
+            "selectionReference": selection.reference,
+            "status": selection.status,
+            "companyName": selection.company.name,
+            "verificationReference": request.reference if request else None,
+            "verificationStatus": request.status if request else None,
+            "bookingReference": booking.reference if booking else None,
+            "bookingStatus": booking.status if booking else None,
+            "currency": selection.selected_currency,
+            "selectedTotal": selection.selected_total_price,
+            "agreedTotal": booking.agreed_total_price if booking else None,
+            "wasRevised": bool(booking and booking.was_revised),
+            "offer": {
+                "baseFreight": offer.base_freight,
+                "fuelSurcharge": offer.fuel_surcharge,
+                "handlingFee": offer.handling_fee,
+                "documentationFee": offer.documentation_fee,
+                "totalPrice": offer.total_price,
+            }
+            if offer
+            else None,
+        }
+
     # ---- Carrier selection & agent assignment ----
     selectedCarrier = serializers.CharField(source="selected_carrier", read_only=True)
     assignedAgentEmail = serializers.CharField(source="assigned_agent_email", read_only=True)
@@ -106,6 +150,7 @@ class QuoteSerializer(serializers.ModelSerializer):
         fields = [
             "customsSummary",
             "aiInsights",
+            "m4",
             "selectedCarrier",
             "selected_carrier",
             "assignedAgentEmail",

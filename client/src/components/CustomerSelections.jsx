@@ -263,6 +263,7 @@ export default function CustomerSelections() {
                   <Term label="You selected" value={money(s.selectedTotalPrice, s.selectedCurrency)} />
                   <Term label="Transit" value={`${s.selectedTransitDays ?? "—"} days`} />
                   <Term label="Shipment" value={s.shipmentId} />
+                  <Term label="Quote" value={s.quoteId} />
                   {s.priceChanged && (
                     <Term label="Agreed after revision" value="see below" tone="warn" />
                   )}
