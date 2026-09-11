@@ -160,6 +160,37 @@
 .cap-note ul { margin:5px 0 0; padding-left:18px; }
 .cap-rev-line { margin-top:6px; font-size:12.5px; }
 
+/* AI analysis: the M2 price and M3 risk behind this request */
+.cap-ai {
+  padding:14px 16px; margin-bottom:18px;
+  background:#f8faff; border:1px solid #e0e7ff; border-radius:10px;
+}
+.cap-ai-head {
+  display:flex; align-items:center; justify-content:space-between;
+  gap:10px; flex-wrap:wrap; margin-bottom:10px;
+}
+.cap-ai-head h3 { display:flex; align-items:center; gap:6px; margin:0; font-size:14px; color:#1e1b4b; }
+.cap-ai .cap-facts { margin-bottom:10px; }
+.cap-ai .cap-fact { background:#fff; }
+.cap-ai-line { margin:0 0 10px; font-size:12.5px; color:#475569; line-height:1.5; }
+.cap-ai-bars { display:grid; gap:6px; margin-bottom:10px; }
+.cap-ai-bar {
+  display:grid; grid-template-columns:64px 1fr 52px; align-items:center;
+  gap:8px; font-size:12.5px; color:#475569;
+}
+.cap-ai-bar strong { text-align:right; color:#0f172a; }
+.cap-ai-track { height:7px; background:#e2e8f0; border-radius:4px; overflow:hidden; }
+.cap-ai-fill { display:block; height:100%; border-radius:4px; }
+.cap-ai-fill.low    { background:#22c55e; }
+.cap-ai-fill.medium { background:#f59e0b; }
+.cap-ai-fill.high   { background:#ef4444; }
+.cap-ai-alerts { margin:0; padding-left:18px; font-size:12.5px; color:#92400e; }
+.cap-risk { font-size:11.5px; font-weight:700; padding:3px 9px; border-radius:999px; }
+.cap-risk.low      { background:#dcfce7; color:#15803d; }
+.cap-risk.medium   { background:#fef3c7; color:#b45309; }
+.cap-risk.high,
+.cap-risk.critical { background:#fee2e2; color:#b91c1c; }
+
 /* Checklist */
 .cap-checklist { margin-bottom: 20px; }
 .cap-checklist-head {

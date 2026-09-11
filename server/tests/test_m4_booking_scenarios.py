@@ -604,3 +604,30 @@ class TestM4BookingScenarios:
             confirm_booking(stored, actor={"email": "x", "role": "customer"})
 
         assert not Booking.objects.filter(selection=stored).exists()
+
+    # -- M2 and M3 carry through into M4 ------------------------------------
+
+    def test_offers_are_priced_from_the_ai_market_rate(self):
+        from quotes.insights import market_factor
+        from quotes.models import Quote
+
+        quote_id = self._quote()
+        factor = market_factor(Quote.objects.get(id=quote_id))
+        assert factor is not None
+
+        for offer in self._offers(quote_id):
+            assert offer["aiMarketFactor"] == factor
+            assert offer["riskLevel"]
+
+    def test_the_agent_sees_the_ai_price_and_risk(self):
+        _, _, verification = self._selected("Beta Freight")
+        response = self.client.get(
+            f"/api/verification-requests/{verification['reference']}", **self.agent_b
+        )
+        assert response.status_code == 200
+
+        insights = response.data["aiInsights"]
+        assert insights["recommendedPrice"] > 0
+        assert insights["offerAdjustmentPct"] is not None
+        assert insights["risk"]["overallLevel"]
+        assert insights["risk"]["customs"]["score"] is not None

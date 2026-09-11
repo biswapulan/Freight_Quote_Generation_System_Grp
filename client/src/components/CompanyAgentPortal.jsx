@@ -13,6 +13,7 @@ import {
   RotateCw,
   MessageSquare,
   TrendingUp,
+  Sparkles,
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import {
@@ -589,6 +590,8 @@ function RequestDetail(props) {
               />
             </section>
 
+            <AiAnalysis insights={detail.aiInsights} />
+
             {detail.requestedInformation?.length > 0 && (
               <div className="cap-note info">
                 <MessageSquare size={15} />
@@ -777,5 +780,104 @@ function Fact({ icon, label, value }) {
       </span>
       <span className="cap-fact-value">{value || "—"}</span>
     </div>
+  );
+}
+
+const RISK_BARS = [
+  ["weather", "Weather"],
+  ["customs", "Customs"],
+  ["route", "Route"],
+];
+
+function scoreTone(score) {
+  if (score >= 67) return "high";
+  if (score >= 34) return "medium";
+  return "low";
+}
+
+function signedPct(pct) {
+  return `${pct > 0 ? "+" : pct < 0 ? "−" : ""}${Math.abs(pct)}%`;
+}
+
+/**
+ * What M2 and M3 concluded about this shipment. The checklist asks the agent
+ * to weigh the commercial terms and the weather, customs and route risk; this
+ * is the analysis those checks are about, so it sits right above them.
+ */
+function AiAnalysis({ insights }) {
+  if (!insights) return null;
+  const risk = insights.risk || {};
+
+  return (
+    <section className="cap-ai">
+      <div className="cap-ai-head">
+        <h3>
+          <Sparkles size={15} /> AI analysis of this shipment
+        </h3>
+        {risk.overallLevel && (
+          <span className={`cap-risk ${risk.overallLevel.toLowerCase()}`}>
+            {risk.overallLevel} risk
+            {risk.overallScore != null ? ` · ${Math.round(risk.overallScore)}/100` : ""}
+          </span>
+        )}
+      </div>
+
+      <div className="cap-facts">
+        <Fact
+          label="Standard rate"
+          value={insights.standardPrice != null ? money(insights.standardPrice, "INR") : null}
+        />
+        <Fact
+          label="AI predicted"
+          value={
+            insights.aiPredictedPrice != null
+              ? money(insights.aiPredictedPrice, "INR")
+              : "Model unavailable"
+          }
+        />
+        <Fact
+          label="AI recommended"
+          value={insights.recommendedPrice != null ? money(insights.recommendedPrice, "INR") : null}
+        />
+      </div>
+
+      <p className="cap-ai-line">
+        {insights.offerAdjustmentPct != null
+          ? `The AI market rate for this lane moved this offer's freight rate ${signedPct(insights.offerAdjustmentPct)} from your rate card${
+              insights.riskPremiumPct
+                ? `, including a ${insights.riskPremiumPct}% loading for ${risk.overallLevel} risk`
+                : ""
+            }.`
+          : "This offer was priced from your rate card alone, before the AI market rate applied."}
+      </p>
+
+      <div className="cap-ai-bars">
+        {RISK_BARS.map(([key, label]) => {
+          const score = risk[key]?.score;
+          if (score == null) return null;
+          return (
+            <div key={key} className="cap-ai-bar" title={risk[key]?.summary || ""}>
+              <span>{label}</span>
+              <span className="cap-ai-track">
+                <span
+                  className={`cap-ai-fill ${scoreTone(score)}`}
+                  style={{ width: `${Math.min(100, Math.max(0, score))}%` }}
+                />
+              </span>
+              <strong>{Math.round(score)}/100</strong>
+            </div>
+          );
+        })}
+      </div>
+
+      {risk.summary && <p className="cap-ai-line">{risk.summary}</p>}
+      {insights.alerts?.length > 0 && (
+        <ul className="cap-ai-alerts">
+          {insights.alerts.map((alert) => (
+            <li key={alert}>{alert}</li>
+          ))}
+        </ul>
+      )}
+    </section>
   );
 }

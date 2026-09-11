@@ -422,6 +422,9 @@ function toRouteOption(offer) {
     transitDays: offer.transitDays,
     recommended: Boolean(offer.isRecommended),
     onTimePerformance: offer.onTimePerformance,
+    riskLevel: offer.riskLevel,
+    riskScore: offer.riskScore,
+    aiMarketFactor: offer.aiMarketFactor,
     validUntil: offer.validUntil,
     isExpired: Boolean(offer.isExpired),
     breakdown: {
@@ -431,6 +434,146 @@ function toRouteOption(offer) {
       documentationFee: offer.documentationFee,
     },
   };
+}
+
+// ---- The server's M2 price and M3 risk (quotes/insights.py) --------------
+
+const LINE_BASIS = {
+  base: "Fixed booking & terminal charge",
+  distance: "Per-kilometre line haul rate",
+  weight: "Per-tonne weight rate",
+  fuel: "Fuel surcharge on the line haul",
+};
+
+function hasAiPrice(insights) {
+  return insights?.recommendedPrice != null && insights?.standardPrice != null;
+}
+
+function signedPct(pct) {
+  return `${pct > 0 ? "+" : pct < 0 ? "−" : ""}${Math.abs(pct)}%`;
+}
+
+function aiBasis(insights) {
+  const parts = [];
+  if (insights.aiPredictedPrice != null) parts.push(`AI model predicts ${money(insights.aiPredictedPrice)}`);
+  else parts.push("AI model unavailable");
+  if (insights.riskPremiumPct) parts.push(`${insights.riskPremiumPct}% loading for ${insights.risk?.overallLevel || "the assessed"} risk`);
+  return parts.join("; ");
+}
+
+function riskColours(level) {
+  const key = (level || "").toUpperCase();
+  if (key === "LOW") return { background: "#dcfce7", color: "#15803d" };
+  if (key === "MEDIUM") return { background: "#fef3c7", color: "#b45309" };
+  return { background: "#fee2e2", color: "#b91c1c" };
+}
+
+function scoreColour(score) {
+  if (score >= 67) return "#ef4444";
+  if (score >= 34) return "#f59e0b";
+  return "#22c55e";
+}
+
+/** Quote modal rows: standard rate, the AI's adjustment, in two columns. */
+function AiPriceRows({ insights }) {
+  const adjustment = insights.recommendedPrice - insights.standardPrice;
+  return (
+    <>
+      {insights.breakdown.map((line) => (
+        <tr key={line.key}>
+          <td>
+            <strong>{line.label}</strong>
+            <span style={{ display: "block", fontSize: 11, color: "#64748b" }}>{LINE_BASIS[line.key]}</span>
+          </td>
+          <td className="text-right" style={{ fontWeight: 600 }}>{money(line.amount)}</td>
+        </tr>
+      ))}
+      <tr style={{ background: "#f8fafc", borderTop: "1.5px solid #e2e8f0" }}>
+        <td style={{ fontWeight: 700, color: "#334155" }}>Standard rate (M1 formula)</td>
+        <td className="text-right" style={{ fontWeight: 700, color: "#334155" }}>{money(insights.standardPrice)}</td>
+      </tr>
+      <tr style={{ background: "#fff7ed" }}>
+        <td style={{ fontWeight: 700, color: "#c2410c" }}>
+          AI market adjustment ({signedPct(insights.aiAdjustmentPct)})
+          <span style={{ display: "block", fontSize: 11, fontWeight: 500 }}>{aiBasis(insights)}</span>
+        </td>
+        <td className="text-right" style={{ fontWeight: 700, color: "#c2410c" }}>
+          {adjustment < 0 ? "− " : "+ "}{money(Math.abs(adjustment))}
+        </td>
+      </tr>
+    </>
+  );
+}
+
+/** The same figures for the PDF's four-column table. */
+function AiPdfRows({ insights }) {
+  const adjustment = insights.recommendedPrice - insights.standardPrice;
+  return (
+    <>
+      {insights.breakdown.map((line) => (
+        <tr key={line.key}>
+          <td><strong>{line.label}</strong></td>
+          <td>{LINE_BASIS[line.key]}</td>
+          <td className="text-right">INR</td>
+          <td className="text-right">{money(line.amount)}</td>
+        </tr>
+      ))}
+      <tr style={{ background: "#f1f5f9", borderTop: "2px solid #cbd5e1" }}>
+        <td colSpan={2}><strong>Standard rate (M1 formula)</strong></td>
+        <td className="text-right"><strong>INR</strong></td>
+        <td className="text-right"><strong>{money(insights.standardPrice)}</strong></td>
+      </tr>
+      <tr style={{ background: "#fff7ed" }}>
+        <td colSpan={2} style={{ color: "#c2410c" }}>
+          <strong>AI market adjustment ({signedPct(insights.aiAdjustmentPct)})</strong> — {aiBasis(insights)}
+        </td>
+        <td className="text-right" style={{ color: "#c2410c" }}><strong>INR</strong></td>
+        <td className="text-right" style={{ color: "#c2410c" }}>
+          <strong>{adjustment < 0 ? "− " : "+ "}{money(Math.abs(adjustment))}</strong>
+        </td>
+      </tr>
+    </>
+  );
+}
+
+/** M3's verdict on the shipment: overall level, the three scores, alerts. */
+function AiRiskPanel({ insights }) {
+  const risk = insights?.risk;
+  if (!risk?.overallLevel) return null;
+  const bars = [
+    ["Weather", risk.weather?.score],
+    ["Customs", risk.customs?.score],
+    ["Route", risk.route?.score],
+  ];
+  return (
+    <div style={{ border: "1px solid #e2e8f0", background: "#f8fafc", borderRadius: 10, padding: "12px 14px", margin: "14px 0" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8, gap: 8, flexWrap: "wrap" }}>
+        <strong style={{ fontSize: 13, color: "#0f172a" }}>AI risk assessment (M3)</strong>
+        <span style={{ ...riskColours(risk.overallLevel), fontSize: 11.5, fontWeight: 700, padding: "3px 9px", borderRadius: 999 }}>
+          {risk.overallLevel} risk{risk.overallScore != null ? ` · ${Math.round(risk.overallScore)}/100` : ""}
+        </span>
+      </div>
+      {bars.map(([label, score]) =>
+        score == null ? null : (
+          <div key={label} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, margin: "4px 0" }}>
+            <span style={{ width: 62, color: "#475569" }}>{label}</span>
+            <span style={{ flex: 1, height: 6, background: "#e2e8f0", borderRadius: 4, overflow: "hidden" }}>
+              <span style={{ display: "block", height: "100%", width: `${Math.min(100, Math.max(0, score))}%`, background: scoreColour(score) }} />
+            </span>
+            <span style={{ width: 48, textAlign: "right", color: "#0f172a", fontWeight: 600 }}>{Math.round(score)}/100</span>
+          </div>
+        ),
+      )}
+      {risk.summary && <p style={{ fontSize: 12, color: "#475569", margin: "8px 0 0" }}>{risk.summary}</p>}
+      {insights.alerts?.length > 0 && (
+        <ul style={{ margin: "6px 0 0", paddingLeft: 18, fontSize: 12, color: "#92400e" }}>
+          {insights.alerts.map((alert) => (
+            <li key={alert}>{alert}</li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
 }
 
 export default function RetailGenerateQuote() {
@@ -995,7 +1138,13 @@ export default function RetailGenerateQuote() {
   useEffect(() => {
     const chart = chartInstanceRef.current;
     if (!chart) return;
-    if (generatedQuote?.breakdown) {
+    const aiLines = generatedQuote?.insights?.breakdown || [];
+    if (aiLines.length) {
+      // The server's standard rate: freight against the fuel surcharge.
+      const fuel = aiLines.filter((l) => l.key === "fuel").reduce((sum, l) => sum + l.amount, 0);
+      const freight = aiLines.reduce((sum, l) => sum + l.amount, 0) - fuel;
+      chart.data.datasets[0].data = [freight, fuel];
+    } else if (generatedQuote?.breakdown) {
       chart.data.datasets[0].data = [
         generatedQuote.breakdown.distance_cost || 70,
         (generatedQuote.breakdown.fuel_surcharge || 0) + (generatedQuote.breakdown.base_handling_fee || 0),
@@ -1176,6 +1325,9 @@ export default function RetailGenerateQuote() {
         currency: form.currency || "INR",
         breakdown: calcResult.breakdown,
         serverQuote: apiQuote,
+        // The server's M2 price and M3 risk. Where present, this is what the
+        // quote shows; the browser's own estimate above is only a fallback.
+        insights: apiQuote.aiInsights || null,
         status: apiQuote.status || "PENDING_REVIEW",
         created_at: apiQuote.created_at || new Date().toISOString(),
       };
@@ -1764,8 +1916,10 @@ export default function RetailGenerateQuote() {
 
             {generatedQuote ? (
               <>
-                <div className="est-total-label">AGENT-DETERMINED ESTIMATE</div>
-                <div className="est-total-price">{money(generatedQuote.breakdown?.total || 0)}</div>
+                <div className="est-total-label">{hasAiPrice(generatedQuote.insights) ? "AI RECOMMENDED PRICE" : "AGENT-DETERMINED ESTIMATE"}</div>
+                <div className="est-total-price">
+                  {money(hasAiPrice(generatedQuote.insights) ? generatedQuote.insights.recommendedPrice : generatedQuote.breakdown?.total || 0)}
+                </div>
                 <div className="rate-badge">◆ CERTIFIED BY QUOTE AGENT ({`QT-${String(generatedQuote.id).slice(-8).toUpperCase()}`})</div>
                 <button type="button" className="btn-generate" onClick={() => setShowQuoteModal(true)} style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", gap: "8px" }}>
                   <Eye size={16} /> View Full Quotation Offer
@@ -2048,7 +2202,9 @@ export default function RetailGenerateQuote() {
                 <tr><th>Description</th><th className="text-right">Amount (₹)</th></tr>
               </thead>
               <tbody>
-                {generatedQuote?.breakdown ? (
+                {hasAiPrice(generatedQuote?.insights) ? (
+                  <AiPriceRows insights={generatedQuote.insights} />
+                ) : generatedQuote?.breakdown ? (
                   <>
                     <tr>
                       <td>
@@ -2148,13 +2304,21 @@ export default function RetailGenerateQuote() {
               </tbody>
               <tfoot>
                 <tr style={{ fontWeight: "bold", background: "#0f172a", color: "#ffffff" }}>
-                  <td style={{ fontSize: 15, color: "#ffffff", padding: "12px 14px" }}>FINAL SELL PRICE (QUOTATION)</td>
+                  <td style={{ fontSize: 15, color: "#ffffff", padding: "12px 14px" }}>
+                    {hasAiPrice(generatedQuote?.insights) ? "AI RECOMMENDED PRICE" : "FINAL SELL PRICE (QUOTATION)"}
+                  </td>
                   <td className="text-right" style={{ fontSize: 20, color: "#f97316", padding: "12px 14px" }}>
-                    {generatedQuote?.breakdown?.total ? money(generatedQuote.breakdown.total) : quote.formattedPrice}
+                    {hasAiPrice(generatedQuote?.insights)
+                      ? money(generatedQuote.insights.recommendedPrice)
+                      : generatedQuote?.breakdown?.total
+                      ? money(generatedQuote.breakdown.total)
+                      : quote.formattedPrice}
                   </td>
                 </tr>
               </tfoot>
             </table>
+
+            <AiRiskPanel insights={generatedQuote?.insights} />
 
             <div className="modal-prompt-box">
               <div className="modal-prompt-title" style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "8px" }}>
@@ -2251,6 +2415,16 @@ export default function RetailGenerateQuote() {
                   Choose the carrier you&apos;d like for quote <strong>{bookingRef}</strong>, then send
                   it to our freight agent for review.
                 </p>
+                {(() => {
+                  const factor = routeOptions.find((o) => o.aiMarketFactor != null)?.aiMarketFactor;
+                  return factor ? (
+                    <p className="rq-route-sub" style={{ marginTop: 4 }}>
+                      Every offer is priced from the AI market rate for this lane (
+                      {signedPct(Math.round((factor - 1) * 1000) / 10)} against each company&apos;s rate
+                      card) and carries the same risk assessment.
+                    </p>
+                  ) : null;
+                })()}
               </div>
               <button
                 type="button"
@@ -2296,6 +2470,22 @@ export default function RetailGenerateQuote() {
                           ? ` \u00b7 ${Math.round(opt.onTimePerformance)}% on time`
                           : ""}
                       </span>
+                      {opt.riskLevel && (
+                        <span
+                          style={{
+                            ...riskColours(opt.riskLevel),
+                            alignSelf: "flex-start",
+                            marginTop: 4,
+                            fontSize: 11,
+                            fontWeight: 700,
+                            padding: "2px 8px",
+                            borderRadius: 999,
+                          }}
+                        >
+                          {opt.riskLevel} risk
+                          {opt.riskScore != null ? ` \u00b7 ${Math.round(opt.riskScore)}/100` : ""}
+                        </span>
+                      )}
                     </span>
 
                     <span className="rq-route-figures">
@@ -2510,101 +2700,111 @@ export default function RetailGenerateQuote() {
               </tr>
             </thead>
             <tbody>
-              <tr>
-                <td><strong>Base Freight</strong></td>
-                <td>{summaryStats.containerSummaryStr} linehaul tariff</td>
-                <td className="text-right">{generatedQuote?.currency || "INR"}</td>
-                <td className="text-right">{money(generatedQuote?.breakdown?.base_freight ?? generatedQuote?.breakdown?.distance_cost ?? 0)}</td>
-              </tr>
-              <tr>
-                <td><strong>Bunker Adjustment Factor (BAF)</strong></td>
-                <td>{generatedQuote?.breakdown?.baf_pct || 10}% fuel indexation on base freight</td>
-                <td className="text-right">{generatedQuote?.currency || "INR"}</td>
-                <td className="text-right">{money(generatedQuote?.breakdown?.baf_amount ?? generatedQuote?.breakdown?.fuel_surcharge ?? 0)}</td>
-              </tr>
-              <tr>
-                <td><strong>Terminal Handling Charges (Origin THC)</strong></td>
-                <td>Origin terminal handling &amp; container loading</td>
-                <td className="text-right">{generatedQuote?.currency || "INR"}</td>
-                <td className="text-right">{money(generatedQuote?.breakdown?.origin_thc ?? ((generatedQuote?.breakdown?.base_handling_fee || 0) - 3000))}</td>
-              </tr>
-              <tr>
-                <td><strong>Documentation &amp; Bill of Lading</strong></td>
-                <td>Automated carrier manifest &amp; customs filing</td>
-                <td className="text-right">{generatedQuote?.currency || "INR"}</td>
-                <td className="text-right">{money(generatedQuote?.breakdown?.documentation_fee || 3000)}</td>
-              </tr>
-              {generatedQuote?.breakdown?.dest_thc > 0 && (
-                <tr>
-                  <td>Destination THC ({form.incoterm})</td>
-                  <td>Port offloading at destination terminal</td>
-                  <td className="text-right">{generatedQuote?.currency || "INR"}</td>
-                  <td className="text-right">{money(generatedQuote.breakdown.dest_thc)}</td>
-                </tr>
+              {hasAiPrice(generatedQuote?.insights) ? (
+                <AiPdfRows insights={generatedQuote.insights} />
+              ) : (
+                <>
+                  <tr>
+                    <td><strong>Base Freight</strong></td>
+                    <td>{summaryStats.containerSummaryStr} linehaul tariff</td>
+                    <td className="text-right">{generatedQuote?.currency || "INR"}</td>
+                    <td className="text-right">{money(generatedQuote?.breakdown?.base_freight ?? generatedQuote?.breakdown?.distance_cost ?? 0)}</td>
+                  </tr>
+                  <tr>
+                    <td><strong>Bunker Adjustment Factor (BAF)</strong></td>
+                    <td>{generatedQuote?.breakdown?.baf_pct || 10}% fuel indexation on base freight</td>
+                    <td className="text-right">{generatedQuote?.currency || "INR"}</td>
+                    <td className="text-right">{money(generatedQuote?.breakdown?.baf_amount ?? generatedQuote?.breakdown?.fuel_surcharge ?? 0)}</td>
+                  </tr>
+                  <tr>
+                    <td><strong>Terminal Handling Charges (Origin THC)</strong></td>
+                    <td>Origin terminal handling &amp; container loading</td>
+                    <td className="text-right">{generatedQuote?.currency || "INR"}</td>
+                    <td className="text-right">{money(generatedQuote?.breakdown?.origin_thc ?? ((generatedQuote?.breakdown?.base_handling_fee || 0) - 3000))}</td>
+                  </tr>
+                  <tr>
+                    <td><strong>Documentation &amp; Bill of Lading</strong></td>
+                    <td>Automated carrier manifest &amp; customs filing</td>
+                    <td className="text-right">{generatedQuote?.currency || "INR"}</td>
+                    <td className="text-right">{money(generatedQuote?.breakdown?.documentation_fee || 3000)}</td>
+                  </tr>
+                  {generatedQuote?.breakdown?.dest_thc > 0 && (
+                    <tr>
+                      <td>Destination THC ({form.incoterm})</td>
+                      <td>Port offloading at destination terminal</td>
+                      <td className="text-right">{generatedQuote?.currency || "INR"}</td>
+                      <td className="text-right">{money(generatedQuote.breakdown.dest_thc)}</td>
+                    </tr>
+                  )}
+                  {generatedQuote?.breakdown?.dest_customs > 0 && (
+                    <tr>
+                      <td>Destination Customs Clearance (DDP)</td>
+                      <td>Import customs clearance protocol</td>
+                      <td className="text-right">{generatedQuote?.currency || "INR"}</td>
+                      <td className="text-right">{money(generatedQuote.breakdown.dest_customs)}</td>
+                    </tr>
+                  )}
+                  {generatedQuote?.breakdown?.delivery_haulage > 0 && (
+                    <tr>
+                      <td>Final-Mile Delivery Drayage</td>
+                      <td>Port to consignee door transport</td>
+                      <td className="text-right">{generatedQuote?.currency || "INR"}</td>
+                      <td className="text-right">{money(generatedQuote.breakdown.delivery_haulage)}</td>
+                    </tr>
+                  )}
+                  {generatedQuote?.breakdown?.insurance_cost > 0 && (
+                    <tr>
+                      <td>All-Risk Cargo Insurance</td>
+                      <td>Comprehensive transit liability coverage</td>
+                      <td className="text-right">{generatedQuote?.currency || "INR"}</td>
+                      <td className="text-right">{money(generatedQuote.breakdown.insurance_cost)}</td>
+                    </tr>
+                  )}
+                  {generatedQuote?.breakdown?.hazmat_cost > 0 && (
+                    <tr>
+                      <td>Hazardous Material Protocol (HAZMAT)</td>
+                      <td>Dangerous goods safety and escort</td>
+                      <td className="text-right">{generatedQuote?.currency || "INR"}</td>
+                      <td className="text-right">{money(generatedQuote.breakdown.hazmat_cost)}</td>
+                    </tr>
+                  )}
+                  {generatedQuote?.breakdown?.reefer_cost > 0 && (
+                    <tr>
+                      <td>Cold Chain Reefer Monitoring</td>
+                      <td>Active temperature logging &amp; power plug-in</td>
+                      <td className="text-right">{generatedQuote?.currency || "INR"}</td>
+                      <td className="text-right">{money(generatedQuote.breakdown.reefer_cost)}</td>
+                    </tr>
+                  )}
+                  <tr style={{ background: "#f1f5f9", borderTop: "2px solid #cbd5e1" }}>
+                    <td colSpan={2}><strong>TOTAL BUY COST (Subtotal)</strong></td>
+                    <td className="text-right"><strong>{generatedQuote?.currency || "INR"}</strong></td>
+                    <td className="text-right"><strong>{money(generatedQuote?.breakdown?.subtotal_buy_cost || (generatedQuote?.breakdown?.total / 1.15))}</strong></td>
+                  </tr>
+                  <tr style={{ background: "#fff7ed" }}>
+                    <td colSpan={2} style={{ color: "#c2410c" }}><strong>Commercial Margin ({generatedQuote?.breakdown?.margin_pct || 15}%)</strong></td>
+                    <td className="text-right" style={{ color: "#c2410c" }}><strong>{generatedQuote?.currency || "INR"}</strong></td>
+                    <td className="text-right" style={{ color: "#c2410c" }}><strong>+ {money(generatedQuote?.breakdown?.margin_amount || (generatedQuote?.breakdown?.total - (generatedQuote?.breakdown?.total / 1.15)))}</strong></td>
+                  </tr>
+                </>
               )}
-              {generatedQuote?.breakdown?.dest_customs > 0 && (
-                <tr>
-                  <td>Destination Customs Clearance (DDP)</td>
-                  <td>Import customs clearance protocol</td>
-                  <td className="text-right">{generatedQuote?.currency || "INR"}</td>
-                  <td className="text-right">{money(generatedQuote.breakdown.dest_customs)}</td>
-                </tr>
-              )}
-              {generatedQuote?.breakdown?.delivery_haulage > 0 && (
-                <tr>
-                  <td>Final-Mile Delivery Drayage</td>
-                  <td>Port to consignee door transport</td>
-                  <td className="text-right">{generatedQuote?.currency || "INR"}</td>
-                  <td className="text-right">{money(generatedQuote.breakdown.delivery_haulage)}</td>
-                </tr>
-              )}
-              {generatedQuote?.breakdown?.insurance_cost > 0 && (
-                <tr>
-                  <td>All-Risk Cargo Insurance</td>
-                  <td>Comprehensive transit liability coverage</td>
-                  <td className="text-right">{generatedQuote?.currency || "INR"}</td>
-                  <td className="text-right">{money(generatedQuote.breakdown.insurance_cost)}</td>
-                </tr>
-              )}
-              {generatedQuote?.breakdown?.hazmat_cost > 0 && (
-                <tr>
-                  <td>Hazardous Material Protocol (HAZMAT)</td>
-                  <td>Dangerous goods safety and escort</td>
-                  <td className="text-right">{generatedQuote?.currency || "INR"}</td>
-                  <td className="text-right">{money(generatedQuote.breakdown.hazmat_cost)}</td>
-                </tr>
-              )}
-              {generatedQuote?.breakdown?.reefer_cost > 0 && (
-                <tr>
-                  <td>Cold Chain Reefer Monitoring</td>
-                  <td>Active temperature logging &amp; power plug-in</td>
-                  <td className="text-right">{generatedQuote?.currency || "INR"}</td>
-                  <td className="text-right">{money(generatedQuote.breakdown.reefer_cost)}</td>
-                </tr>
-              )}
-              <tr style={{ background: "#f1f5f9", borderTop: "2px solid #cbd5e1" }}>
-                <td colSpan={2}><strong>TOTAL BUY COST (Subtotal)</strong></td>
-                <td className="text-right"><strong>{generatedQuote?.currency || "INR"}</strong></td>
-                <td className="text-right"><strong>{money(generatedQuote?.breakdown?.subtotal_buy_cost || (generatedQuote?.breakdown?.total / 1.15))}</strong></td>
-              </tr>
-              <tr style={{ background: "#fff7ed" }}>
-                <td colSpan={2} style={{ color: "#c2410c" }}><strong>Commercial Margin ({generatedQuote?.breakdown?.margin_pct || 15}%)</strong></td>
-                <td className="text-right" style={{ color: "#c2410c" }}><strong>{generatedQuote?.currency || "INR"}</strong></td>
-                <td className="text-right" style={{ color: "#c2410c" }}><strong>+ {money(generatedQuote?.breakdown?.margin_amount || (generatedQuote?.breakdown?.total - (generatedQuote?.breakdown?.total / 1.15)))}</strong></td>
-              </tr>
             </tbody>
             <tfoot>
               <tr className="pdf-grand-total-row">
                 <td colSpan={2}>
-                  <strong>FINAL SELL PRICE (QUOTATION)</strong>
+                  <strong>{hasAiPrice(generatedQuote?.insights) ? "AI RECOMMENDED PRICE" : "FINAL SELL PRICE (QUOTATION)"}</strong>
                 </td>
                 <td className="text-right"><strong>{generatedQuote?.currency || "INR"}</strong></td>
                 <td className="text-right pdf-total-amount">
-                  <strong>{money(generatedQuote?.breakdown?.total || 0)}</strong>
+                  <strong>
+                    {money(hasAiPrice(generatedQuote?.insights) ? generatedQuote.insights.recommendedPrice : generatedQuote?.breakdown?.total || 0)}
+                  </strong>
                 </td>
               </tr>
             </tfoot>
           </table>
+
+          <AiRiskPanel insights={generatedQuote?.insights} />
 
           {/* AI Agent Verification Seal */}
           <div className="pdf-seal-box">

@@ -3,7 +3,8 @@
 M1 works out the route and distance, M2 predicts a price and M3 scores the
 risk. That analysis is the same whoever carries the freight. What differs is
 each company's commercial terms, so each company prices the same work from its
-own rate card.
+own rate card, and the AI's recommended price for the lane (M2's prediction
+loaded for M3's risk) moves every company's freight rate by the same factor.
 
 This replaces the browser-side generator, where the three options were the
 platform's own total multiplied by 0.88, 1.00 and 1.05. Those were not offers:
@@ -16,6 +17,7 @@ from datetime import timedelta
 from django.utils import timezone
 
 from companies.models import CompanyRateCard, FreightCompany
+from quotes.insights import market_factor
 
 from .models import CompanyQuote
 
@@ -29,12 +31,16 @@ def _rate_card_for(company, mode):
     return None
 
 
-def price_offer(card, *, distance_km, weight_kg, transit_days, base_reference):
+def price_offer(card, *, distance_km, weight_kg, transit_days, base_reference, ai_factor=None):
     """Apply one rate card to one shipment's measurements.
 
     `base_reference` anchors the offer to the platform's own M1/M2 costing, so
     a company with a sparse rate card still produces a sane number rather than
     a near-zero one.
+
+    `ai_factor` is the AI's view of the lane (quotes.insights.market_factor).
+    It scales the line haul, the part of a freight price the market moves; the
+    company's fixed fees stay as its rate card sets them.
     """
     distance_km = float(distance_km or 0)
     weight_kg = float(weight_kg or 0)
@@ -44,6 +50,8 @@ def price_offer(card, *, distance_km, weight_kg, transit_days, base_reference):
         # No usable per-unit terms: fall back to the platform's costing so the
         # company still competes rather than quoting nothing.
         line_haul = float(base_reference or 0)
+    elif ai_factor:
+        line_haul *= ai_factor
 
     fuel = line_haul * (card.fuel_surcharge_pct / 100.0)
     total = (
@@ -84,6 +92,7 @@ def generate_company_quotes(quote, *, replace=False):
         existing.exclude(status="SELECTED").delete()
 
     mode = (shipment.transport_mode or "ocean").lower()
+    factor = market_factor(quote)
     offers = []
 
     for company in FreightCompany.objects.filter(status="ACTIVE"):
@@ -100,6 +109,7 @@ def generate_company_quotes(quote, *, replace=False):
             weight_kg=shipment.weight,
             transit_days=quote.estimated_transit_days,
             base_reference=quote.total_price,
+            ai_factor=factor,
         )
 
         offer, _ = CompanyQuote.objects.update_or_create(
@@ -111,6 +121,7 @@ def generate_company_quotes(quote, *, replace=False):
                 "service_name": company.service_name,
                 "risk_level": quote.overall_risk_level or "",
                 "risk_score": quote.overall_risk_score,
+                "ai_market_factor": factor,
                 "status": "AVAILABLE",
                 **priced,
             },

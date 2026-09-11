@@ -116,11 +116,11 @@ flowchart TD
 
 #### M4 End-to-End Process
 
-1. M1-M3 produce multiple company-specific quote options for a shipment.
+1. M1-M3 produce multiple company-specific quote options for a shipment. Each company prices the lane from its own rate card, and the AI market factor (the recommended price, which blends M2's prediction with M3's risk loading, against the rule price, held within 30% either way) moves every company's freight rate.
 2. The customer compares price, transit time, service, risk, and quote validity.
 3. The customer selects one company quote; the system stores a commercial snapshot.
 4. The selected company's authorized agent receives a verification request. Other companies cannot access it.
-5. The agent reviews shipment details, capacity, route, schedule, documents, commercial terms, risk context, and expiry.
+5. The agent reviews shipment details, capacity, route, schedule, documents, commercial terms, risk context, and expiry, with the AI analysis (standard, predicted and recommended price; weather, customs and route risk; alerts) shown above the checklist.
 6. The agent approves, modifies, rejects, requests information, or escalates the request.
 7. A modification requires a reason and creates a revision without overwriting the original quote.
 8. The customer accepts or rejects a revision, or supplies the requested information.

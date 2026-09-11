@@ -77,6 +77,13 @@ class CompanyQuote(models.Model):
     risk_level = models.CharField(max_length=16, blank=True, default="")
     risk_score = models.FloatField(null=True, blank=True)
 
+    # ---- The AI's view of the lane from M2 and M3 (quotes.insights) ---------
+    ai_market_factor = models.FloatField(
+        null=True,
+        blank=True,
+        help_text="AI recommended price as a share of the rule price, applied to line haul.",
+    )
+
     # ---- Validity. M4 forbids confirming an expired offer outright. ---------
     valid_until = models.DateTimeField(null=True, blank=True)
 

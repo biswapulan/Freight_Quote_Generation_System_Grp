@@ -2,6 +2,8 @@
 
 from rest_framework import serializers
 
+from quotes.insights import ai_insights
+
 from .models import (
     Booking,
     CompanyQuote,
@@ -40,6 +42,7 @@ class CompanyQuoteSerializer(serializers.ModelSerializer):
     isRecommended = serializers.BooleanField(source="is_recommended", read_only=True)
     riskLevel = serializers.CharField(source="risk_level", read_only=True)
     riskScore = serializers.FloatField(source="risk_score", read_only=True)
+    aiMarketFactor = serializers.FloatField(source="ai_market_factor", read_only=True)
     validUntil = serializers.DateTimeField(source="valid_until", read_only=True)
     isExpired = serializers.BooleanField(source="is_expired", read_only=True)
 
@@ -66,6 +69,7 @@ class CompanyQuoteSerializer(serializers.ModelSerializer):
             "isRecommended",
             "riskLevel",
             "riskScore",
+            "aiMarketFactor",
             "validUntil",
             "isExpired",
             "status",
@@ -201,6 +205,19 @@ class VerificationRequestSerializer(serializers.ModelSerializer):
     requestedInformation = serializers.JSONField(
         source="requested_information", read_only=True
     )
+    aiInsights = serializers.SerializerMethodField()
+
+    def get_aiInsights(self, obj):
+        # The checklist asks the agent to weigh the commercial terms and the
+        # weather, customs and route risk; this is the analysis behind them.
+        insights = ai_insights(obj.selection.quote)
+        if insights is not None:
+            offer = obj.selection.company_quote
+            factor = offer.ai_market_factor if offer else None
+            # Offers priced before the AI rate applied carry no factor. Say
+            # so, rather than claim an adjustment this offer never had.
+            insights["offerAdjustmentPct"] = round((factor - 1.0) * 100.0, 1) if factor else None
+        return insights
 
     class Meta:
         model = VerificationRequest
@@ -220,6 +237,7 @@ class VerificationRequestSerializer(serializers.ModelSerializer):
             "checks",
             "revisions",
             "requestedInformation",
+            "aiInsights",
             "created_at",
         ]
 

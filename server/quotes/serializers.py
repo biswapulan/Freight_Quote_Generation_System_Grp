@@ -1,5 +1,6 @@
 from rest_framework import serializers
 
+from .insights import ai_insights
 from .models import Quote, Shipment
 
 
@@ -88,6 +89,12 @@ class QuoteSerializer(serializers.ModelSerializer):
             "checklist_items": customs.get("checklist_items") or [],
         }
 
+    # ---- M2 price and M3 risk, in rupees, for the M4 screens ----
+    aiInsights = serializers.SerializerMethodField()
+
+    def get_aiInsights(self, obj):
+        return ai_insights(obj)
+
     # ---- Carrier selection & agent assignment ----
     selectedCarrier = serializers.CharField(source="selected_carrier", read_only=True)
     assignedAgentEmail = serializers.CharField(source="assigned_agent_email", read_only=True)
@@ -98,6 +105,7 @@ class QuoteSerializer(serializers.ModelSerializer):
         model = Quote
         fields = [
             "customsSummary",
+            "aiInsights",
             "selectedCarrier",
             "selected_carrier",
             "assignedAgentEmail",
