@@ -291,7 +291,8 @@ export default function CustomerSelections() {
                           {money(s.pendingRevision.revisedTotalPrice, s.pendingRevision.currency)}
                         </span>
                         <span className="csel-compare-sub">
-                          {s.pendingRevision.revisedTransitDays} days
+                          {/* A price-only revision keeps the original transit time. */}
+                          {s.pendingRevision.revisedTransitDays ?? s.pendingRevision.originalTransitDays} days
                         </span>
                       </div>
                       <span
