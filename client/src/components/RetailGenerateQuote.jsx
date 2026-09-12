@@ -25,6 +25,7 @@ import {
   calculateGeoDistanceKm,
   CATCHMENT_RADIUS_KM,
 } from "../utils/geoProximity";
+import { alertText } from "../utils/alerts";
 import "./RetailGenerateQuote.css";
 
 // Fix default Leaflet marker icons (Vite asset URL issue)
@@ -576,8 +577,8 @@ function AiRiskPanel({ insights }) {
       {risk.summary && <p style={{ fontSize: 12, color: "#475569", margin: "8px 0 0" }}>{risk.summary}</p>}
       {insights.alerts?.length > 0 && (
         <ul style={{ margin: "6px 0 0", paddingLeft: 18, fontSize: 12, color: "#92400e" }}>
-          {insights.alerts.map((alert) => (
-            <li key={alert}>{alert}</li>
+          {insights.alerts.map((alert, i) => (
+            <li key={i}>{alertText(alert)}</li>
           ))}
         </ul>
       )}

@@ -25,6 +25,7 @@ import {
   submitVerificationDecision,
 } from "../api/workflow";
 import DocumentViewer from "./DocumentViewer";
+import { alertText } from "../utils/alerts";
 import "./CompanyAgentPortal.css";
 
 /**
@@ -1004,8 +1005,8 @@ function AiAnalysis({ insights }) {
       {risk.summary && <p className="cap-ai-line">{risk.summary}</p>}
       {insights.alerts?.length > 0 && (
         <ul className="cap-ai-alerts">
-          {insights.alerts.map((alert) => (
-            <li key={alert}>{alert}</li>
+          {insights.alerts.map((alert, i) => (
+            <li key={i}>{alertText(alert)}</li>
           ))}
         </ul>
       )}

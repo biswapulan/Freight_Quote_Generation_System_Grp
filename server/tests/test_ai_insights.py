@@ -106,6 +106,41 @@ def test_insights_carry_the_risk_and_its_alerts():
     assert any("Commercial Invoice" in alert for alert in insights["alerts"])
 
 
+def test_weather_alert_records_reach_the_screens_as_sentences():
+    """A swell or storm alert arrives as a record; drawn as-is it crashed the quote screen."""
+    analysis = {
+        **ANALYSIS,
+        "weather": {
+            "risk_score": 64.0,
+            "summary": "High swell on the lane.",
+            "alerts": [
+                {
+                    "alert_type": "HIGH_SWELL_ADVISORY",
+                    "severity": "HIGH",
+                    "title": "Severe Maritime Weather Alert on INNSA-SGSIN",
+                    "message": "Peak swell waves of 4.1m detected near the Andaman Sea.",
+                }
+            ],
+        },
+    }
+    quote = SimpleNamespace(
+        analysis=analysis,
+        ml_status="PREDICTED",
+        overall_risk_score=40.0,
+        overall_risk_level="MEDIUM",
+        weather_risk_score=64.0,
+        customs_risk_score=52.0,
+        route_risk_score=20.0,
+    )
+
+    alerts = ai_insights(quote)["alerts"]
+    assert all(isinstance(alert, str) for alert in alerts)
+    assert alerts[0] == (
+        "Severe Maritime Weather Alert on INNSA-SGSIN: "
+        "Peak swell waves of 4.1m detected near the Andaman Sea."
+    )
+
+
 def test_the_ai_factor_moves_line_haul_but_not_fixed_fees():
     card = SimpleNamespace(
         rate_per_km=10.0,

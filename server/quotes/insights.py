@@ -47,6 +47,17 @@ def market_factor(quote):
     return round(min(max(float(recommended) / float(rule), low), high), 4)
 
 
+def _alert_text(alert):
+    """One alert as a sentence, whether it arrived as text or as a record."""
+    if isinstance(alert, dict):
+        title = str(alert.get("title") or "").strip()
+        message = str(alert.get("message") or "").strip()
+        if title and message:
+            return f"{title}: {message}"
+        return title or message or str(alert.get("alert_type") or "").strip()
+    return str(alert or "").strip()
+
+
 def ai_insights(quote):
     """Prices in rupees, risk scores and alerts for one quote, or None."""
     pricing = _section(quote, "pricing")
@@ -71,7 +82,10 @@ def ai_insights(quote):
         if rate and breakdown.get(field) is not None
     ]
 
-    alerts = list(weather.get("alerts") or [])
+    # Weather alerts arrive as records ({alert_type, severity, title,
+    # message}). The screens show sentences, and a record drawn as text
+    # crashed the quote screen whenever the lane had a swell or storm alert.
+    alerts = [text for text in map(_alert_text, weather.get("alerts") or []) if text]
     if weather.get("has_storm"):
         alerts.append("Storm activity is forecast on the route.")
     if customs.get("is_prohibited"):

@@ -15,6 +15,7 @@ import {
   verifyShipmentDocument,
 } from "../api/workflow";
 import DocumentViewer from "./DocumentViewer";
+import { alertText } from "../utils/alerts";
 import "./CustomsClearanceDesk.css";
 
 /**
@@ -314,8 +315,8 @@ function Clearance({ row, open, canDecide, onToggle, reason, setReason, busy, on
       {alerts.length > 0 && (
         <ul className="ccd-alerts">
           {alerts.map((alert, i) => (
-            <li key={`${i}-${alert}`}>
-              <AlertTriangle size={13} /> {alert}
+            <li key={i}>
+              <AlertTriangle size={13} /> {alertText(alert)}
             </li>
           ))}
         </ul>
