@@ -124,14 +124,19 @@ flowchart TD
 6. The agent approves, modifies, rejects, requests information, or escalates the request.
 7. A modification requires a reason and creates a revision without overwriting the original quote.
 8. The customer accepts or rejects a revision, or supplies the requested information.
-9. An approved request creates a booking reference; a rejection allows the customer to select another quote.
-10. Notifications, status history, and audit records preserve the complete workflow.
+9. An approved request goes to customs. A customs officer checks the consignment, its documents and M3's customs risk, then clears it or rejects it with a reason.
+10. Once customs clears it, the customer makes the final decision: confirming creates the booking reference, declining closes the request. A rejection by the company or by customs, or a declined booking, lets the customer select another quote.
+11. Notifications, status history, and audit records preserve the complete workflow.
 
 #### M4 Status Lifecycle
 
 ```text
 QUOTE_OPTIONS_AVAILABLE -> QUOTE_SELECTED -> PENDING_COMPANY_VERIFICATION
--> UNDER_VERIFICATION -> APPROVED -> BOOKING_CONFIRMED
+-> UNDER_VERIFICATION -> APPROVED -> PENDING_CUSTOMS_REVIEW
+-> CUSTOMS_CLEARED -> BOOKING_CONFIRMED (the customer confirms)
+
+PENDING_CUSTOMS_REVIEW -> CUSTOMS_REJECTED -> RESELECT_QUOTE (customs rejects, with a reason)
+CUSTOMS_CLEARED -> RESELECT_QUOTE (the customer declines the booking)
 
 UNDER_VERIFICATION -> REVISION_PENDING_CUSTOMER -> REVISION_ACCEPTED -> APPROVED
 UNDER_VERIFICATION -> AWAITING_CUSTOMER_INFO -> UNDER_VERIFICATION
@@ -143,17 +148,18 @@ UNDER_VERIFICATION -> ESCALATED -> APPROVED / REVISION_PENDING_CUSTOMER / REJECT
 
 | Role | Responsibility | Data Access |
 |---|---|---|
-| Customer | Compare and select quotes, respond to revisions, attach documents when a company asks for information, view bookings | Own shipments, selections, and documents |
+| Customer | Compare and select quotes, respond to revisions, attach documents when a company asks for information, confirm or decline the booking once customs clears it, view bookings | Own shipments, selections, and documents |
 | Company Agent | Verify capacity, route, documents, risk, and commercial terms; approve, revise, reject, request information, or escalate | Only their company's requests, and documents for shipments that chose it |
 | Company Manager | Decide escalated requests. An agent's approval above the company's sign-off value, or of a high-risk shipment, goes to a manager automatically | Own company |
+| Customs Officer | Clear or reject each approved request on the Booking Clearances desk before the customer can book it; a rejection needs a reason | Approved requests with their shipment, documents, and customs risk; never a company's verification queue |
 | Platform Admin | Manage companies, agents, and each company's manager sign-off rule; monitor selections, verification, bookings, performance, and audit logs | Platform-wide, but views company requests without deciding them |
 | AI Services | Provide pricing, risk, weather, and customs context | Backend intelligence only; no final booking approval |
 
-Customs officers review trade documents on their own desk and have no access to company verification requests.
+Customs officers never see a company's verification queue. A request reaches them only once the company has approved it, and the customer is asked to confirm only once customs has cleared it.
 
 #### M4 Data Model
 
-`CompanyQuote` stores each provider's offer. `QuoteSelection` stores the customer's choice and frozen commercial terms. `VerificationRequest` owns the selected company's review queue. `VerificationCheck`, `QuoteRevision`, `Booking`, `StatusHistory`, and `Notification` preserve checklist results, revisions, final confirmation, auditability, and workflow alerts.
+`CompanyQuote` stores each provider's offer. `QuoteSelection` stores the customer's choice and frozen commercial terms. `VerificationRequest` owns the selected company's review queue. `CustomsClearance` records customs' decision on an approved request. `VerificationCheck`, `QuoteRevision`, `Booking`, `StatusHistory`, and `Notification` preserve checklist results, revisions, final confirmation, auditability, and workflow alerts.
 
 ---
 

@@ -393,6 +393,34 @@ export function cancelBooking(token, reference, reason) {
   });
 }
 
+/** The customer's last word once customs has cleared it: book it, or decline. */
+export function submitFinalDecision(token, reference, { decision, note }) {
+  return apiRequest(`/selections/${encodeURIComponent(reference)}/final-decision`, {
+    method: "POST",
+    token,
+    body: { decision, note },
+    timeoutMs: 20000,
+  });
+}
+
+/** Requests companies have approved, waiting for customs or already decided. */
+export function listCustomsClearances(token, { status } = {}) {
+  return apiRequest(
+    `/customs-clearances${status ? `?status=${encodeURIComponent(status)}` : ""}`,
+    { token, timeoutMs: 20000 },
+  );
+}
+
+/** Clear a shipment for booking, or reject it. A rejection needs a reason. */
+export function decideCustomsClearance(token, reference, { decision, reason }) {
+  return apiRequest(`/customs-clearances/${encodeURIComponent(reference)}/decision`, {
+    method: "POST",
+    token,
+    body: { decision, reason },
+    timeoutMs: 20000,
+  });
+}
+
 // ---------------------------------------------------------------------------
 // M4 administration: companies, agent mappings, monitoring and performance
 // ---------------------------------------------------------------------------

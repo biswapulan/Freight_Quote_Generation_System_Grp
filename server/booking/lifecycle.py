@@ -1,9 +1,10 @@
 """The M4 selection-to-booking state machine (milestone document section 11).
 
 M1-M3 end at a priced, risk-scored quote. M4 carries the customer's chosen
-company offer through that company's verification and out the other side as a
-booking, or as a revision the customer must accept, or as a rejection that
-sends them back to the other offers.
+company offer through that company's verification and customs clearance, and
+out the other side as a booking the customer confirmed, or as a revision the
+customer must accept, or as a rejection that sends them back to the other
+offers.
 
 Transitions are declared rather than implied, so an agent decision cannot skip
 verification, a booking cannot be confirmed straight from a selection, and a
@@ -27,6 +28,10 @@ REVISION_ACCEPTED = "REVISION_ACCEPTED"
 APPROVED = "APPROVED"
 REJECTED = "REJECTED"
 ESCALATED = "ESCALATED"
+# The company's approval goes to customs, and the customer confirms last.
+PENDING_CUSTOMS_REVIEW = "PENDING_CUSTOMS_REVIEW"
+CUSTOMS_CLEARED = "CUSTOMS_CLEARED"
+CUSTOMS_REJECTED = "CUSTOMS_REJECTED"
 BOOKING_CONFIRMED = "BOOKING_CONFIRMED"
 BOOKING_CANCELLED = "BOOKING_CANCELLED"
 RESELECT_QUOTE = "RESELECT_QUOTE"
@@ -42,6 +47,9 @@ STATUS_CHOICES = [
     (APPROVED, "Approved by company"),
     (REJECTED, "Rejected by company"),
     (ESCALATED, "Escalated for manager approval"),
+    (PENDING_CUSTOMS_REVIEW, "Pending customs clearance"),
+    (CUSTOMS_CLEARED, "Cleared by customs, awaiting the customer"),
+    (CUSTOMS_REJECTED, "Rejected by customs"),
     (BOOKING_CONFIRMED, "Booking confirmed"),
     (BOOKING_CANCELLED, "Booking cancelled"),
     (RESELECT_QUOTE, "Customer may select another option"),
@@ -69,10 +77,18 @@ ALLOWED_TRANSITIONS = {
     AWAITING_CUSTOMER_INFO: {UNDER_VERIFICATION, BOOKING_CANCELLED},
     # The customer either takes the revised terms or walks to another company.
     REVISION_PENDING_CUSTOMER: {REVISION_ACCEPTED, RESELECT_QUOTE, BOOKING_CANCELLED},
-    REVISION_ACCEPTED: {APPROVED, BOOKING_CONFIRMED},
+    # The company proposed the revised terms, so accepting them approves it.
+    REVISION_ACCEPTED: {APPROVED},
     # A manager either clears the escalation or the company declines it.
     ESCALATED: {APPROVED, REJECTED, REVISION_PENDING_CUSTOMER},
-    APPROVED: {BOOKING_CONFIRMED, BOOKING_CANCELLED},
+    # The company's approval is not a booking yet: customs checks the
+    # consignment first, and only then does the customer confirm.
+    APPROVED: {PENDING_CUSTOMS_REVIEW, BOOKING_CANCELLED},
+    PENDING_CUSTOMS_REVIEW: {CUSTOMS_CLEARED, CUSTOMS_REJECTED},
+    # Cleared: the customer books it, or declines and may choose another company.
+    CUSTOMS_CLEARED: {BOOKING_CONFIRMED, RESELECT_QUOTE},
+    # Customs closes this company's route for the shipment, not the shipment.
+    CUSTOMS_REJECTED: {RESELECT_QUOTE},
     # A rejection is not the end of the shipment, only of this company's part.
     REJECTED: {RESELECT_QUOTE},
     BOOKING_CONFIRMED: {BOOKING_CANCELLED},
@@ -84,7 +100,10 @@ ALLOWED_TRANSITIONS = {
 AGENT_ACTIONABLE = {PENDING_COMPANY_VERIFICATION, UNDER_VERIFICATION, ESCALATED}
 
 # Statuses where the ball is with the customer.
-CUSTOMER_ACTIONABLE = {AWAITING_CUSTOMER_INFO, REVISION_PENDING_CUSTOMER, APPROVED}
+CUSTOMER_ACTIONABLE = {AWAITING_CUSTOMER_INFO, REVISION_PENDING_CUSTOMER, CUSTOMS_CLEARED}
+
+# Statuses waiting on a customs officer.
+CUSTOMS_ACTIONABLE = {PENDING_CUSTOMS_REVIEW}
 
 
 def can_transition(current, target):

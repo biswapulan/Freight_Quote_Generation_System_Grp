@@ -7,6 +7,7 @@ from quotes.insights import ai_insights
 from .models import (
     Booking,
     CompanyQuote,
+    CustomsClearance,
     QuoteRevision,
     QuoteSelection,
     StatusHistory,
@@ -123,7 +124,24 @@ class QuoteSelectionSerializer(serializers.ModelSerializer):
         source="selected_transit_days", read_only=True
     )
     priceChanged = serializers.BooleanField(source="price_changed", read_only=True)
+    # What a booking would be for: the offer's price, which a revision moves.
+    agreedTotalPrice = serializers.FloatField(
+        source="company_quote.total_price", read_only=True
+    )
     isActive = serializers.BooleanField(source="is_active", read_only=True)
+    customs = serializers.SerializerMethodField()
+
+    def get_customs(self, obj):
+        clearance = getattr(obj, "customs_clearance", None)
+        if clearance is None:
+            return None
+        return {
+            "reference": clearance.reference,
+            "status": clearance.status,
+            "reason": clearance.reason,
+            "officer": clearance.officer_email,
+            "decidedAt": clearance.decided_at,
+        }
 
     class Meta:
         model = QuoteSelection
@@ -140,8 +158,10 @@ class QuoteSelectionSerializer(serializers.ModelSerializer):
             "selectedCurrency",
             "selectedTransitDays",
             "priceChanged",
+            "agreedTotalPrice",
             "status",
             "isActive",
+            "customs",
             "created_at",
         ]
 
@@ -189,6 +209,58 @@ class QuoteRevisionSerializer(serializers.ModelSerializer):
         ]
 
 
+def shipment_documents(selection):
+    """What the customer has uploaded for this selection's shipment."""
+    from customs.models import ShipmentDocument
+
+    docs = ShipmentDocument.objects.filter(
+        shipment_id=selection.shipment_id
+    ).order_by("-uploaded_at")
+    return [
+        {
+            "id": str(doc.id),
+            "documentType": doc.document_type,
+            "fileName": doc.file_name,
+            "fileUrl": doc.file_url,
+            "status": doc.verification_status,
+            "uploadedAt": doc.uploaded_at,
+        }
+        for doc in docs
+    ]
+
+
+def required_documents(selection):
+    """The papers customs requires on this lane, and whether each is on file."""
+    from customs.models import ShipmentDocument
+
+    quote = selection.quote
+    customs = ((quote.analysis or {}).get("customs") or {}) if quote else {}
+    names = [
+        item.get("item_name")
+        for item in customs.get("checklist_items") or []
+        if item.get("item_name")
+    ] or list(customs.get("missing_documents") or [])
+
+    def key(text):
+        return "".join(ch for ch in (text or "").lower() if ch.isalnum())
+
+    # Customers name uploads in their own words ("Bill of Lading" for
+    # "Bill of Lading / Sea Waybill (B/L)"), so match loosely.
+    uploaded = [
+        key(t)
+        for t in ShipmentDocument.objects.filter(
+            shipment_id=selection.shipment_id
+        ).values_list("document_type", flat=True)
+    ]
+    return [
+        {
+            "name": name,
+            "onFile": any(u and (u in key(name) or key(name) in u) for u in uploaded),
+        }
+        for name in names
+    ]
+
+
 class VerificationRequestSerializer(serializers.ModelSerializer):
     """What a company agent sees in their queue."""
 
@@ -226,22 +298,7 @@ class VerificationRequestSerializer(serializers.ModelSerializer):
     def get_documents(self, obj):
         # The DOCUMENTS check asks whether the paperwork is present, so the
         # agent sees what the customer has uploaded for this shipment.
-        from customs.models import ShipmentDocument
-
-        docs = ShipmentDocument.objects.filter(
-            shipment_id=obj.selection.shipment_id
-        ).order_by("-uploaded_at")
-        return [
-            {
-                "id": str(doc.id),
-                "documentType": doc.document_type,
-                "fileName": doc.file_name,
-                "fileUrl": doc.file_url,
-                "status": doc.verification_status,
-                "uploadedAt": doc.uploaded_at,
-            }
-            for doc in docs
-        ]
+        return shipment_documents(obj.selection)
 
     shipment = serializers.SerializerMethodField()
 
@@ -267,35 +324,7 @@ class VerificationRequestSerializer(serializers.ModelSerializer):
     requiredDocuments = serializers.SerializerMethodField()
 
     def get_requiredDocuments(self, obj):
-        """The papers customs requires on this lane, and whether each is on file."""
-        from customs.models import ShipmentDocument
-
-        quote = obj.selection.quote
-        customs = ((quote.analysis or {}).get("customs") or {}) if quote else {}
-        names = [
-            item.get("item_name")
-            for item in customs.get("checklist_items") or []
-            if item.get("item_name")
-        ] or list(customs.get("missing_documents") or [])
-
-        def key(text):
-            return "".join(ch for ch in (text or "").lower() if ch.isalnum())
-
-        # Customers name uploads in their own words ("Bill of Lading" for
-        # "Bill of Lading / Sea Waybill (B/L)"), so match loosely.
-        uploaded = [
-            key(t)
-            for t in ShipmentDocument.objects.filter(
-                shipment_id=obj.selection.shipment_id
-            ).values_list("document_type", flat=True)
-        ]
-        return [
-            {
-                "name": name,
-                "onFile": any(u and (u in key(name) or key(name) in u) for u in uploaded),
-            }
-            for name in names
-        ]
+        return required_documents(obj.selection)
 
     class Meta:
         model = VerificationRequest
@@ -378,4 +407,72 @@ class BookingSerializer(serializers.ModelSerializer):
             "cancelledAt",
             "cancelledBy",
             "cancellationReason",
+        ]
+
+
+class CustomsClearanceSerializer(serializers.ModelSerializer):
+    """What a customs officer sees: the consignment, its papers and its risk."""
+
+    officerEmail = serializers.EmailField(source="officer_email", read_only=True)
+    decidedAt = serializers.DateTimeField(source="decided_at", read_only=True)
+    selection = QuoteSelectionSerializer(read_only=True)
+    verification = serializers.SerializerMethodField()
+    shipment = serializers.SerializerMethodField()
+    documents = serializers.SerializerMethodField()
+    requiredDocuments = serializers.SerializerMethodField()
+    aiInsights = serializers.SerializerMethodField()
+
+    def get_verification(self, obj):
+        # Who at the company approved it, and why: the officer reads the
+        # approval they are being asked to follow.
+        request_obj = getattr(obj.selection, "verification", None)
+        if request_obj is None:
+            return None
+        return {
+            "reference": request_obj.reference,
+            "decidedBy": request_obj.decided_by_email,
+            "decisionReason": request_obj.decision_reason,
+            "decidedAt": request_obj.decided_at,
+        }
+
+    def get_shipment(self, obj):
+        shipment = obj.selection.shipment
+        return {
+            "id": shipment.id,
+            "origin": shipment.origin,
+            "destination": shipment.destination,
+            "cargoType": shipment.cargo_type,
+            "weightKg": shipment.weight,
+            "volumeCbm": shipment.volume,
+            "transportMode": shipment.transport_mode,
+            "containerType": shipment.container_type,
+            "hsCode": shipment.hs_code,
+        }
+
+    def get_documents(self, obj):
+        return shipment_documents(obj.selection)
+
+    def get_requiredDocuments(self, obj):
+        return required_documents(obj.selection)
+
+    def get_aiInsights(self, obj):
+        # M3's customs score and alerts for this lane and cargo.
+        return ai_insights(obj.selection.quote)
+
+    class Meta:
+        model = CustomsClearance
+        fields = [
+            "id",
+            "reference",
+            "status",
+            "reason",
+            "officerEmail",
+            "decidedAt",
+            "selection",
+            "verification",
+            "shipment",
+            "documents",
+            "requiredDocuments",
+            "aiInsights",
+            "created_at",
         ]

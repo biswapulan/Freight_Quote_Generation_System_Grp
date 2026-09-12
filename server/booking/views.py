@@ -21,6 +21,7 @@ from . import lifecycle
 from .models import (
     Booking,
     CompanyQuote,
+    CustomsClearance,
     QuoteSelection,
     VerificationCheck,
     VerificationRequest,
@@ -29,6 +30,7 @@ from .offer_engine import generate_company_quotes
 from .serializers import (
     BookingSerializer,
     CompanyQuoteSerializer,
+    CustomsClearanceSerializer,
     QuoteRevisionSerializer,
     QuoteSelectionSerializer,
     StatusHistorySerializer,
@@ -36,10 +38,14 @@ from .serializers import (
     VerificationRequestSerializer,
 )
 from .services import (
+    CUSTOMS_ROLES,
     BookingError,
     CustomerResponseError,
+    CustomsDecisionError,
     DecisionError,
     cancel_booking,
+    customer_final_decision,
+    decide_customs,
     move_selection,
     notify_customer_of_decision,
     notify_managers_of_escalation,
@@ -689,6 +695,152 @@ def _may_cancel_booking(booking, actor):
     return can_act_for_company(actor["email"], actor["role"], booking.company_id)
 
 
+class FinalDecisionView(APIView):
+    """POST /selections/<ref>/final-decision -> the customer books or declines.
+
+    The company has approved the request and customs has cleared it, so this
+    is the customer's last word: accepting creates the booking, declining
+    closes the request and leaves them free to choose another company.
+    """
+
+    authentication_classes = []
+    permission_classes = []
+
+    def post(self, request, reference):
+        actor = _actor(request)
+        selection = _selection_for_customer(reference, actor)
+        note = request.data.get("note", "")
+
+        try:
+            selection, booking = customer_final_decision(
+                selection,
+                decision=request.data.get("decision"),
+                actor=actor,
+                note=note,
+            )
+        except (
+            CustomerResponseError,
+            BookingError,
+            lifecycle.InvalidSelectionTransitionError,
+        ) as exc:
+            return Response({"error": str(exc)}, status=status.HTTP_409_CONFLICT)
+
+        audit_service.record(
+            actor_id=actor["id"] or actor["email"],
+            actor_role=actor["role"],
+            actor_email=actor["email"],
+            action="BOOKING_CONFIRMED_BY_CUSTOMER" if booking else "BOOKING_DECLINED_BY_CUSTOMER",
+            entity_type="QUOTE_SELECTION",
+            entity_id=selection.reference,
+            reason=note,
+            changes={"status": {"to": selection.status}},
+            context={"booking": booking.reference if booking else None},
+        )
+
+        selection.refresh_from_db()
+        payload = QuoteSelectionSerializer(selection).data
+        payload["booking"] = BookingSerializer(booking).data if booking else None
+        payload["canReselect"] = selection.status == lifecycle.RESELECT_QUOTE
+        return Response(payload, status=status.HTTP_200_OK)
+
+
+def _clearances():
+    return CustomsClearance.objects.select_related(
+        "selection",
+        "selection__company",
+        "selection__company_quote",
+        "selection__shipment",
+        "selection__quote",
+        "selection__verification",
+    )
+
+
+class CustomsClearanceQueueView(APIView):
+    """GET /customs-clearances -> requests companies approved, for customs to clear.
+
+    Customs is the platform's own desk, so an officer sees every company's
+    approved requests. The administrator may watch the queue; deciding is the
+    officer's alone.
+    """
+
+    authentication_classes = []
+    permission_classes = []
+
+    def get(self, request):
+        actor = _actor(request)
+        if actor["role"] not in CUSTOMS_ROLES and not is_platform_wide(actor["role"]):
+            raise PermissionDenied("Only customs officers review booking clearances.")
+
+        clearances = _clearances()
+        wanted = (request.query_params.get("status") or "").upper()
+        if wanted in ("PENDING", "CLEARED", "REJECTED"):
+            clearances = clearances.filter(status=wanted)
+
+        rows = CustomsClearanceSerializer(list(clearances[:200]), many=True).data
+        summary = {
+            key: CustomsClearance.objects.filter(status=key).count()
+            for key in ("PENDING", "CLEARED", "REJECTED")
+        }
+        return Response(
+            {
+                "count": len(rows),
+                "summary": summary,
+                "canDecide": actor["role"] in CUSTOMS_ROLES,
+                "results": rows,
+            },
+            status=status.HTTP_200_OK,
+        )
+
+
+class CustomsClearanceDecisionView(APIView):
+    """POST /customs-clearances/<ref>/decision -> clear or reject the shipment.
+
+    A rejection needs a reason, which the customer and the company both read.
+    """
+
+    authentication_classes = []
+    permission_classes = []
+
+    def post(self, request, reference):
+        actor = _actor(request)
+        clearance = _clearances().filter(reference=reference).first()
+        if not clearance:
+            raise NotFound("Customs clearance not found.")
+
+        if actor["role"] not in CUSTOMS_ROLES:
+            raise PermissionDenied("Only a customs officer may clear or reject a shipment.")
+
+        try:
+            clearance = decide_customs(
+                clearance,
+                decision=request.data.get("decision"),
+                actor=actor,
+                reason=request.data.get("reason", ""),
+            )
+        except (CustomsDecisionError, lifecycle.InvalidSelectionTransitionError) as exc:
+            return Response({"error": str(exc)}, status=status.HTTP_409_CONFLICT)
+
+        audit_service.record(
+            actor_id=actor["id"] or actor["email"],
+            actor_role=actor["role"],
+            actor_email=actor["email"],
+            action=f"CUSTOMS_{clearance.status}",
+            entity_type="CUSTOMS_CLEARANCE",
+            entity_id=clearance.reference,
+            reason=clearance.reason,
+            changes={"status": {"to": clearance.status}},
+            context={
+                "selection": clearance.selection.reference,
+                "company": clearance.selection.company.code,
+            },
+        )
+
+        clearance = _clearances().get(pk=clearance.pk)
+        return Response(
+            CustomsClearanceSerializer(clearance).data, status=status.HTTP_200_OK
+        )
+
+
 class AdminSelectionsView(APIView):
     """GET /admin/selections -> every customer selection on the platform.
 
@@ -745,11 +897,15 @@ class AdminSelectionsView(APIView):
             "total": len(rows),
             "awaitingCompany": sum(1 for r in rows if r["awaitingCompany"]),
             "awaitingCustomer": sum(1 for r in rows if r["awaitingCustomer"]),
+            "withCustoms": sum(
+                1 for r in rows if r["status"] in lifecycle.CUSTOMS_ACTIONABLE
+            ),
             "booked": sum(1 for r in rows if r["status"] == lifecycle.BOOKING_CONFIRMED),
             "lost": sum(
                 1
                 for r in rows
-                if r["status"] in (lifecycle.REJECTED, lifecycle.RESELECT_QUOTE)
+                if r["status"]
+                in (lifecycle.REJECTED, lifecycle.CUSTOMS_REJECTED, lifecycle.RESELECT_QUOTE)
             ),
         }
 

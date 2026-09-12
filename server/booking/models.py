@@ -534,3 +534,48 @@ class Booking(models.Model):
         else:
             nxt = 10001
         return f"{prefix}{nxt}"
+
+
+class CustomsClearance(models.Model):
+    """Customs' check on a request the company has approved.
+
+    The company's approval says it can carry the shipment; customs says whether
+    the goods may move. Only once customs clears it is the customer asked to
+    confirm, so a booking is never made for a consignment customs has not seen.
+    """
+
+    STATUS_CHOICES = [
+        ("PENDING", "Waiting for customs"),
+        ("CLEARED", "Cleared"),
+        ("REJECTED", "Rejected"),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    reference = models.CharField(max_length=32, unique=True, db_index=True)
+
+    selection = models.OneToOneField(
+        QuoteSelection, on_delete=models.CASCADE, related_name="customs_clearance"
+    )
+    status = models.CharField(
+        max_length=16, choices=STATUS_CHOICES, default="PENDING", db_index=True
+    )
+    officer_email = models.EmailField(blank=True, default="")
+    # Why customs rejected it, or the officer's note on a clearance. The
+    # customer and the company both read it.
+    reason = models.TextField(blank=True, default="")
+    decided_at = models.DateTimeField(null=True, blank=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "customs_clearances"
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.reference} {self.selection.reference} [{self.status}]"
+
+    def save(self, *args, **kwargs):
+        if not self.reference:
+            self.reference = f"CUS-{uuid.uuid4().hex[:8].upper()}"
+        super().save(*args, **kwargs)

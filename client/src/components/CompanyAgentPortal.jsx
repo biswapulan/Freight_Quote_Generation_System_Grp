@@ -50,6 +50,9 @@ const STATUS_LABELS = {
   APPROVED: "Approved",
   REJECTED: "Rejected",
   ESCALATED: "Escalated",
+  PENDING_CUSTOMS_REVIEW: "With customs",
+  CUSTOMS_CLEARED: "Cleared, customer deciding",
+  CUSTOMS_REJECTED: "Rejected by customs",
   BOOKING_CONFIRMED: "Booked",
   BOOKING_CANCELLED: "Cancelled",
   RESELECT_QUOTE: "Customer moved on",
@@ -66,6 +69,9 @@ const STATUS_TONE = {
   REJECTED: "bad",
   BOOKING_CANCELLED: "bad",
   ESCALATED: "warn",
+  PENDING_CUSTOMS_REVIEW: "active",
+  CUSTOMS_CLEARED: "ok",
+  CUSTOMS_REJECTED: "bad",
   RESELECT_QUOTE: "muted",
 };
 
@@ -153,7 +159,8 @@ export default function CompanyAgentPortal({ initialTab = "incoming" }) {
       ["AWAITING_CUSTOMER_INFO", "REVISION_PENDING_CUSTOMER"].includes(r.status),
     );
     const settled = requests.filter((r) =>
-      ["APPROVED", "REJECTED", "REVISION_ACCEPTED", "BOOKING_CONFIRMED",
+      ["APPROVED", "REJECTED", "REVISION_ACCEPTED", "PENDING_CUSTOMS_REVIEW",
+       "CUSTOMS_CLEARED", "CUSTOMS_REJECTED", "BOOKING_CONFIRMED",
        "BOOKING_CANCELLED", "RESELECT_QUOTE"].includes(r.status),
     );
     return { incoming, verifying, manager, waiting, settled };
@@ -172,7 +179,8 @@ export default function CompanyAgentPortal({ initialTab = "incoming" }) {
       incoming: buckets.incoming.length,
       verifying: buckets.verifying.length,
       approvedToday: decidedToday.filter((r) =>
-        ["APPROVED", "BOOKING_CONFIRMED"].includes(r.status),
+        ["APPROVED", "PENDING_CUSTOMS_REVIEW", "CUSTOMS_CLEARED", "CUSTOMS_REJECTED",
+         "BOOKING_CONFIRMED"].includes(r.status),
       ).length,
       rejectedToday: decidedToday.filter((r) => r.status === "REJECTED").length,
       overdue: requests.filter((r) => r.isOverdue).length,
@@ -288,6 +296,8 @@ export default function CompanyAgentPortal({ initialTab = "incoming" }) {
         text:
           updated.status === "ESCALATED" && decisionAction !== "ESCALATE"
             ? "This needs a manager, so it has gone to your company's manager for approval. The customer has been told it is under review."
+            : updated.status === "PENDING_CUSTOMS_REVIEW"
+            ? "Approved and sent to customs. Once customs clears it, the customer confirms the booking."
             : `Recorded as ${STATUS_LABELS[updated.status] || updated.status}. The customer has been told.`,
       });
       load();

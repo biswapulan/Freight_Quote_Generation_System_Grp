@@ -15,7 +15,13 @@ from rest_framework.test import APIClient
 
 from accounts.tokens import create_token
 from booking import lifecycle
-from booking.models import Booking, CompanyQuote, QuoteRevision, QuoteSelection
+from booking.models import (
+    Booking,
+    CompanyQuote,
+    CustomsClearance,
+    QuoteRevision,
+    QuoteSelection,
+)
 from companies.models import CompanyAgent, CompanyRateCard, FreightCompany
 
 SHIPMENT = {
@@ -83,6 +89,7 @@ class TestM4BookingScenarios:
             "CUST-M4-2", "customer", "someone.else@acme.example"
         )
         self.admin = _headers("ADMIN-M4", "admin", "admin@freightai.com")
+        self.customs = _headers("CUSTOMS-M4", "customs", "customs@freightai.com")
 
         # Two companies so isolation can actually be tested: A must never see B.
         self.company_a = _company(
@@ -150,6 +157,25 @@ class TestM4BookingScenarios:
             **headers,
         )
 
+    def _book(self, selection_ref):
+        """Customs clears the approved request and the customer confirms it."""
+        clearance = CustomsClearance.objects.get(selection__reference=selection_ref)
+        cleared = self.client.post(
+            f"/api/customs-clearances/{clearance.reference}/decision",
+            {"decision": "CLEAR"},
+            format="json",
+            **self.customs,
+        )
+        assert cleared.status_code == 200, cleared.data
+        booked = self.client.post(
+            f"/api/selections/{selection_ref}/final-decision",
+            {"decision": "ACCEPT"},
+            format="json",
+            **self.customer,
+        )
+        assert booked.status_code == 200, booked.data
+        return booked
+
     # -- 1. Customer selects valid quote -> selection and company stored -----
 
     def test_01_customer_selects_valid_quote(self):
@@ -215,6 +241,13 @@ class TestM4BookingScenarios:
         assert response.status_code == 200, response.data
 
         stored = QuoteSelection.objects.get(reference=selection["reference"])
+        # The approval starts it, but a booking needs customs to clear it and
+        # the customer to confirm it, so there is none yet.
+        assert stored.status == lifecycle.PENDING_CUSTOMS_REVIEW
+        assert not Booking.objects.filter(selection=stored).exists()
+
+        self._book(selection["reference"])
+        stored.refresh_from_db()
         assert stored.status == lifecycle.BOOKING_CONFIRMED
 
         booking = Booking.objects.get(selection=stored)
@@ -286,6 +319,10 @@ class TestM4BookingScenarios:
         )
         assert response.status_code == 200, response.data
 
+        stored.refresh_from_db()
+        assert stored.status == lifecycle.PENDING_CUSTOMS_REVIEW
+
+        self._book(selection["reference"])
         stored.refresh_from_db()
         assert stored.status == lifecycle.BOOKING_CONFIRMED
 
@@ -461,6 +498,7 @@ class TestM4BookingScenarios:
             {"action": "APPROVE", "reason": "Confirmed."},
             self.agent_b,
         )
+        self._book(selection["reference"])
         booking = Booking.objects.get(selection__reference=selection["reference"])
 
         # A different customer, and a different company's agent, are both out.
@@ -498,6 +536,7 @@ class TestM4BookingScenarios:
             {"action": "APPROVE", "reason": "Confirmed."},
             self.agent_b,
         )
+        self._book(selection["reference"])
         booking = Booking.objects.get(selection__reference=selection["reference"])
 
         response = self.client.post(
@@ -530,6 +569,11 @@ class TestM4BookingScenarios:
         assert response.status_code == 200, response.data
 
         stored = QuoteSelection.objects.get(reference=selection["reference"])
+        assert stored.status == lifecycle.PENDING_CUSTOMS_REVIEW
+
+        # Customs' decision and the customer's confirmation survive it too.
+        self._book(selection["reference"])
+        stored.refresh_from_db()
         assert stored.status == lifecycle.BOOKING_CONFIRMED
         assert Booking.objects.filter(selection=stored).exists()
 
@@ -563,6 +607,11 @@ class TestM4BookingScenarios:
             verification["reference"],
             {"action": "APPROVE", "reason": "Confirmed."},
             self.agent_b,
+        )
+        self._book(
+            QuoteSelection.objects.get(
+                verification__reference=verification["reference"]
+            ).reference
         )
 
         response = self.client.get("/api/bookings", **self.customer)

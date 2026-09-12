@@ -7,6 +7,9 @@ from .views import (
     BookingCancelView,
     BookingDetailView,
     BookingListView,
+    CustomsClearanceDecisionView,
+    CustomsClearanceQueueView,
+    FinalDecisionView,
     MySelectionsView,
     ProvideInformationView,
     QuoteCompanyOptionsView,
@@ -104,6 +107,40 @@ urlpatterns += [
         "selections/<str:reference>/information/",
         ProvideInformationView.as_view(),
         name="selection-information-slash",
+    ),
+]
+
+urlpatterns += [
+    # The customer's last word, once the company approved and customs cleared.
+    path(
+        "selections/<str:reference>/final-decision",
+        FinalDecisionView.as_view(),
+        name="selection-final-decision",
+    ),
+    path(
+        "selections/<str:reference>/final-decision/",
+        FinalDecisionView.as_view(),
+        name="selection-final-decision-slash",
+    ),
+    path(
+        "customs-clearances",
+        CustomsClearanceQueueView.as_view(),
+        name="customs-clearances",
+    ),
+    path(
+        "customs-clearances/",
+        CustomsClearanceQueueView.as_view(),
+        name="customs-clearances-slash",
+    ),
+    path(
+        "customs-clearances/<str:reference>/decision",
+        CustomsClearanceDecisionView.as_view(),
+        name="customs-clearance-decision",
+    ),
+    path(
+        "customs-clearances/<str:reference>/decision/",
+        CustomsClearanceDecisionView.as_view(),
+        name="customs-clearance-decision-slash",
     ),
 ]
 

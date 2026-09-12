@@ -10,6 +10,7 @@ import logging
 from datetime import timedelta
 
 from django.db import transaction
+from django.db.models import Q
 from django.utils import timezone
 
 from companies.models import CompanyAgent
@@ -20,6 +21,7 @@ from . import lifecycle
 from .models import (
     Booking,
     CompanyQuote,
+    CustomsClearance,
     QuoteRevision,
     QuoteSelection,
     StatusHistory,
@@ -91,6 +93,11 @@ QUOTE_STATUS_FOR = {
     lifecycle.REVISION_PENDING_CUSTOMER: "SENT",
     lifecycle.REVISION_ACCEPTED: "APPROVED",
     lifecycle.APPROVED: "APPROVED",
+    # Approved by the company and now with customs.
+    lifecycle.PENDING_CUSTOMS_REVIEW: "APPROVED",
+    # Cleared by customs: the final quote is with the customer to accept.
+    lifecycle.CUSTOMS_CLEARED: "SENT",
+    lifecycle.CUSTOMS_REJECTED: "REJECTED",
     lifecycle.BOOKING_CONFIRMED: "ACCEPTED",
     lifecycle.REJECTED: "REJECTED",
     lifecycle.RESELECT_QUOTE: "REJECTED",
@@ -193,9 +200,12 @@ def create_selection(*, quote, company_quote, actor):
 
     # One live selection per shipment. An earlier one is stood down rather than
     # deleted, so the history of what the customer tried survives.
+    # A request customs rejected is closed even though its offer is not, so
+    # choosing that company again stands it down and starts a fresh one.
+    closed = sorted(lifecycle.TERMINAL | {lifecycle.CUSTOMS_REJECTED})
     superseded = QuoteSelection.objects.filter(
         shipment=quote.shipment, is_active=True
-    ).exclude(company_quote=company_quote)
+    ).exclude(Q(company_quote=company_quote) & ~Q(status__in=closed))
     for old in superseded:
         # Apply the move as well as recording it. Writing only the history line
         # left the status saying UNDER_VERIFICATION on a selection the customer
@@ -217,7 +227,7 @@ def create_selection(*, quote, company_quote, actor):
     # customer back into a dead end; they get a fresh selection instead.
     existing = (
         QuoteSelection.objects.filter(company_quote=company_quote)
-        .exclude(status__in=sorted(lifecycle.TERMINAL))
+        .exclude(status__in=closed)
         .order_by("-created_at")
         .first()
     )
@@ -507,14 +517,16 @@ def submit_decision(request_obj, *, action, actor, reason="", revision=None,
         selection, old=old, new=target, actor=actor, reason=reason, context=context
     )
 
-    # Document section 3 step 14: an approved request becomes a confirmed
-    # booking. The customer already consented by selecting, and by accepting
-    # any revision, so approval is the last gate.
+    # An approved request is not a booking yet. Customs clears the consignment
+    # first, and the customer then confirms or declines it.
     if target == lifecycle.APPROVED:
-        confirm_booking(
+        send_to_customs(
             selection,
             actor={"email": "system", "role": "system"},
-            note=f"Approved by {actor.get('email', 'the company')}.",
+            note=(
+                f"Approved by {actor.get('email', 'the company')}; sent to "
+                "customs for clearance."
+            ),
         )
         selection.refresh_from_db()
 
@@ -602,13 +614,14 @@ def notify_customer_of_decision(request_obj, revision=None):
     status_now = request_obj.status
     reason = request_obj.decision_reason
 
-    if status_now == lifecycle.APPROVED:
+    if status_now in (lifecycle.APPROVED, lifecycle.PENDING_CUSTOMS_REVIEW):
         title = f"{company} approved your shipment"
-        # Approval confirms the booking in the same step, so there is nothing
-        # left for the customer to do but note the reference.
+        # Approval sends the request to customs; the customer's turn comes
+        # once customs has cleared it.
         body = (
-            f"Your selected quote {ref} has been verified and approved, and your "
-            "booking is confirmed. The booking reference is under Selected Quotes."
+            f"{company} verified and approved {ref}. Customs is now checking the "
+            "consignment. Once it is cleared you confirm or decline the booking "
+            "in Selected Quotes."
         )
         severity = "SUCCESS"
     elif status_now == lifecycle.REVISION_PENDING_CUSTOMER and revision:
@@ -789,10 +802,13 @@ def respond_to_revision(selection, *, decision, actor, note=""):
             reason=f"Revised terms accepted by the customer ({revision.reference}).",
         )
 
-        confirm_booking(
+        send_to_customs(
             selection,
             actor={"email": "system", "role": "system"},
-            note=f"Revised terms accepted ({revision.reference}).",
+            note=(
+                f"Revised terms accepted ({revision.reference}); sent to customs "
+                "for clearance."
+            ),
         )
         selection.refresh_from_db()
 
@@ -802,7 +818,7 @@ def respond_to_revision(selection, *, decision, actor, note=""):
             (
                 f"The customer accepted {revision.currency} "
                 f"{revision.revised_total_price:,.0f}. The request is approved and "
-                "ready to be booked."
+                "has gone to customs for clearance."
             ),
             severity="SUCCESS",
         )
@@ -884,6 +900,184 @@ def provide_requested_information(selection, *, actor, note="", provided=None):
     return selection
 
 
+# --- Customs clearance and the customer's final word ------------------------
+#
+# The company's approval says it can carry the shipment. Customs then decides
+# whether the goods may move, and the customer has the last word on booking:
+# approved by the company, cleared by customs, confirmed by the customer.
+
+CUSTOMS_ROLES = ("customs", "customs_officer")
+
+
+class CustomsDecisionError(ValueError):
+    """A customs decision the workflow will not accept, with the reason."""
+
+
+def send_to_customs(selection, *, actor, note=""):
+    """Queue an approved request for customs clearance, and tell the desk."""
+    from notifications import service as notify
+
+    clearance, _ = CustomsClearance.objects.get_or_create(selection=selection)
+    move_selection(
+        selection,
+        lifecycle.PENDING_CUSTOMS_REVIEW,
+        actor=actor,
+        reason=note or "Sent to customs for clearance.",
+        context={"customs_reference": clearance.reference},
+    )
+
+    shipment = selection.shipment
+    for role in CUSTOMS_ROLES:
+        safe_notify(
+            notify.notify_role,
+            role,
+            f"Clearance needed: {clearance.reference}",
+            (
+                f"{selection.company.name} approved {shipment.origin} to "
+                f"{shipment.destination} ({shipment.cargo_type}, HS "
+                f"{shipment.hs_code or 'not given'}). Clear or reject it; the "
+                "customer cannot book until you do."
+            ),
+            category="CUSTOMS",
+            severity="WARNING",
+            entity_type="CUSTOMS_CLEARANCE",
+            entity_id=clearance.reference,
+            link="/dashboard/booking-clearances",
+        )
+    return clearance
+
+
+@transaction.atomic
+def decide_customs(clearance, *, decision, actor, reason=""):
+    """A customs officer clears the shipment or rejects it.
+
+    Clearing hands the request to the customer for the final decision. A
+    rejection needs a reason, which the customer and the company both read,
+    and leaves the customer free to choose another company.
+    """
+    decision = (decision or "").upper()
+    if decision not in ("CLEAR", "REJECT"):
+        raise CustomsDecisionError("Decision must be CLEAR or REJECT.")
+
+    reason = (reason or "").strip()
+    if decision == "REJECT" and not reason:
+        raise CustomsDecisionError(
+            "Give the reason for rejecting. The customer and the company both see it."
+        )
+
+    selection = clearance.selection
+    if clearance.status != "PENDING":
+        raise CustomsDecisionError(
+            f"{clearance.reference} was already {clearance.status.lower()} by "
+            f"{clearance.officer_email or 'another officer'}."
+        )
+    if selection.status != lifecycle.PENDING_CUSTOMS_REVIEW:
+        raise CustomsDecisionError(
+            f"This request is {selection.status}, not waiting for customs."
+        )
+
+    cleared = decision == "CLEAR"
+    clearance.status = "CLEARED" if cleared else "REJECTED"
+    clearance.officer_email = actor.get("email", "")
+    clearance.reason = reason
+    clearance.decided_at = timezone.now()
+    clearance.save(
+        update_fields=["status", "officer_email", "reason", "decided_at", "updated_at"]
+    )
+
+    move_selection(
+        selection,
+        lifecycle.CUSTOMS_CLEARED if cleared else lifecycle.CUSTOMS_REJECTED,
+        actor=actor,
+        reason=reason or "Cleared by customs.",
+        context={"customs_reference": clearance.reference},
+    )
+
+    from notifications import service as notify
+
+    company = selection.company.name
+    offer = selection.company_quote
+    if cleared:
+        title = f"Customs cleared {selection.reference}: confirm your booking"
+        body = (
+            f"{company} approved your shipment and customs has cleared it. "
+            f"Confirm the booking at {offer.currency} {offer.total_price:,.0f}, "
+            "or decline it, in Selected Quotes."
+            + (f" Officer's note: {reason}" if reason else "")
+        )
+    else:
+        title = f"Customs could not clear {selection.reference}"
+        body = f"Reason: {reason} You can choose another company's offer."
+    safe_notify(
+        notify.notify_user,
+        selection.customer_id,
+        title,
+        body,
+        category="CUSTOMS",
+        severity="SUCCESS" if cleared else "WARNING",
+        entity_type="QUOTE_SELECTION",
+        entity_id=str(selection.id),
+        link="/dashboard/selected-quotes",
+    )
+    _notify_company(
+        selection,
+        f"Customs {'cleared' if cleared else 'rejected'} {selection.reference}",
+        (
+            "The customer now confirms or declines the booking."
+            if cleared
+            else f"Customs rejected the shipment. Reason: {reason}"
+        ),
+        severity="INFO" if cleared else "WARNING",
+    )
+    return clearance
+
+
+@transaction.atomic
+def customer_final_decision(selection, *, decision, actor, note=""):
+    """The customer's last word on a cleared request: book it, or decline.
+
+    Returns the selection and its booking, which is None after a decline.
+    Declining does not cancel the shipment; the customer may choose another
+    company, as after any other rejection.
+    """
+    decision = (decision or "").upper()
+    if decision not in ("ACCEPT", "DECLINE"):
+        raise CustomerResponseError("Decision must be ACCEPT or DECLINE.")
+
+    if selection.status != lifecycle.CUSTOMS_CLEARED:
+        raise CustomerResponseError(
+            f"There is no booking waiting on your decision. This request is "
+            f"{selection.status}."
+        )
+
+    note = (note or "").strip()
+    if decision == "ACCEPT":
+        booking, _ = confirm_booking(
+            selection, actor=actor, note=note or "Customer confirmed the booking."
+        )
+        return selection, booking
+
+    move_selection(
+        selection,
+        lifecycle.RESELECT_QUOTE,
+        actor=actor,
+        reason=note or "Customer declined the booking.",
+    )
+    selection.is_active = False
+    selection.save(update_fields=["is_active", "updated_at"])
+
+    _notify_company(
+        selection,
+        f"Booking declined on {selection.reference}",
+        (
+            "The customer decided not to book after customs cleared it. "
+            f"Reason: {note or 'none given'}"
+        ),
+        severity="WARNING",
+    )
+    return selection, None
+
+
 # --- Booking (document section 3, step 14) ---------------------------------
 
 
@@ -893,10 +1087,11 @@ class BookingError(ValueError):
 
 @transaction.atomic
 def confirm_booking(selection, *, actor, note=""):
-    """Turn an approved selection into a confirmed booking.
+    """Turn a cleared selection into a confirmed booking.
 
-    Only an approved selection can become a booking. That is the milestone's
-    success definition: verification and any customer confirmation must have
+    Only a selection the company approved and customs cleared can become a
+    booking, and only when the customer confirms it. That is the milestone's
+    success definition: verification and customer confirmation must have
     happened first, so a booking can never appear straight off a selection.
     """
     existing = getattr(selection, "booking", None)
@@ -905,9 +1100,10 @@ def confirm_booking(selection, *, actor, note=""):
         # second reference for one shipment.
         return existing, False
 
-    if selection.status not in (lifecycle.APPROVED, lifecycle.REVISION_ACCEPTED):
+    if selection.status != lifecycle.CUSTOMS_CLEARED:
         raise BookingError(
-            f"Only an approved request can be booked. This one is {selection.status}."
+            "Only a request the company approved and customs cleared can be "
+            f"booked. This one is {selection.status}."
         )
 
     offer = selection.company_quote

@@ -26,6 +26,7 @@ import AdminMasterData from "./AdminMasterData";
 import M1RouteDashboard from "./M1RouteDashboard";
 import M3IntelligenceDashboard from "./M3IntelligenceDashboard";
 import CustomsOfficerPortal from "./CustomsOfficerPortal";
+import CustomsClearanceDesk from "./CustomsClearanceDesk";
 import CompanyAgentPortal from "./CompanyAgentPortal";
 import CustomerSelections from "./CustomerSelections";
 import AdminCompanyDesk from "./AdminCompanyDesk";
@@ -82,8 +83,11 @@ const AGENT_SECTIONS = [
   "Profile",
 ];
 
+// Booking Clearances is M4's customs step: shipments a company has approved,
+// which the customer cannot book until customs clears them.
 const CUSTOMS_SECTIONS = [
   "Dashboard",
+  "Booking Clearances",
   "Pending Reviews",
   "Assigned Shipments",
   "Document Verification",
@@ -308,6 +312,8 @@ export default function DashboardShell() {
               <RetailProfile />
             ) : activeItem.slug === "support" ? (
               <Support />
+            ) : activeItem.slug === "booking-clearances" ? (
+              <CustomsClearanceDesk />
             ) : (
               <CustomsOfficerPortal initialTab={activeItem.slug} />
             )

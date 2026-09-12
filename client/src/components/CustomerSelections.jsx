@@ -16,6 +16,7 @@ import {
   listMySelections,
   provideSelectionInformation,
   respondToRevision,
+  submitFinalDecision,
   uploadShipmentDocument,
 } from "../api/workflow";
 import "./CustomerSelections.css";
@@ -33,7 +34,8 @@ const STAGES = [
   { key: "QUOTE_SELECTED", label: "Selected" },
   { key: "PENDING_COMPANY_VERIFICATION", label: "Sent to company" },
   { key: "UNDER_VERIFICATION", label: "Being checked" },
-  { key: "APPROVED", label: "Approved" },
+  { key: "APPROVED", label: "Company approved" },
+  { key: "CUSTOMS_CLEARED", label: "Customs cleared" },
   { key: "BOOKING_CONFIRMED", label: "Booked" },
 ];
 
@@ -47,7 +49,12 @@ const EXPLAIN = {
   REVISION_PENDING_CUSTOMER:
     "The company has proposed different terms. Accept them, or choose another company.",
   REVISION_ACCEPTED: "You accepted the revised terms.",
-  APPROVED: "The company has approved your shipment.",
+  APPROVED: "The company has approved your shipment. It is going to customs.",
+  PENDING_CUSTOMS_REVIEW:
+    "The company approved it. Customs is now checking the consignment and its papers.",
+  CUSTOMS_CLEARED:
+    "Approved by the company and cleared by customs. Confirm the booking, or decline it.",
+  CUSTOMS_REJECTED: "Customs could not clear this shipment. You can choose another company.",
   REJECTED: "This company cannot carry the shipment. You can choose another.",
   ESCALATED: "The company is getting internal approval for this one.",
   BOOKING_CONFIRMED: "Confirmed. Your booking reference is below.",
@@ -56,6 +63,8 @@ const EXPLAIN = {
 };
 
 const TONE = {
+  CUSTOMS_CLEARED: "warn",
+  CUSTOMS_REJECTED: "bad",
   APPROVED: "ok",
   REVISION_ACCEPTED: "ok",
   BOOKING_CONFIRMED: "ok",
@@ -92,6 +101,8 @@ export default function CustomerSelections() {
   const [busy, setBusy] = useState(null);
 
   const [revisionFor, setRevisionFor] = useState(null);
+  // The cleared request the customer is booking or declining.
+  const [finalFor, setFinalFor] = useState(null);
   const [infoFor, setInfoFor] = useState(null);
   const [note, setNote] = useState("");
   const [files, setFiles] = useState([]);
@@ -143,7 +154,7 @@ export default function CustomerSelections() {
         type: decision === "ACCEPT" ? "success" : "info",
         text:
           decision === "ACCEPT"
-            ? "Revised terms accepted. Your booking is being confirmed."
+            ? "Revised terms accepted. The shipment now goes to customs for clearance."
             : "Declined. You can now choose another company for this shipment.",
       });
       setRevisionFor(null);
@@ -152,6 +163,35 @@ export default function CustomerSelections() {
       return res;
     } catch (err) {
       setNotice({ type: "error", text: err.message || "Could not record your response." });
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function answerFinal(decision) {
+    if (!finalFor || busy) return;
+    if (decision === "DECLINE" && !note.trim()) {
+      setNotice({ type: "error", text: "Tell the company why you are declining." });
+      return;
+    }
+    setBusy(finalFor.reference);
+    try {
+      const res = await submitFinalDecision(token, finalFor.reference, {
+        decision,
+        note: note.trim(),
+      });
+      setNotice({
+        type: decision === "ACCEPT" ? "success" : "info",
+        text:
+          decision === "ACCEPT"
+            ? `Booked. Your booking reference is ${res.booking?.reference || "shown below"}.`
+            : "Declined. You can now choose another company for this shipment.",
+      });
+      setFinalFor(null);
+      setNote("");
+      await load();
+    } catch (err) {
+      setNotice({ type: "error", text: err.message || "Could not record your decision." });
     } finally {
       setBusy(null);
     }
@@ -264,6 +304,7 @@ export default function CustomerSelections() {
                   <Term label="Transit" value={`${s.selectedTransitDays ?? "—"} days`} />
                   <Term label="Shipment" value={s.shipmentId} />
                   <Term label="Quote" value={s.quoteId} />
+                  {s.customs && <Term label="Customs" value={s.customs.reference} />}
                   {s.priceChanged && (
                     <Term label="Agreed after revision" value="see below" tone="warn" />
                   )}
@@ -337,6 +378,34 @@ export default function CustomerSelections() {
                   </div>
                 )}
 
+                {s.customs?.reason && (
+                  <p className="csel-customs-note">
+                    <strong>Customs:</strong> {s.customs.reason}
+                  </p>
+                )}
+
+                {s.status === "CUSTOMS_CLEARED" && (
+                  <div className="csel-final">
+                    <div>
+                      <strong>Approved by {s.companyName} and cleared by customs</strong>
+                      <span className="csel-compare-sub">
+                        Book it at {money(s.agreedTotalPrice, s.selectedCurrency)}, or decline
+                        and choose another company.
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      className="csel-primary"
+                      onClick={() => {
+                        setFinalFor(s);
+                        setNote("");
+                      }}
+                    >
+                      Make your decision
+                    </button>
+                  </div>
+                )}
+
                 {booking && (
                   <div className="csel-booking">
                     <ShieldCheck size={16} />
@@ -350,7 +419,7 @@ export default function CustomerSelections() {
                   </div>
                 )}
 
-                {(s.status === "REJECTED" || s.status === "RESELECT_QUOTE") && (
+                {["REJECTED", "CUSTOMS_REJECTED", "RESELECT_QUOTE"].includes(s.status) && (
                   <Link
                     to="/dashboard/my-quotes"
                     className="csel-secondary"
@@ -370,8 +439,9 @@ export default function CustomerSelections() {
           onClose={() => setRevisionFor(null)}
         >
           <p className="csel-modal-text">
-            Accepting takes the new terms and confirms your booking. Declining does
-            not cancel your shipment: you can pick another company.
+            Accepting takes the new terms; customs then clears the shipment and you
+            confirm the booking. Declining does not cancel your shipment: you can pick
+            another company.
           </p>
           <div className="csel-compare boxed">
             <div>
@@ -413,6 +483,57 @@ export default function CustomerSelections() {
               onClick={() => answerRevision("ACCEPT")}
             >
               <CheckCircle2 size={15} /> Accept revised terms
+            </button>
+          </div>
+        </Modal>
+      )}
+
+      {finalFor && (
+        <Modal
+          title={`Book with ${finalFor.companyName}?`}
+          onClose={() => setFinalFor(null)}
+        >
+          <p className="csel-modal-text">
+            {finalFor.companyName} approved this shipment and customs has cleared it.
+            Confirming creates your booking. Declining does not cancel your shipment:
+            you can choose another company.
+          </p>
+          <div className="csel-compare boxed">
+            <div>
+              <span className="csel-compare-label">Booking price</span>
+              <span className="csel-compare-new">
+                {money(finalFor.agreedTotalPrice, finalFor.selectedCurrency)}
+              </span>
+              <span className="csel-compare-sub">
+                {finalFor.reference} · customs {finalFor.customs?.reference}
+              </span>
+            </div>
+          </div>
+          <label className="csel-field">
+            Note to the company (required if you decline)
+            <textarea
+              rows={3}
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              placeholder="Optional if confirming."
+            />
+          </label>
+          <div className="csel-modal-actions">
+            <button
+              type="button"
+              className="csel-decline"
+              disabled={Boolean(busy)}
+              onClick={() => answerFinal("DECLINE")}
+            >
+              <XCircle size={15} /> Decline
+            </button>
+            <button
+              type="button"
+              className="csel-primary"
+              disabled={Boolean(busy)}
+              onClick={() => answerFinal("ACCEPT")}
+            >
+              <CheckCircle2 size={15} /> Confirm booking
             </button>
           </div>
         </Modal>
@@ -481,7 +602,9 @@ export default function CustomerSelections() {
 function Progress({ status }) {
   // Off-path states get their own note rather than a misleading position on
   // the happy path.
-  const offPath = ["REJECTED", "BOOKING_CANCELLED", "RESELECT_QUOTE"].includes(status);
+  const offPath = ["REJECTED", "CUSTOMS_REJECTED", "BOOKING_CANCELLED", "RESELECT_QUOTE"].includes(
+    status,
+  );
   if (offPath) return null;
 
   const order = STAGES.map((s) => s.key);
@@ -491,6 +614,9 @@ function Progress({ status }) {
   }
   if (status === "REVISION_ACCEPTED" || status === "ESCALATED") {
     reached = order.indexOf("UNDER_VERIFICATION");
+  }
+  if (status === "PENDING_CUSTOMS_REVIEW") {
+    reached = order.indexOf("APPROVED");
   }
 
   return (

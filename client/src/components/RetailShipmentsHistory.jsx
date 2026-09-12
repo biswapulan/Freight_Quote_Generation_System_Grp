@@ -54,6 +54,9 @@ const M4_STAGE = {
   REVISION_PENDING_CUSTOMER: "Revised offer for you",
   REVISION_ACCEPTED: "Revision accepted",
   APPROVED: "Approved",
+  PENDING_CUSTOMS_REVIEW: "With customs",
+  CUSTOMS_CLEARED: "Cleared by customs, confirm your booking",
+  CUSTOMS_REJECTED: "Rejected by customs",
   BOOKING_CONFIRMED: "Booked",
   BOOKING_CANCELLED: "Booking cancelled",
   REJECTED: "Declined by the company",
@@ -854,6 +857,7 @@ export default function RetailShipmentsHistory({ viewMode = "quotes" }) {
                       ["Shipment", selectedQuote.shipmentId, selectedQuote.shipmentStatus],
                       ["Selection", selectedQuote.m4.selectionReference, selectedQuote.m4.status],
                       ["Verification", selectedQuote.m4.verificationReference, selectedQuote.m4.verificationStatus],
+                      ["Customs", selectedQuote.m4.customsReference, selectedQuote.m4.customsStatus],
                       ["Booking", selectedQuote.m4.bookingReference, selectedQuote.m4.bookingStatus],
                     ].flatMap(([label, ref, state], i) => {
                       const step = (

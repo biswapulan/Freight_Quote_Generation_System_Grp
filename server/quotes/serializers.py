@@ -114,6 +114,7 @@ class QuoteSerializer(serializers.ModelSerializer):
             return None
 
         request = getattr(selection, "verification", None)
+        clearance = getattr(selection, "customs_clearance", None)
         booking = getattr(selection, "booking", None)
         offer = selection.company_quote
         return {
@@ -122,6 +123,9 @@ class QuoteSerializer(serializers.ModelSerializer):
             "companyName": selection.company.name,
             "verificationReference": request.reference if request else None,
             "verificationStatus": request.status if request else None,
+            "customsReference": clearance.reference if clearance else None,
+            "customsStatus": clearance.status if clearance else None,
+            "customsReason": clearance.reason if clearance else "",
             "bookingReference": booking.reference if booking else None,
             "bookingStatus": booking.status if booking else None,
             "currency": selection.selected_currency,

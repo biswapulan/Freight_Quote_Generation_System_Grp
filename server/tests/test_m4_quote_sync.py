@@ -10,7 +10,7 @@ import pytest
 from rest_framework.test import APIClient
 
 from accounts.tokens import create_token
-from booking.models import Booking
+from booking.models import Booking, CustomsClearance
 from companies.models import CompanyAgent, CompanyRateCard, FreightCompany
 from quotes.models import Quote
 from quotes.serializers import QuoteSerializer
@@ -70,6 +70,7 @@ class TestQuoteFollowsTheCompanyWorkflow:
     def setup_method(self):
         self.client = APIClient()
         self.customer = _headers("CUST-S1", "customer", "owner@acme.example")
+        self.customs = _headers("CUSTOMS-S1", "customs", "customs@freightai.com")
         _company("alpha", "Alpha Line", "agent.alpha@x.example")
         _company("beta", "Beta Freight", "agent.beta@x.example")
         self.agent_a = _headers("AGT-A", "agent", "agent.alpha@x.example")
@@ -103,6 +104,25 @@ class TestQuoteFollowsTheCompanyWorkflow:
         assert response.status_code == 200, response.data
         return response
 
+    def _customs(self, selection_ref, decision="CLEAR", reason=""):
+        clearance = CustomsClearance.objects.get(selection__reference=selection_ref)
+        response = self.client.post(
+            f"/api/customs-clearances/{clearance.reference}/decision",
+            {"decision": decision, "reason": reason},
+            format="json",
+            **self.customs,
+        )
+        assert response.status_code == 200, response.data
+
+    def _final(self, selection_ref, decision="ACCEPT"):
+        response = self.client.post(
+            f"/api/selections/{selection_ref}/final-decision",
+            {"decision": decision},
+            format="json",
+            **self.customer,
+        )
+        assert response.status_code == 200, response.data
+
     def _state(self, quote_id):
         quote = Quote.objects.select_related("shipment").get(id=quote_id)
         return quote.status, quote.shipment.status
@@ -114,10 +134,28 @@ class TestQuoteFollowsTheCompanyWorkflow:
     def test_a_booking_closes_the_quote_and_shipment_and_links_every_id(self):
         quote_id, selection, verification = self._select()
         self._decide(verification["reference"], {"action": "APPROVE", "reason": "Space held."})
+        # Approved by the company and now with customs: not booked yet.
+        assert self._state(quote_id) == ("APPROVED", "QUOTED")
+
+        self._customs(selection["reference"], "CLEAR")
+        # Cleared: the final quote is with the customer, who alone may book it.
+        assert self._state(quote_id) == ("SENT", "QUOTED")
+        legacy = self.client.post(
+            f"/api/quotes/{quote_id}/decision",
+            {"decision": "ACCEPTED"},
+            format="json",
+            **self.customer,
+        )
+        assert legacy.status_code == 409
+
+        self._final(selection["reference"], "ACCEPT")
         assert self._state(quote_id) == ("ACCEPTED", "CLOSED")
 
         m4 = QuoteSerializer(Quote.objects.get(id=quote_id)).data["m4"]
         booking = Booking.objects.get(selection__reference=selection["reference"])
+        clearance = CustomsClearance.objects.get(selection__reference=selection["reference"])
+        assert m4["customsReference"] == clearance.reference
+        assert m4["customsStatus"] == "CLEARED"
         assert m4["selectionReference"] == selection["reference"]
         assert m4["verificationReference"] == verification["reference"]
         assert m4["bookingReference"] == booking.reference
@@ -141,6 +179,10 @@ class TestQuoteFollowsTheCompanyWorkflow:
             **self.customer,
         )
         assert accepted.status_code == 200, accepted.data
+        assert self._state(quote_id) == ("APPROVED", "QUOTED")
+
+        self._customs(selection["reference"], "CLEAR")
+        self._final(selection["reference"], "ACCEPT")
         assert self._state(quote_id) == ("ACCEPTED", "CLOSED")
 
     def test_a_rejection_shows_until_another_company_is_chosen(self):
@@ -156,6 +198,8 @@ class TestQuoteFollowsTheCompanyWorkflow:
     def test_cancelling_the_booking_cancels_the_shipment(self):
         quote_id, selection, verification = self._select()
         self._decide(verification["reference"], {"action": "APPROVE", "reason": "Space held."})
+        self._customs(selection["reference"], "CLEAR")
+        self._final(selection["reference"], "ACCEPT")
         booking = Booking.objects.get(selection__reference=selection["reference"])
 
         cancelled = self.client.post(
@@ -183,3 +227,17 @@ class TestQuoteFollowsTheCompanyWorkflow:
         assert response.status_code == 409
         assert "Selected Quotes" in response.data["error"]
         assert self._state(quote_id) == ("SENT", "QUOTED")
+
+    def test_a_customs_rejection_rejects_the_quote(self):
+        quote_id, selection, verification = self._select()
+        self._decide(verification["reference"], {"action": "APPROVE", "reason": "Space held."})
+        self._customs(selection["reference"], "REJECT", "Export licence missing.")
+        assert self._state(quote_id) == ("REJECTED", "QUOTED")
+
+    def test_declining_the_booking_rejects_the_quote(self):
+        quote_id, selection, verification = self._select()
+        self._decide(verification["reference"], {"action": "APPROVE", "reason": "Space held."})
+        self._customs(selection["reference"], "CLEAR")
+        self._final(selection["reference"], "DECLINE")
+        assert self._state(quote_id) == ("REJECTED", "QUOTED")
+        assert not Booking.objects.filter(selection__reference=selection["reference"]).exists()

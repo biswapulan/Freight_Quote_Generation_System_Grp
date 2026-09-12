@@ -1,0 +1,157 @@
+/* Customs' booking clearance desk (M4, between company approval and booking). */
+
+.ccd-page { padding: 26px 30px 40px; }
+
+.ccd-header {
+  display:flex; align-items:flex-start; justify-content:space-between;
+  gap:16px; flex-wrap:wrap; margin-bottom:18px;
+}
+.ccd-eyebrow { margin:0 0 3px; font-size:11.5px; color:#94a3b8; font-weight:600; }
+.ccd-title { margin:0; font-size:25px; font-weight:800; color:#0f172a; }
+.ccd-sub { margin:5px 0 0; font-size:13px; color:#64748b; max-width:640px; }
+
+.ccd-refresh {
+  display:inline-flex; align-items:center; gap:7px; padding:8px 14px;
+  border:1px solid #cbd5e1; border-radius:8px; background:#fff;
+  color:#475569; font-size:13px; font-weight:600; cursor:pointer;
+}
+.ccd-spin { animation: ccd-rotate 1s linear infinite; }
+@keyframes ccd-rotate { to { transform: rotate(360deg); } }
+
+.ccd-banner {
+  margin-bottom:14px; padding:11px 14px; border-radius:8px;
+  font-size:13px; font-weight:600;
+}
+.ccd-banner.error   { background:#fef2f2; border:1px solid #fecaca; color:#b91c1c; }
+.ccd-banner.success { background:#ecfdf5; border:1px solid #a7f3d0; color:#047857; }
+.ccd-banner.info    { background:#eff6ff; border:1px solid #bfdbfe; color:#1e40af; }
+
+.ccd-tabs { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:14px; }
+.ccd-tab {
+  display:inline-flex; align-items:center; gap:8px; padding:8px 14px;
+  border:1px solid #e2e8f0; border-radius:8px; background:#fff;
+  color:#475569; font-size:13px; font-weight:700; cursor:pointer;
+}
+.ccd-tab.active { background:#0f172a; border-color:#0f172a; color:#fff; }
+.ccd-count {
+  padding:1px 8px; border-radius:10px; background:#f1f5f9;
+  color:#475569; font-size:11px;
+}
+.ccd-tab.active .ccd-count { background:#334155; color:#fff; }
+
+.ccd-empty {
+  padding:44px 20px; text-align:center; color:#94a3b8; font-size:13.5px;
+  background:#fff; border:1px solid #e2e8f0; border-radius:10px;
+}
+
+.ccd-list { display:flex; flex-direction:column; gap:14px; }
+
+.ccd-card {
+  background:#fff; border:1px solid #e2e8f0; border-left-width:4px;
+  border-radius:10px; padding:18px 20px;
+}
+.ccd-card.ok     { border-left-color:#16a34a; }
+.ccd-card.bad    { border-left-color:#dc2626; }
+.ccd-card.active { border-left-color:#0284c7; }
+
+.ccd-card-head {
+  display:flex; align-items:flex-start; justify-content:space-between;
+  gap:12px; flex-wrap:wrap; margin-bottom:12px;
+}
+.ccd-lane { display:block; font-size:17px; font-weight:800; color:#0f172a; }
+.ccd-refs {
+  display:block; font-size:11.5px; color:#94a3b8; margin-top:2px;
+  overflow-wrap:anywhere;
+}
+
+.ccd-pill {
+  padding:4px 11px; border-radius:6px; font-size:11px; font-weight:800;
+  text-transform:uppercase; letter-spacing:.03em; white-space:nowrap;
+}
+.ccd-pill.ok     { background:#dcfce7; color:#15803d; }
+.ccd-pill.bad    { background:#fee2e2; color:#b91c1c; }
+.ccd-pill.active { background:#e0f2fe; color:#0369a1; }
+
+.ccd-terms {
+  display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr));
+  gap:10px; margin-bottom:12px;
+}
+.ccd-term { padding:10px 12px; background:#f8fafc; border-radius:8px; }
+.ccd-term.warn { background:#fffbeb; }
+.ccd-term.bad  { background:#fef2f2; }
+.ccd-term-label {
+  display:block; font-size:10.5px; font-weight:700; text-transform:uppercase;
+  letter-spacing:.04em; color:#94a3b8; margin-bottom:3px;
+}
+.ccd-term-value { font-size:14px; font-weight:800; color:#0f172a; }
+
+.ccd-approval {
+  display:flex; align-items:flex-start; gap:8px; margin:0 0 12px;
+  padding:10px 13px; background:#ecfdf5; border:1px solid #a7f3d0;
+  border-radius:8px; font-size:12.5px; color:#065f46; line-height:1.5;
+}
+.ccd-approval svg { flex-shrink:0; margin-top:2px; }
+
+.ccd-alerts {
+  list-style:none; margin:0 0 12px; padding:0;
+  display:flex; flex-direction:column; gap:5px;
+}
+.ccd-alerts li {
+  display:flex; align-items:flex-start; gap:7px; padding:7px 10px;
+  background:#fffbeb; border:1px solid #fde68a; border-radius:7px;
+  font-size:12.5px; color:#92400e;
+}
+.ccd-alerts svg { flex-shrink:0; margin-top:2px; }
+
+.ccd-outcome { margin:0 0 12px; padding:9px 12px; border-radius:8px; font-size:12.5px; }
+.ccd-outcome.ok  { background:#ecfdf5; color:#047857; }
+.ccd-outcome.bad { background:#fef2f2; color:#b91c1c; }
+
+.ccd-actions { display:flex; gap:8px; flex-wrap:wrap; }
+.ccd-primary, .ccd-secondary, .ccd-clear, .ccd-reject {
+  display:inline-flex; align-items:center; gap:7px; padding:9px 16px;
+  border-radius:8px; font-size:13px; font-weight:700; cursor:pointer;
+}
+.ccd-primary { border:0; background:#ea580c; color:#fff; }
+.ccd-primary:hover { background:#c2410c; }
+.ccd-secondary { border:1px solid #cbd5e1; background:#fff; color:#475569; }
+.ccd-clear { border:0; background:#16a34a; color:#fff; }
+.ccd-clear:hover { background:#15803d; }
+.ccd-reject { border:1px solid #fecaca; background:#fff; color:#dc2626; }
+.ccd-reject:hover { background:#fef2f2; }
+.ccd-clear:disabled, .ccd-reject:disabled { opacity:.6; cursor:not-allowed; }
+
+.ccd-detail { margin-top:14px; padding-top:14px; border-top:1px dashed #e2e8f0; }
+.ccd-detail-cols {
+  display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:16px;
+}
+.ccd-detail h3 {
+  margin:0 0 8px; font-size:11.5px; font-weight:800; text-transform:uppercase;
+  letter-spacing:.04em; color:#64748b;
+}
+.ccd-docs { list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:6px; }
+.ccd-docs li {
+  display:flex; align-items:center; gap:7px; flex-wrap:wrap;
+  font-size:13px; color:#0f172a;
+}
+.ccd-docs li.ok      { color:#047857; }
+.ccd-docs li.missing { color:#b91c1c; }
+.ccd-muted { margin:0; font-size:12.5px; color:#94a3b8; }
+.ccd-summary { margin-top:12px; line-height:1.55; }
+
+.ccd-decide { margin-top:14px; }
+.ccd-field {
+  display:flex; flex-direction:column; gap:6px; margin:0 0 12px;
+  font-size:12.5px; font-weight:700; color:#475569;
+}
+.ccd-field textarea {
+  padding:10px 12px; border:1px solid #cbd5e1; border-radius:8px;
+  font-size:13px; font-weight:400; font-family:inherit; color:#0f172a; resize:vertical;
+}
+.ccd-decide-actions { display:flex; gap:10px; justify-content:flex-end; flex-wrap:wrap; }
+
+@media (max-width:720px) {
+  .ccd-page { padding:18px 14px 30px; }
+  .ccd-decide-actions { flex-direction:column-reverse; }
+  .ccd-decide-actions button { width:100%; justify-content:center; }
+}

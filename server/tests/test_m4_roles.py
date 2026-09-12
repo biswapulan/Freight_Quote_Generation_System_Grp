@@ -3,7 +3,8 @@
 The milestone gives each role a job and a boundary: customers act on their own
 shipments, a company's agents on its requests, its managers on the special
 cases, the administrator manages and monitors, and nobody else sees a
-company's work. Customs officers are not an M4 role at all.
+company's work. Customs officers never see a company's requests; they clear
+the approved ones on their own desk before the customer books.
 """
 
 import pytest
@@ -124,6 +125,26 @@ class TestM4Roles:
     def _set_rule(self, company, **fields):
         FreightCompany.objects.filter(id=company.id).update(**fields)
 
+    def _book(self, selection_ref):
+        """Customs clears the approved request and the customer confirms it."""
+        from booking.models import CustomsClearance
+
+        clearance = CustomsClearance.objects.get(selection__reference=selection_ref)
+        cleared = self.client.post(
+            f"/api/customs-clearances/{clearance.reference}/decision",
+            {"decision": "CLEAR"},
+            format="json",
+            **self.customs,
+        )
+        assert cleared.status_code == 200, cleared.data
+        booked = self.client.post(
+            f"/api/selections/{selection_ref}/final-decision",
+            {"decision": "ACCEPT"},
+            format="json",
+            **self.customer,
+        )
+        assert booked.status_code == 200, booked.data
+
     # -- Routing ------------------------------------------------------------
 
     def test_routine_requests_go_to_an_agent_not_the_manager(self):
@@ -172,6 +193,7 @@ class TestM4Roles:
     def test_the_admin_sees_but_cannot_cancel_a_booking(self):
         _, selection, verification = self._selected()
         self._decide(verification["reference"], {"action": "APPROVE", "reason": "ok"}, self.agent_b)
+        self._book(selection["reference"])
         booking = Booking.objects.get(selection__reference=selection["reference"])
 
         assert self.client.get(f"/api/bookings/{booking.reference}", **self.admin).status_code == 200
@@ -215,7 +237,8 @@ class TestM4Roles:
         signed = self._decide(ref, {"action": "APPROVE", "reason": "Signed off."}, self.manager_b)
         assert signed.status_code == 200, signed.data
         stored = QuoteSelection.objects.get(reference=selection["reference"])
-        assert stored.status == lifecycle.BOOKING_CONFIRMED
+        # The manager's approval goes on to customs like any other.
+        assert stored.status == lifecycle.PENDING_CUSTOMS_REVIEW
 
     def test_the_manager_is_told_about_an_escalation(self):
         from notifications.models import Notification
@@ -225,12 +248,12 @@ class TestM4Roles:
         self._decide(verification["reference"], {"action": "APPROVE", "reason": "ok"}, self.agent_b)
         assert Notification.objects.filter(recipient_id="UID-mgr.bravo@x.example").exists()
 
-    def test_an_approval_under_the_limit_books_straight_away(self):
-        _, selection, verification = self._selected()
+    def test_an_approval_under_the_limit_goes_straight_to_customs(self):
+        _, _, verification = self._selected()
         self._set_rule(self.bravo, manager_approval_threshold=1e12)
         response = self._decide(verification["reference"], {"action": "APPROVE", "reason": "ok"}, self.agent_b)
         assert response.status_code == 200
-        assert Booking.objects.filter(selection__reference=selection["reference"]).exists()
+        assert response.data["status"] == lifecycle.PENDING_CUSTOMS_REVIEW
 
     def test_high_risk_shipments_need_the_manager_when_the_company_says_so(self):
         _, selection, verification = self._selected()
@@ -255,11 +278,11 @@ class TestM4Roles:
         assert "Escalate" in response.data["error"]
 
     def test_a_company_without_a_manager_is_not_stranded(self):
-        _, selection, verification = self._selected("Charlie Cargo")
+        _, _, verification = self._selected("Charlie Cargo")
         self._set_rule(self.charlie, manager_approval_threshold=1000.0)
         response = self._decide(verification["reference"], {"action": "APPROVE", "reason": "ok"}, self.agent_c)
         assert response.status_code == 200
-        assert Booking.objects.filter(selection__reference=selection["reference"]).exists()
+        assert response.data["status"] == lifecycle.PENDING_CUSTOMS_REVIEW
 
     # -- What the agent sees when they open a request (process step 7) ---------
 
