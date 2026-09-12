@@ -20,9 +20,11 @@ import {
   getVerificationRequest,
   listBookings,
   listVerificationRequests,
+  reviewDocumentForCompany,
   submitVerificationCheck,
   submitVerificationDecision,
 } from "../api/workflow";
+import DocumentViewer from "./DocumentViewer";
 import "./CompanyAgentPortal.css";
 
 /**
@@ -113,6 +115,8 @@ export default function CompanyAgentPortal({ initialTab = "incoming" }) {
   const [detail, setDetail] = useState(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [busy, setBusy] = useState(false);
+  // The document the agent has open for review.
+  const [viewingDoc, setViewingDoc] = useState(null);
 
   // Decision composer state
   const [decisionAction, setDecisionAction] = useState(null);
@@ -206,6 +210,23 @@ export default function CompanyAgentPortal({ initialTab = "incoming" }) {
     },
     [token],
   );
+
+  // The agent's verdict on one paper, given from the viewer once it is open.
+  // Errors reach the viewer, which shows them beside the buttons.
+  async function reviewDocument(doc, decision, remarks) {
+    const updated = await reviewDocumentForCompany(token, detail.reference, doc.id, {
+      decision,
+      remarks,
+    });
+    setDetail(updated);
+    setNotice({
+      type: decision === "VERIFIED" ? "success" : "info",
+      text:
+        decision === "VERIFIED"
+          ? `${doc.documentType} verified.`
+          : `${doc.documentType} rejected. The customer has been asked for a corrected copy.`,
+    });
+  }
 
   function resetComposer() {
     setDecisionAction(null);
@@ -415,6 +436,9 @@ export default function CompanyAgentPortal({ initialTab = "incoming" }) {
           infoItems={infoItems}
           setInfoItems={setInfoItems}
           onSend={sendDecision}
+          viewingDoc={viewingDoc}
+          setViewingDoc={setViewingDoc}
+          reviewDocument={reviewDocument}
         />
       )}
     </div>
@@ -572,6 +596,10 @@ function RequestDetail(props) {
     infoItems,
     setInfoItems,
     onSend,
+    // The document open for review, and the agent's verdict on it.
+    viewingDoc,
+    setViewingDoc,
+    reviewDocument,
   } = props;
 
   const sel = detail?.selection || {};
@@ -628,7 +656,27 @@ function RequestDetail(props) {
 
             <AiAnalysis insights={detail.aiInsights} />
 
-            <DocumentsOnFile documents={detail.documents} required={detail.requiredDocuments} />
+            <DocumentsOnFile
+              documents={detail.documents}
+              required={detail.requiredDocuments}
+              readiness={detail.documentReadiness}
+              canReview={Boolean(detail.canCheck)}
+              onOpen={setViewingDoc}
+            />
+
+            {viewingDoc && (
+              <DocumentViewer
+                document={viewingDoc}
+                reviewerLabel="Your company's review"
+                currentStatus={viewingDoc.companyStatus}
+                onDecide={
+                  detail.canCheck
+                    ? (decision, remarks) => reviewDocument(viewingDoc, decision, remarks)
+                    : null
+                }
+                onClose={() => setViewingDoc(null)}
+              />
+            )}
 
             {detail.requestedInformation?.length > 0 && (
               <div className="cap-note info">
@@ -727,6 +775,17 @@ function RequestDetail(props) {
             ) : (
               <section className="cap-decide">
                 <h3>Your decision</h3>
+                {detail.documentReadiness && !detail.documentReadiness.ready && (
+                  <div className="cap-note warn">
+                    <FileText size={15} />
+                    <div>
+                      <strong>Verify the documents first.</strong> Open each one under
+                      Documents and verify or reject it. Approving or revising needs every
+                      paper verified ({detail.documentReadiness.verified} of{" "}
+                      {detail.documentReadiness.required} so far).
+                    </div>
+                  </div>
+                )}
                 {escalated && (
                   <div className="cap-note warn">
                     <ShieldCheck size={15} />
@@ -751,6 +810,11 @@ function RequestDetail(props) {
                       key={value}
                       type="button"
                       className={`cap-action ${tone}${decisionAction === value ? " on" : ""}`}
+                      disabled={
+                        ["APPROVE", "MODIFY"].includes(value) &&
+                        Boolean(detail.documentReadiness) &&
+                        !detail.documentReadiness.ready
+                      }
                       onClick={() => setDecisionAction(value)}
                     >
                       {label}
@@ -1018,24 +1082,44 @@ function CommercialTerms({ offer }) {
 
 const DOC_TONE = { VERIFIED: "ok", REJECTED: "bad" };
 
-/** What the DOCUMENTS check is about: what customs requires, and what is on file. */
-function DocumentsOnFile({ documents, required }) {
+const REVIEW_WORDS = { VERIFIED: "verified", REJECTED: "rejected", PENDING: "awaiting review" };
+
+const REQUIRED_WORDS = {
+  VERIFIED: "verified by you",
+  REJECTED: "rejected",
+  PENDING: "on file · awaiting your review",
+  MISSING: "not uploaded",
+};
+
+/**
+ * The papers the DOCUMENTS check is about. Nothing here is verified by
+ * arriving: the agent opens each file and verifies or rejects it, and customs
+ * does its own review of the same papers later.
+ */
+function DocumentsOnFile({ documents, required, readiness, canReview, onOpen }) {
   if (!documents) return null;
   return (
     <section className="cap-docs">
       <h3>
         <FileText size={14} /> Documents
-        <span className="cap-block-hint">Document checks</span>
+        <span className="cap-block-hint">
+          {readiness
+            ? `${readiness.verified} of ${readiness.required} verified by your company`
+            : "Document checks"}
+        </span>
       </h3>
       {required?.length > 0 && (
         <ul className="cap-required">
-          {required.map((doc) => (
-            <li key={doc.name} className={doc.onFile ? "on" : "off"}>
-              {doc.onFile ? <CheckCircle2 size={13} /> : <AlertTriangle size={13} />}
-              <span>{doc.name}</span>
-              <em>{doc.onFile ? "on file" : "missing"}</em>
-            </li>
-          ))}
+          {required.map((doc) => {
+            const state = doc.onFile ? doc.companyStatus : "MISSING";
+            return (
+              <li key={doc.name} className={state === "VERIFIED" ? "on" : "off"}>
+                {state === "VERIFIED" ? <CheckCircle2 size={13} /> : <AlertTriangle size={13} />}
+                <span>{doc.name}</span>
+                <em>{REQUIRED_WORDS[state] || state.toLowerCase()}</em>
+              </li>
+            );
+          })}
         </ul>
       )}
       {documents.length === 0 ? (
@@ -1045,18 +1129,21 @@ function DocumentsOnFile({ documents, required }) {
       ) : (
         <ul>
           {documents.map((doc) => (
-            <li key={doc.id}>
+            <li key={doc.id} className="cap-doc-row">
               <span className="cap-doc-type">{doc.documentType}</span>
-              {doc.fileUrl ? (
-                <a href={doc.fileUrl} target="_blank" rel="noreferrer">
-                  {doc.fileName}
-                </a>
-              ) : (
-                <span>{doc.fileName}</span>
-              )}
-              <span className={`cap-pill ${DOC_TONE[doc.status] || "waiting"}`}>
-                {(doc.status || "pending").toLowerCase()}
+              <span className="cap-doc-file">{doc.fileName}</span>
+              <span className={`cap-pill ${DOC_TONE[doc.companyStatus] || "waiting"}`}>
+                Company: {REVIEW_WORDS[doc.companyStatus] || "awaiting review"}
               </span>
+              <span className={`cap-pill ${DOC_TONE[doc.customsStatus] || "waiting"}`}>
+                Customs: {REVIEW_WORDS[doc.customsStatus] || "awaiting review"}
+              </span>
+              <button type="button" className="cap-doc-open" onClick={() => onOpen(doc)}>
+                {canReview && doc.companyStatus !== "VERIFIED" ? "Open & review" : "Open"}
+              </button>
+              {doc.companyStatus === "REJECTED" && doc.companyRemarks && (
+                <span className="cap-doc-remarks">You rejected it: {doc.companyRemarks}</span>
+              )}
             </li>
           ))}
         </ul>

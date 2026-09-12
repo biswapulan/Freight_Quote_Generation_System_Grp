@@ -51,6 +51,7 @@ from .services import (
     notify_managers_of_escalation,
     provide_requested_information,
     respond_to_revision,
+    review_document_for_company,
     submit_decision,
 )
 
@@ -400,6 +401,70 @@ class VerificationDecisionView(APIView):
         payload = VerificationRequestSerializer(vr).data
         if revision:
             payload["createdRevision"] = QuoteRevisionSerializer(revision).data
+        payload.update(_viewer_rights(vr, actor))
+        return Response(payload, status=status.HTTP_200_OK)
+
+
+class DocumentReviewView(APIView):
+    """POST /verification-requests/<ref>/documents/<id>/review -> the agent's verdict on one paper.
+
+    Verifying is manual: the agent opens the file, which is recorded, and then
+    verifies or rejects it. Approving the request needs every paper verified.
+    """
+
+    authentication_classes = []
+    permission_classes = []
+
+    def post(self, request, reference, document_id):
+        from customs.models import ShipmentDocument
+
+        actor = _actor(request)
+        vr = (
+            VerificationRequest.objects.select_related(
+                "company", "selection", "selection__company", "selection__quote"
+            )
+            .filter(reference=reference)
+            .first()
+        )
+        if not vr:
+            raise NotFound("Verification request not found.")
+        if not can_act_for_company(actor["email"], actor["role"], vr.company_id):
+            raise PermissionDenied("Only this company's agents review its shipment documents.")
+
+        document = ShipmentDocument.objects.filter(
+            id=document_id, shipment_id=vr.selection.shipment_id
+        ).first()
+        if not document:
+            raise NotFound("That document is not on this shipment.")
+
+        try:
+            document = review_document_for_company(
+                document,
+                request_obj=vr,
+                decision=request.data.get("decision"),
+                actor=actor,
+                remarks=request.data.get("remarks", ""),
+            )
+        except DecisionError as exc:
+            return Response({"error": str(exc)}, status=status.HTTP_409_CONFLICT)
+
+        audit_service.record(
+            actor_id=actor["id"] or actor["email"],
+            actor_role=actor["role"],
+            actor_email=actor["email"],
+            action=f"COMPANY_DOCUMENT_{document.agent_status}",
+            entity_type="SHIPMENT_DOCUMENT",
+            entity_id=str(document.id),
+            reason=document.agent_remarks,
+            changes={"agent_status": {"to": document.agent_status}},
+            context={
+                "verification": vr.reference,
+                "company": vr.company.code,
+                "document_type": document.document_type,
+            },
+        )
+
+        payload = VerificationRequestSerializer(vr).data
         payload.update(_viewer_rights(vr, actor))
         return Response(payload, status=status.HTTP_200_OK)
 

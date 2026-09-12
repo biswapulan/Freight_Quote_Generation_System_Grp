@@ -281,6 +281,32 @@ export function verifyShipmentDocument(token, documentId, { decision, officerNam
   });
 }
 
+/**
+ * The uploaded file itself, for a reviewer to read. The server records that
+ * this reviewer opened it, and refuses a verdict from anyone who has not.
+ */
+export async function fetchShipmentDocumentFile(token, documentId) {
+  const headers = {};
+  if (token) headers.Authorization = `Bearer ${token}`;
+  const res = await fetch(
+    `${API_BASE}/v1/customs/documents/${encodeURIComponent(documentId)}/file/`,
+    { headers },
+  );
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || data.detail || "The document could not be opened.");
+  }
+  return res.blob();
+}
+
+/** The company agent's verdict on one document: VERIFIED, or REJECTED with remarks. */
+export function reviewDocumentForCompany(token, reference, documentId, { decision, remarks }) {
+  return apiRequest(
+    `/verification-requests/${encodeURIComponent(reference)}/documents/${encodeURIComponent(documentId)}/review`,
+    { method: "POST", token, body: { decision, remarks }, timeoutMs: 20000 },
+  );
+}
+
 export function signOffCustomsCheck(token, checkId, { decision, officerName, comments }) {
   return apiRequest(`/v1/customs/${encodeURIComponent(checkId)}/sign-off/`, {
     method: "POST",

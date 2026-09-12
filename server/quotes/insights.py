@@ -78,9 +78,22 @@ def ai_insights(quote):
         alerts.append("This cargo is prohibited on this lane.")
     elif customs.get("is_restricted"):
         alerts.append("This cargo is restricted on this lane and needs a licence.")
-    missing = customs.get("missing_documents") or []
+    # Read the uploads as they are now. The stored checklist is from when the
+    # quote was generated and went on listing papers the customer had since
+    # uploaded as outstanding.
+    from customs.paperwork import paperwork
+
+    papers, _ = paperwork(quote)
+    missing = [p["name"] for p in papers if not p["onFile"]]
+    rejected = [
+        p["name"]
+        for p in papers
+        if p["onFile"] and "REJECTED" in (p["customsStatus"], p["companyAnyStatus"])
+    ]
     if missing:
         alerts.append("Customs documents outstanding: " + ", ".join(missing) + ".")
+    if rejected:
+        alerts.append("Rejected and waiting for a new upload: " + ", ".join(rejected) + ".")
 
     premium = recommendation.get("risk_premium_rate")
     raw_factor = float(recommended) / float(rule) if rule and recommended is not None else None

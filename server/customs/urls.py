@@ -4,6 +4,7 @@ from .views import (
     CustomsSignOffView,
     CustomsValidateView,
     DocumentDeleteView,
+    DocumentFileView,
     DocumentUploadView,
     DocumentVerifyView,
     HSCodeListView,
@@ -24,6 +25,11 @@ urlpatterns = [
         "customs/documents/<uuid:document_id>/",
         DocumentDeleteView.as_view(),
         name="customs-document-delete-slash",
+    ),
+    path(
+        "customs/documents/<uuid:document_id>/file/",
+        DocumentFileView.as_view(),
+        name="customs-document-file",
     ),
     path(
         "customs/documents/<uuid:document_id>/verify/",

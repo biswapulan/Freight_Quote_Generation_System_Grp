@@ -23,6 +23,7 @@ from booking.models import (
     QuoteSelection,
 )
 from companies.models import CompanyAgent, CompanyRateCard, FreightCompany
+from tests.paperwork_steps import customs_verifies, papers_ready_for_company
 
 SHIPMENT = {
     "origin": "Chennai, India",
@@ -142,11 +143,19 @@ class TestM4BookingScenarios:
         )
 
     def _selected(self, company_name="Beta Freight"):
-        """A quote selected with the given company, ready for verification."""
+        """A quote selected with the given company, ready for verification.
+
+        The customer has uploaded the lane's papers and the company's agent
+        has opened and verified each one, which approving or revising needs.
+        """
         quote_id = self._quote()
         offer = self._offer_for(quote_id, company_name)
         response = self._select(quote_id, offer["id"])
         assert response.status_code == 200, response.data
+        agent = self.agent_b if company_name == "Beta Freight" else self.agent_a
+        papers_ready_for_company(
+            self.client, response.data["selection"]["reference"], self.customer, agent
+        )
         return quote_id, response.data["selection"], response.data["verification"]
 
     def _decide(self, reference, payload, headers):
@@ -158,7 +167,8 @@ class TestM4BookingScenarios:
         )
 
     def _book(self, selection_ref):
-        """Customs clears the approved request and the customer confirms it."""
+        """Customs opens and verifies each paper and clears it; the customer confirms."""
+        customs_verifies(self.client, selection_ref, self.customs)
         clearance = CustomsClearance.objects.get(selection__reference=selection_ref)
         cleared = self.client.post(
             f"/api/customs-clearances/{clearance.reference}/decision",

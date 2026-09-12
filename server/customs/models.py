@@ -315,6 +315,19 @@ class ShipmentDocument(models.Model):
     verified_by = models.CharField(max_length=128, null=True, blank=True)
     verified_at = models.DateTimeField(null=True, blank=True)
     rejection_reason = models.TextField(blank=True)
+    # The freight company's own check of the paper, kept apart from customs':
+    # the carrier reads it for carriage, customs for compliance, and neither
+    # verdict is given until that reviewer has opened the file.
+    agent_status = models.CharField(
+        max_length=20, choices=VERIFICATION_STATUS_CHOICES, default="PENDING"
+    )
+    agent_company = models.CharField(max_length=64, blank=True, default="")
+    agent_reviewed_by = models.CharField(max_length=190, blank=True, default="")
+    agent_reviewed_at = models.DateTimeField(null=True, blank=True)
+    agent_remarks = models.TextField(blank=True, default="")
+    # Everyone who has opened the file, so a verdict from someone who never
+    # looked at it can be refused.
+    viewed_by = models.JSONField(default=list, blank=True)
     
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -327,3 +340,25 @@ class ShipmentDocument(models.Model):
 
     def __str__(self):
         return f"{self.file_name} ({self.document_type}) [{self.verification_status}]"
+
+    def was_viewed_by(self, email):
+        email = (email or "").strip().lower()
+        return bool(email) and any(
+            (entry.get("email") or "").lower() == email for entry in (self.viewed_by or [])
+        )
+
+    def record_view(self, email, role=""):
+        """Note that this person opened the file. Their first opening is kept."""
+        email = (email or "").strip().lower()
+        if not email or self.was_viewed_by(email):
+            return
+        self.viewed_by = list(self.viewed_by or []) + [
+            {"email": email, "role": role or "", "at": timezone.now().isoformat()}
+        ]
+        self.save(update_fields=["viewed_by"])
+
+    def company_status(self, company_code):
+        """This company's verdict. Another company's review does not count for it."""
+        if self.agent_company and self.agent_company == company_code:
+            return self.agent_status
+        return "PENDING"

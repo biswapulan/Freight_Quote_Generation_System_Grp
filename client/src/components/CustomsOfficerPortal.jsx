@@ -34,6 +34,7 @@ import {
   syncQuoteDocumentsToVault,
   approveQuoteCustomsStep,
 } from "../utils/quoteWorkflow";
+import DocumentViewer from "./DocumentViewer";
 import "./CustomsOfficerPortal.css";
 
 export function resolveDocumentFileUrl(doc) {
@@ -349,14 +350,9 @@ export default function CustomsOfficerPortal({ initialTab = "pending-reviews" })
             ? `${(uploaded.file_size / 1024).toFixed(0)} KB`
             : "1.2 MB";
 
-        const isUserUploaded = Boolean(
-          d.fileDataUrl ||
-          vaultMatch?.fileDataUrl ||
-          blobFromMemory ||
-          uploaded?.file_url ||
-          d.status === "UPLOADED" ||
-          d.status === "VERIFIED"
-        );
+        // Only a document on the server counts as uploaded. This browser's own
+        // vault copies and the quote's old checklist are not evidence.
+        const isUserUploaded = Boolean(uploaded);
 
         const docId = `${s.id}-${d.name.replace(/[^a-zA-Z0-9]/g, "_")}`;
         seenDocKeys.add(docId);
@@ -364,7 +360,7 @@ export default function CustomsOfficerPortal({ initialTab = "pending-reviews" })
 
         list.push({
           id: docId,
-          documentId: uploaded?.id || vaultMatch?.id || null,
+          documentId: uploaded?.id || null,
           uploaded: isUserUploaded,
           shipmentId: s.id,
           quoteNo: s.quoteNo || s.id,
@@ -384,48 +380,18 @@ export default function CustomsOfficerPortal({ initialTab = "pending-reviews" })
           fileSize: effectiveFileSize,
           fileDataUrl: fileUrl,
           fileType: d.fileType || vaultMatch?.fileType || uploaded?.mime_type || "application/pdf",
-          status: vaultMatch?.status === "VERIFIED" ? "VERIFIED" : (uploaded?.verification_status || d.status || "PENDING"),
+          // A person's decision on the server copy, and nothing else: not the
+          // quote's old checklist, and not this browser's vault.
+          status: uploaded ? uploaded.verification_status || "PENDING" : "NOT_UPLOADED",
           rejectionReason: uploaded?.rejection_reason || "",
           ocrSummary: getOcrComplianceNote(d.name, s.hsCode),
         });
       });
     });
 
-    // 2. Also append any uploaded vault docs that aren't tied to default documents list
-    vaultDocs.forEach((v) => {
-      if (!v.id || seenDocKeys.has(v.id)) return;
-      seenDocKeys.add(v.id);
-
-      const parentShipment = shipments.find(
-        (s) => s.id === v.shipmentRef || s.quoteNo === v.shipmentRef || s.shipmentId === v.shipmentRef
-      );
-
-      list.unshift({
-        id: v.id,
-        documentId: v.id,
-        uploaded: true,
-        shipmentId: v.shipmentRef || "VAULT-UPLOAD",
-        quoteNo: parentShipment?.quoteNo || v.shipmentRef || "VAULT",
-        customer: parentShipment?.customer || "Direct Client Vault Upload",
-        origin: parentShipment?.origin || "Origin Port",
-        destination: parentShipment?.destination || "Destination Port",
-        route: v.route || (parentShipment ? `${parentShipment.origin} ➔ ${parentShipment.destination}` : "Customs Border Clearance"),
-        hsCode: parentShipment?.hsCode || "8471.30",
-        cargoType: parentShipment?.cargoType || "Commercial Freight",
-        vessel: parentShipment?.vessel || "",
-        berth: parentShipment?.berth || "",
-        containers: parentShipment?.containers || "1 Container",
-        declaredValue: parentShipment?.declaredValue || "Declared Goods",
-        dutyEstimate: parentShipment?.dutyEstimate || "Pending Tariff",
-        docType: v.name || v.type || "Commercial Document",
-        fileName: v.fileName || `${(v.name || "document").replace(/\s+/g, "_")}.pdf`,
-        fileSize: v.size || "1.4 MB",
-        fileDataUrl: v.fileDataUrl || null,
-        fileType: v.fileType || "application/pdf",
-        status: v.status === "VERIFIED" ? "VERIFIED" : (v.status || "UNDER_REVIEW"),
-        ocrSummary: getOcrComplianceNote(v.name || v.type, parentShipment?.hsCode),
-      });
-    });
+    // Papers that exist only in this browser's vault are not listed. They were
+    // shown as "Direct Client Vault Upload" groups marked verified, though no
+    // officer had seen them and the server had no copy to open or verify.
 
     return list;
   }, [shipments, uploadedDocs]);
@@ -480,6 +446,29 @@ export default function CustomsOfficerPortal({ initialTab = "pending-reviews" })
   const [docNotice, setDocNotice] = useState(null);
   /** Consignment whose papers have just all been verified, for the popup. */
   const [allVerifiedFor, setAllVerifiedFor] = useState(null);
+  /** The uploaded paper the officer has open in the viewer. */
+  const [reviewDoc, setReviewDoc] = useState(null);
+
+  /**
+   * The officer's verdict, given from the viewer once the file is open. The
+   * server refuses a verdict from anyone who has not opened the document, and
+   * errors reach the viewer, which shows them beside the buttons.
+   */
+  const reviewInViewer = async (doc, decision, remarks) => {
+    await verifyShipmentDocument(token, doc.documentId, {
+      decision,
+      officerName: user?.full_name || user?.email || "Customs Officer",
+      remarks,
+    });
+    await Promise.all([reload(), loadUploadedDocs()]);
+    setDocNotice({
+      type: decision === "VERIFIED" ? "success" : "warning",
+      text:
+        decision === "VERIFIED"
+          ? `"${doc.docType}" verified. The customer has been notified.`
+          : `"${doc.docType}" rejected. The customer has been told why.`,
+    });
+  };
 
   /** Is there a real uploaded file behind this checklist item? */
   const hasRealFile = (doc) =>
@@ -502,63 +491,6 @@ export default function CustomsOfficerPortal({ initialTab = "pending-reviews" })
   };
 
   /**
-   * Verify one document.
-   *
-   * Records decision against backend API (if connected) and synchronizes with
-   * local platform store and Document Vault so status is consistently updated.
-   */
-  const handleVerifySingleDoc = async (shipmentId, docName, documentId, decision = "VERIFIED", remarks = "") => {
-    if (docBusy) return;
-
-    // A real document id is required: without one the decision cannot reach the
-    // server, and the officer would be told the paper was stamped when nothing
-    // had happened. Failures used to be swallowed by a console warning.
-    if (!token || !documentId || String(documentId).startsWith("doc-")) {
-      setDocNotice({
-        type: "error",
-        text: `"${docName}" has no uploaded file on record, so it cannot be ${decision === "VERIFIED" ? "verified" : "rejected"}.`,
-      });
-      return;
-    }
-
-    setDocBusy(documentId);
-    setDocNotice(null);
-    try {
-      await verifyShipmentDocument(token, documentId, {
-        decision,
-        officerName: user?.full_name || "Customs Officer",
-        remarks:
-          remarks ||
-          (decision === "VERIFIED"
-            ? `Verified "${docName}" against declared tariff heading.`
-            : `Rejected "${docName}".`),
-      });
-
-      await Promise.all([reload(), loadUploadedDocs()]);
-
-      if (previewDoc) {
-        setPreviewDoc((prev) => (prev ? { ...prev, status: decision } : null));
-      }
-
-      setDocNotice({
-        type: decision === "VERIFIED" ? "success" : "warning",
-        text:
-          decision === "VERIFIED"
-            ? `"${docName}" verified and stamped. The customer has been notified.`
-            : `"${docName}" rejected. The customer has been notified with your reason.`,
-      });
-      setTimeout(() => setDocNotice(null), 5000);
-    } catch (err) {
-      setDocNotice({
-        type: "error",
-        text: err.message || `Could not record the decision on "${docName}".`,
-      });
-    } finally {
-      setDocBusy(null);
-    }
-  };
-
-  /**
    * Jump from the sign-off queue straight to one consignment's papers.
    *
    * The officer had to switch tabs and find the right consignment by eye,
@@ -577,32 +509,8 @@ export default function CustomsOfficerPortal({ initialTab = "pending-reviews" })
     }, 120);
   };
 
-  /** Reject one document. A reason is mandatory and reaches the customer. */
-  const handleRejectSingleDoc = async (doc) => {
-    const reason = window.prompt(
-      `Reject "${doc.fileName}" (${doc.docType})?\n\nGive the customer a reason. This is sent to them and recorded against the shipment.`,
-    );
-    if (reason === null) return;
-    if (!reason.trim()) {
-      setDocNotice({ type: "error", text: "A reason is required to reject a document." });
-      return;
-    }
-    await handleVerifySingleDoc(doc.shipmentId, doc.docType, doc.documentId, "REJECTED", reason.trim());
-  };
-
-  /** Verify every outstanding document on one quote, in order. */
-  const handleVerifyGroup = async (group) => {
-    const outstanding = group.docs.filter((d) => d.status !== "VERIFIED" && d.documentId);
-    if (!outstanding.length) return;
-    for (const doc of outstanding) {
-      // Sequential: each decision recomputes customs readiness server-side.
-      // eslint-disable-next-line no-await-in-loop
-      await handleVerifySingleDoc(doc.shipmentId, doc.docType, doc.documentId, "VERIFIED");
-    }
-    // Confirm the milestone explicitly, then point the officer at sign-off,
-    // which is the step that actually clears the consignment.
-    setAllVerifiedFor(group);
-  };
+  // Every verdict goes through the viewer (reviewInViewer), one paper at a
+  // time. There is no bulk "verify all": each document must be opened.
 
 
   function openSignoffModal(shipment) {
@@ -928,7 +836,7 @@ export default function CustomsOfficerPortal({ initialTab = "pending-reviews" })
                           <thead>
                             <tr>
                               <th>Document &amp; File</th>
-                              <th>Automated OCR &amp; Compliance Check</th>
+                              <th>AI pre-check (advisory only)</th>
                               <th>Status</th>
                               <th>Officer Action</th>
                             </tr>
@@ -940,8 +848,10 @@ export default function CustomsOfficerPortal({ initialTab = "pending-reviews" })
                                   <button
                                     type="button"
                                     className="cop-doc-name-btn"
-                                    onClick={() => handleOpenDocInspection(doc)}
-                                    title="Inspect document"
+                                    onClick={() =>
+                                      doc.documentId ? setReviewDoc(doc) : handleOpenDocInspection(doc)
+                                    }
+                                    title="Open the document"
                                   >
                                     {doc.docType}
                                   </button>
@@ -964,6 +874,8 @@ export default function CustomsOfficerPortal({ initialTab = "pending-reviews" })
                                       ? "Verified"
                                       : doc.status === "REJECTED"
                                       ? "Rejected"
+                                      : doc.status === "NOT_UPLOADED"
+                                      ? "Not uploaded"
                                       : "Awaiting check"}
                                   </span>
                                   {doc.status === "REJECTED" && doc.rejectionReason && (
@@ -972,29 +884,17 @@ export default function CustomsOfficerPortal({ initialTab = "pending-reviews" })
                                 </td>
                                 <td>
                                   <div className="cop-doc-actions">
+                                    {/* Verify and Reject live in the viewer, so a
+                                        verdict is only ever given with the paper open. */}
                                     <button
                                       type="button"
                                       className="cop-btn-verify"
-                                      disabled={docBusy === doc.documentId || doc.status === "VERIFIED"}
-                                      onClick={() =>
-                                        handleVerifySingleDoc(
-                                          doc.shipmentId,
-                                          doc.docType,
-                                          doc.documentId,
-                                          "VERIFIED",
-                                        )
-                                      }
+                                      disabled={!doc.documentId}
+                                      title={doc.documentId ? "Open the document to verify or reject it" : "Not uploaded yet"}
+                                      onClick={() => setReviewDoc(doc)}
                                     >
-                                      <ShieldCheck size={13} />
-                                      {doc.status === "VERIFIED" ? "Stamped" : "Verify & Stamp"}
-                                    </button>
-                                    <button
-                                      type="button"
-                                      className="cop-btn-reject"
-                                      disabled={docBusy === doc.documentId}
-                                      onClick={() => handleRejectSingleDoc(doc)}
-                                    >
-                                      <XCircle size={13} /> Reject
+                                      <Eye size={13} />
+                                      {doc.status === "VERIFIED" || doc.status === "REJECTED" ? "Open" : "Open & review"}
                                     </button>
                                   </div>
                                 </td>
@@ -1013,15 +913,8 @@ export default function CustomsOfficerPortal({ initialTab = "pending-reviews" })
                             <>
                               <span className="cop-doc-group-hint">
                                 {group.pending} document{group.pending === 1 ? "" : "s"} still awaiting your check.
+                                Open each one to verify or reject it; nothing is verified in bulk.
                               </span>
-                              <button
-                                type="button"
-                                className="cop-btn-verify-all"
-                                disabled={Boolean(docBusy) || group.pending === 0}
-                                onClick={() => handleVerifyGroup(group)}
-                              >
-                                <ShieldCheck size={14} /> Verify all remaining
-                              </button>
                             </>
                           )}
                         </div>
@@ -2142,43 +2035,26 @@ export default function CustomsOfficerPortal({ initialTab = "pending-reviews" })
 
                 {previewDoc.status === "VERIFIED" ? (
                   <span style={{ color: "#059669", fontWeight: 700, display: "inline-flex", alignItems: "center", gap: "6px", fontSize: "13px" }}>
-                    <CheckCircle2 size={18} /> Stamped &amp; cleared by {user?.full_name || "the customs officer"}
+                    <CheckCircle2 size={18} /> Verified by customs
                   </span>
-                ) : !previewHasFile ? (
+                ) : !previewDoc.documentId ? (
                   <span className="cop-preview-notice error">
                     Waiting on the customer to upload this document.
                   </span>
                 ) : (
-                  <>
-                    <button
-                      type="button"
-                      className="cop-btn-reject"
-                      style={{ padding: "10px 16px", fontSize: "13px" }}
-                      disabled={docBusy === previewDoc.documentId}
-                      onClick={() => handleRejectSingleDoc(previewDoc)}
-                    >
-                      <XCircle size={15} /> Reject
-                    </button>
-                    <button
-                      type="button"
-                      className="cop-btn-action"
-                      style={{ background: "#059669", padding: "10px 20px", fontSize: "13px" }}
-                      disabled={docBusy === previewDoc.documentId}
-                      onClick={() =>
-                        handleVerifySingleDoc(
-                          previewDoc.shipmentId,
-                          previewDoc.docType,
-                          previewDoc.documentId,
-                          "VERIFIED",
-                        )
-                      }
-                    >
-                      <ShieldCheck size={16} />
-                      {docBusy === previewDoc.documentId
-                        ? "Stamping..."
-                        : "Verify & Apply Official Customs Stamp"}
-                    </button>
-                  </>
+                  // This preview is a summary. The verdict is given with the
+                  // customer's actual file open, in the document viewer.
+                  <button
+                    type="button"
+                    className="cop-btn-action"
+                    style={{ background: "#059669", padding: "10px 20px", fontSize: "13px" }}
+                    onClick={() => {
+                      setPreviewDocModalOpen(false);
+                      setReviewDoc(previewDoc);
+                    }}
+                  >
+                    <Eye size={16} /> Open the uploaded file to verify or reject it
+                  </button>
                 )}
               </div>
             </div>
@@ -2186,6 +2062,20 @@ export default function CustomsOfficerPortal({ initialTab = "pending-reviews" })
         </div>
       );
       })()}
+
+      {reviewDoc && (
+        <DocumentViewer
+          document={{
+            id: reviewDoc.documentId,
+            documentType: reviewDoc.docType,
+            fileName: reviewDoc.fileName,
+          }}
+          reviewerLabel="Customs"
+          currentStatus={reviewDoc.status}
+          onDecide={(decision, remarks) => reviewInViewer(reviewDoc, decision, remarks)}
+          onClose={() => setReviewDoc(null)}
+        />
+      )}
     </div>
   );
 }

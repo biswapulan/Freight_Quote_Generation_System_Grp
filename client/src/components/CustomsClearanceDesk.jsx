@@ -2,13 +2,19 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle,
   CheckCircle2,
+  Clock,
   FileText,
   RotateCw,
   ShieldCheck,
   XCircle,
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
-import { decideCustomsClearance, listCustomsClearances } from "../api/workflow";
+import {
+  decideCustomsClearance,
+  listCustomsClearances,
+  verifyShipmentDocument,
+} from "../api/workflow";
+import DocumentViewer from "./DocumentViewer";
 import "./CustomsClearanceDesk.css";
 
 /**
@@ -34,6 +40,16 @@ const STATUS_WORDS = {
 
 const TONE = { PENDING: "active", CLEARED: "ok", REJECTED: "bad" };
 
+// How each required paper stands with customs.
+const REQUIRED_TONE = { VERIFIED: "ok", PENDING: "waiting", REJECTED: "missing", MISSING: "missing" };
+const REQUIRED_WORDS = {
+  VERIFIED: "verified",
+  PENDING: "on file · awaiting your check",
+  REJECTED: "rejected",
+  MISSING: "not uploaded",
+};
+const REVIEW_WORDS = { VERIFIED: "verified", REJECTED: "rejected", PENDING: "awaiting your check" };
+
 function money(amount, currency) {
   const value = Number(amount || 0);
   return `${currency === "INR" ? "₹ " : `${currency || ""} `}${value.toLocaleString("en-IN", { maximumFractionDigits: 0 })}`;
@@ -54,8 +70,10 @@ function when(iso) {
 }
 
 export default function CustomsClearanceDesk() {
-  const { token } = useAuth();
+  const { token, user } = useAuth();
   const [tab, setTab] = useState("PENDING");
+  // The paper an officer has open: { doc, canVerify }.
+  const [viewing, setViewing] = useState(null);
   const [rows, setRows] = useState([]);
   const [summary, setSummary] = useState({});
   const [canDecide, setCanDecide] = useState(false);
@@ -87,6 +105,24 @@ export default function CustomsClearanceDesk() {
   }, [load]);
 
   const shown = useMemo(() => rows.filter((r) => r.status === tab), [rows, tab]);
+
+  // Customs' verdict on one paper, given from the viewer once it is open.
+  // Errors reach the viewer, which shows them beside the buttons.
+  async function verifyDocument(doc, decision, remarks) {
+    await verifyShipmentDocument(token, doc.id, {
+      decision,
+      officerName: user?.full_name || user?.email || "Customs officer",
+      remarks,
+    });
+    setNotice({
+      type: decision === "VERIFIED" ? "success" : "info",
+      text:
+        decision === "VERIFIED"
+          ? `${doc.documentType} verified.`
+          : `${doc.documentType} rejected. The customer has been told why.`,
+    });
+    await load();
+  }
 
   function toggle(reference) {
     setOpenRef((current) => (current === reference ? null : reference));
@@ -184,23 +220,39 @@ export default function CustomsClearanceDesk() {
               setReason={setReason}
               busy={busy}
               onDecide={(decision) => decide(row, decision)}
+              onOpenDoc={(doc, canVerify) => setViewing({ doc, canVerify })}
             />
           ))}
         </div>
+      )}
+
+      {viewing && (
+        <DocumentViewer
+          document={viewing.doc}
+          reviewerLabel="Customs"
+          currentStatus={viewing.doc.customsStatus}
+          onDecide={
+            viewing.canVerify
+              ? (decision, remarks) => verifyDocument(viewing.doc, decision, remarks)
+              : null
+          }
+          onClose={() => setViewing(null)}
+        />
       )}
     </div>
   );
 }
 
-function Clearance({ row, open, canDecide, onToggle, reason, setReason, busy, onDecide }) {
+function Clearance({ row, open, canDecide, onToggle, reason, setReason, busy, onDecide, onOpenDoc }) {
   const shipment = row.shipment || {};
   const selection = row.selection || {};
   const insights = row.aiInsights || {};
   const customsRisk = insights.risk?.customs || {};
   const required = row.requiredDocuments || [];
   const documents = row.documents || [];
-  const missing = required.filter((d) => !d.onFile);
   const alerts = insights.alerts || [];
+  const readiness = row.documentReadiness || null;
+  const ready = !readiness || readiness.ready;
   const tone = TONE[row.status] || "active";
   const riskScore = customsRisk.score;
 
@@ -238,13 +290,13 @@ function Clearance({ row, open, canDecide, onToggle, reason, setReason, busy, on
           tone={riskScore >= 60 ? "bad" : riskScore >= 35 ? "warn" : ""}
         />
         <Term
-          label="Papers on file"
+          label="Papers verified by customs"
           value={
-            required.length
-              ? `${required.length - missing.length} of ${required.length}`
+            readiness
+              ? `${readiness.verified} of ${readiness.required}`
               : `${documents.length} uploaded`
           }
-          tone={missing.length ? "warn" : ""}
+          tone={ready ? "" : "warn"}
         />
       </div>
 
@@ -290,11 +342,22 @@ function Clearance({ row, open, canDecide, onToggle, reason, setReason, busy, on
               <h3>Required on this lane</h3>
               {required.length ? (
                 <ul className="ccd-docs">
-                  {required.map((doc) => (
-                    <li key={doc.name} className={doc.onFile ? "ok" : "missing"}>
-                      {doc.onFile ? <CheckCircle2 size={13} /> : <XCircle size={13} />} {doc.name}
-                    </li>
-                  ))}
+                  {required.map((doc) => {
+                    const state = doc.onFile ? doc.customsStatus : "MISSING";
+                    return (
+                      <li key={doc.name} className={REQUIRED_TONE[state] || "waiting"}>
+                        {state === "VERIFIED" ? (
+                          <CheckCircle2 size={13} />
+                        ) : state === "PENDING" ? (
+                          <Clock size={13} />
+                        ) : (
+                          <XCircle size={13} />
+                        )}{" "}
+                        {doc.name}
+                        <span className="ccd-muted"> · {REQUIRED_WORDS[state] || state.toLowerCase()}</span>
+                      </li>
+                    );
+                  })}
                 </ul>
               ) : (
                 <p className="ccd-muted">M3 issued no document checklist for this lane.</p>
@@ -309,8 +372,15 @@ function Clearance({ row, open, canDecide, onToggle, reason, setReason, busy, on
                       <FileText size={13} /> {doc.documentType}
                       <span className="ccd-muted">
                         {" "}
-                        · {doc.fileName} · {String(doc.status || "").toLowerCase()}
+                        · {doc.fileName} · {REVIEW_WORDS[doc.customsStatus] || "awaiting your check"}
                       </span>
+                      <button
+                        type="button"
+                        className="ccd-doc-open"
+                        onClick={() => onOpenDoc(doc, canDecide)}
+                      >
+                        {canDecide && doc.customsStatus !== "VERIFIED" ? "Open & verify" : "Open"}
+                      </button>
                     </li>
                   ))}
                 </ul>
@@ -319,8 +389,6 @@ function Clearance({ row, open, canDecide, onToggle, reason, setReason, busy, on
               )}
             </div>
           </div>
-
-          {customsRisk.summary && <p className="ccd-muted ccd-summary">{customsRisk.summary}</p>}
 
           {canDecide && (
             <div className="ccd-decide">
@@ -333,11 +401,21 @@ function Clearance({ row, open, canDecide, onToggle, reason, setReason, busy, on
                   placeholder="e.g. HS code matches the invoice and the papers are in order."
                 />
               </label>
+              {!ready && (
+                <p className="ccd-hint">
+                  Open and verify every document above before clearing. You can still reject.
+                </p>
+              )}
               <div className="ccd-decide-actions">
                 <button type="button" className="ccd-reject" disabled={busy} onClick={() => onDecide("REJECT")}>
                   <XCircle size={15} /> Reject
                 </button>
-                <button type="button" className="ccd-clear" disabled={busy} onClick={() => onDecide("CLEAR")}>
+                <button
+                  type="button"
+                  className="ccd-clear"
+                  disabled={busy || !ready}
+                  onClick={() => onDecide("CLEAR")}
+                >
                   <ShieldCheck size={15} /> Clear for booking
                 </button>
               </div>

@@ -248,7 +248,7 @@ class TestDocumentUpload:
         )
         assert res.status_code == 400
 
-    def test_officer_can_overturn_an_auto_verification(self, client, quoted_shipment):
+    def test_an_upload_waits_for_an_officer_who_has_opened_it(self, client, quoted_shipment):
         shipment_id, _quote = quoted_shipment
 
         upload = SimpleUploadedFile("coo.pdf", b"%PDF-1.4", content_type="application/pdf")
@@ -262,32 +262,37 @@ class TestDocumentUpload:
             format="multipart",
             **CUSTOMER,
         )
-        document_id = res.json()["document"]["id"]
+        document = res.json()["document"]
+        document_id = document["id"]
+        # Arriving is not being verified.
+        assert document["verification_status"] == "PENDING"
+
+        verify = f"/api/v1/customs/documents/{document_id}/verify/"
 
         # Rejecting requires remarks.
         res = client.post(
-            f"/api/v1/customs/documents/{document_id}/verify/",
-            {"decision": "REJECTED", "officer_name": "Officer Sharma"},
-            format="json",
-            **OFFICER,
+            verify, {"decision": "REJECTED", "officer_name": "Officer Sharma"}, format="json", **OFFICER
         )
         assert res.status_code == 400
 
-        res = client.post(
-            f"/api/v1/customs/documents/{document_id}/verify/",
-            {
-                "decision": "REJECTED",
-                "officer_name": "Officer Sharma",
-                "remarks": "Chamber of Commerce stamp is illegible.",
-            },
-            format="json",
-            **OFFICER,
-        )
-        assert res.status_code == 200
+        rejection = {
+            "decision": "REJECTED",
+            "officer_name": "Officer Sharma",
+            "remarks": "Chamber of Commerce stamp is illegible.",
+        }
+        # And no verdict at all from an officer who has not opened the file.
+        assert client.post(verify, rejection, format="json", **OFFICER).status_code == 409
+
+        opened = client.get(f"/api/v1/customs/documents/{document_id}/file/", **OFFICER)
+        assert opened.status_code == 200
+        assert b"".join(opened.streaming_content) == b"%PDF-1.4"
+
+        assert client.post(verify, rejection, format="json", **OFFICER).status_code == 200
 
         doc = ShipmentDocument.objects.get(id=document_id)
         assert doc.verification_status == "REJECTED"
         assert doc.rejection_reason
+        assert doc.was_viewed_by("officer@freightai.com")
 
 
 @pytest.mark.django_db

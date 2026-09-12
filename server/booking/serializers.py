@@ -216,13 +216,22 @@ def shipment_documents(selection):
     docs = ShipmentDocument.objects.filter(
         shipment_id=selection.shipment_id
     ).order_by("-uploaded_at")
+    company = selection.company.code
     return [
         {
             "id": str(doc.id),
             "documentType": doc.document_type,
             "fileName": doc.file_name,
             "fileUrl": doc.file_url,
+            "hasFile": bool(doc.file),
             "status": doc.verification_status,
+            # Two separate manual reviews: this company's, and customs'.
+            "companyStatus": doc.company_status(company),
+            "companyReviewedBy": doc.agent_reviewed_by if doc.agent_company == company else "",
+            "companyRemarks": doc.agent_remarks if doc.agent_company == company else "",
+            "customsStatus": doc.verification_status,
+            "customsReviewedBy": doc.verified_by or "",
+            "customsRemarks": doc.rejection_reason,
             "uploadedAt": doc.uploaded_at,
         }
         for doc in docs
@@ -230,35 +239,27 @@ def shipment_documents(selection):
 
 
 def required_documents(selection):
-    """The papers customs requires on this lane, and whether each is on file."""
-    from customs.models import ShipmentDocument
+    """The papers customs requires on this lane: on file or not, and each verdict."""
+    from customs.paperwork import paperwork
 
-    quote = selection.quote
-    customs = ((quote.analysis or {}).get("customs") or {}) if quote else {}
-    names = [
-        item.get("item_name")
-        for item in customs.get("checklist_items") or []
-        if item.get("item_name")
-    ] or list(customs.get("missing_documents") or [])
+    rows, _ = paperwork(
+        selection.quote,
+        shipment_id=selection.shipment_id,
+        company_code=selection.company.code,
+    )
+    return rows
 
-    def key(text):
-        return "".join(ch for ch in (text or "").lower() if ch.isalnum())
 
-    # Customers name uploads in their own words ("Bill of Lading" for
-    # "Bill of Lading / Sea Waybill (B/L)"), so match loosely.
-    uploaded = [
-        key(t)
-        for t in ShipmentDocument.objects.filter(
-            shipment_id=selection.shipment_id
-        ).values_list("document_type", flat=True)
-    ]
-    return [
-        {
-            "name": name,
-            "onFile": any(u and (u in key(name) or key(name) in u) for u in uploaded),
-        }
-        for name in names
-    ]
+def document_readiness(selection, reviewer):
+    """How far the company ("company") or customs ("customs") is through the papers."""
+    from customs.paperwork import readiness
+
+    return readiness(
+        selection.quote,
+        reviewer,
+        shipment_id=selection.shipment_id,
+        company_code=selection.company.code,
+    )
 
 
 class VerificationRequestSerializer(serializers.ModelSerializer):
@@ -326,6 +327,12 @@ class VerificationRequestSerializer(serializers.ModelSerializer):
     def get_requiredDocuments(self, obj):
         return required_documents(obj.selection)
 
+    documentReadiness = serializers.SerializerMethodField()
+
+    def get_documentReadiness(self, obj):
+        # Approving needs every paper opened and verified by this company.
+        return document_readiness(obj.selection, "company")
+
     class Meta:
         model = VerificationRequest
         fields = [
@@ -349,6 +356,7 @@ class VerificationRequestSerializer(serializers.ModelSerializer):
             "offer",
             "shipment",
             "requiredDocuments",
+            "documentReadiness",
             "created_at",
         ]
 
@@ -455,6 +463,12 @@ class CustomsClearanceSerializer(serializers.ModelSerializer):
     def get_requiredDocuments(self, obj):
         return required_documents(obj.selection)
 
+    documentReadiness = serializers.SerializerMethodField()
+
+    def get_documentReadiness(self, obj):
+        # Clearing needs every paper opened and verified by customs.
+        return document_readiness(obj.selection, "customs")
+
     def get_aiInsights(self, obj):
         # M3's customs score and alerts for this lane and cargo.
         return ai_insights(obj.selection.quote)
@@ -473,6 +487,7 @@ class CustomsClearanceSerializer(serializers.ModelSerializer):
             "shipment",
             "documents",
             "requiredDocuments",
+            "documentReadiness",
             "aiInsights",
             "created_at",
         ]

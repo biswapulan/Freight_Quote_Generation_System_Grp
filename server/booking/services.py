@@ -433,6 +433,23 @@ def submit_decision(request_obj, *, action, actor, reason="", revision=None,
             reason=f"Opened by {actor.get('email', 'agent')} to decide.",
         )
 
+    # The company commits to carrying the shipment only once its agent has
+    # opened and verified every paper. Nothing about a document is automatic.
+    if action in (ACTION_APPROVE, ACTION_MODIFY):
+        from customs.paperwork import COMPANY, readiness_problem
+
+        problem = readiness_problem(
+            selection.quote,
+            COMPANY,
+            shipment_id=selection.shipment_id,
+            company_code=selection.company.code,
+        )
+        if problem:
+            raise DecisionError(
+                f"{problem} Open and verify each document before you "
+                f"{'approve' if action == ACTION_APPROVE else 'revise'} this request."
+            )
+
     # Special and high-value cases need a company manager (M4 roles). An agent's
     # approval of one goes to a manager instead of becoming a booking, and an
     # agent may not reach the same commitment through a revision either.
@@ -900,6 +917,69 @@ def provide_requested_information(selection, *, actor, note="", provided=None):
     return selection
 
 
+# --- The company's review of each document -----------------------------------
+
+
+def review_document_for_company(document, *, request_obj, decision, actor, remarks=""):
+    """The agent's verdict on one paper, given only after opening it.
+
+    The company reads each document for carriage, as customs later reads it
+    for compliance. A rejection needs remarks, which the customer reads, and
+    asks them for a corrected copy.
+    """
+    decision = (decision or "").upper()
+    if decision not in ("VERIFIED", "REJECTED"):
+        raise DecisionError("Decision must be VERIFIED or REJECTED.")
+
+    remarks = (remarks or "").strip()
+    if decision == "REJECTED" and not remarks:
+        raise DecisionError("Say what is wrong with the document. The customer reads it.")
+
+    open_statuses = lifecycle.AGENT_ACTIONABLE | {lifecycle.AWAITING_CUSTOMER_INFO}
+    if request_obj.status not in open_statuses:
+        raise DecisionError(
+            f"This request is {request_obj.status}, so its documents are no longer "
+            "yours to review."
+        )
+
+    if not document.was_viewed_by(actor.get("email")):
+        raise DecisionError("Open the document and read it before you verify or reject it.")
+
+    document.agent_status = decision
+    document.agent_company = request_obj.company.code
+    document.agent_reviewed_by = actor.get("email", "")
+    document.agent_reviewed_at = timezone.now()
+    document.agent_remarks = remarks
+    document.save(
+        update_fields=[
+            "agent_status",
+            "agent_company",
+            "agent_reviewed_by",
+            "agent_reviewed_at",
+            "agent_remarks",
+        ]
+    )
+
+    if decision == "REJECTED":
+        from notifications import service as notify
+
+        safe_notify(
+            notify.notify_user,
+            request_obj.selection.customer_id,
+            f"{request_obj.company.name} rejected your {document.document_type}",
+            (
+                f'"{document.file_name}" was not accepted. Reason: {remarks} '
+                "Upload a corrected copy under Documents."
+            ),
+            category="QUOTE",
+            severity="WARNING",
+            entity_type="SHIPMENT_DOCUMENT",
+            entity_id=str(document.id),
+            link="/dashboard/documents",
+        )
+    return document
+
+
 # --- Customs clearance and the customer's final word ------------------------
 #
 # The company's approval says it can carry the shipment. Customs then decides
@@ -975,6 +1055,15 @@ def decide_customs(clearance, *, decision, actor, reason=""):
         raise CustomsDecisionError(
             f"This request is {selection.status}, not waiting for customs."
         )
+
+    # Clearing is customs' final word, given only after an officer has opened
+    # and verified every paper. A rejection needs no such wait.
+    if decision == "CLEAR":
+        from customs.paperwork import CUSTOMS, readiness_problem
+
+        problem = readiness_problem(selection.quote, CUSTOMS, shipment_id=selection.shipment_id)
+        if problem:
+            raise CustomsDecisionError(f"{problem} Open and verify each document before clearing.")
 
     cleared = decision == "CLEAR"
     clearance.status = "CLEARED" if cleared else "REJECTED"

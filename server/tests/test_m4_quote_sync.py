@@ -14,6 +14,7 @@ from booking.models import Booking, CustomsClearance
 from companies.models import CompanyAgent, CompanyRateCard, FreightCompany
 from quotes.models import Quote
 from quotes.serializers import QuoteSerializer
+from tests.paperwork_steps import customs_verifies, papers_ready_for_company
 
 SHIPMENT = {
     "origin": "Chennai, India",
@@ -92,6 +93,11 @@ class TestQuoteFollowsTheCompanyWorkflow:
             **self.customer,
         )
         assert chosen.status_code == 200, chosen.data
+        if company == "Alpha Line":
+            # Approving or revising needs every paper verified by the agent.
+            papers_ready_for_company(
+                self.client, chosen.data["selection"]["reference"], self.customer, self.agent_a
+            )
         return quote_id, chosen.data["selection"], chosen.data["verification"]
 
     def _decide(self, reference, payload):
@@ -105,6 +111,8 @@ class TestQuoteFollowsTheCompanyWorkflow:
         return response
 
     def _customs(self, selection_ref, decision="CLEAR", reason=""):
+        if decision == "CLEAR":
+            customs_verifies(self.client, selection_ref, self.customs)
         clearance = CustomsClearance.objects.get(selection__reference=selection_ref)
         response = self.client.post(
             f"/api/customs-clearances/{clearance.reference}/decision",

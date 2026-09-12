@@ -136,6 +136,13 @@
 }
 .ccd-docs li.ok      { color:#047857; }
 .ccd-docs li.missing { color:#b91c1c; }
+.ccd-docs li.waiting { color:#b45309; }
+.ccd-doc-open {
+  margin-left:auto; padding:4px 10px; border:1px solid #cbd5e1; border-radius:7px;
+  background:#fff; color:#0f172a; font-size:12px; font-weight:700; cursor:pointer;
+}
+.ccd-doc-open:hover { border-color:#ea580c; color:#c2410c; }
+.ccd-hint { margin:0 0 10px; font-size:12.5px; font-weight:600; color:#b45309; }
 .ccd-muted { margin:0; font-size:12.5px; color:#94a3b8; }
 .ccd-summary { margin-top:12px; line-height:1.55; }
 

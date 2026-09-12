@@ -15,6 +15,7 @@ from booking import lifecycle
 from booking.models import Booking, CustomsClearance, QuoteSelection
 from companies.models import CompanyAgent, CompanyRateCard, FreightCompany
 from notifications.models import Notification
+from tests.paperwork_steps import customs_verifies, papers_ready_for_company
 
 SHIPMENT = {
     "origin": "Chennai, India",
@@ -101,6 +102,9 @@ class TestCustomsClearance:
         ).data["id"]
         chosen = self._pick(quote_id, "Alpha Line")
         assert chosen.status_code == 200, chosen.data
+        papers_ready_for_company(
+            self.client, chosen.data["selection"]["reference"], self.customer, self.agent_a
+        )
         approved = self.client.post(
             f"/api/verification-requests/{chosen.data['verification']['reference']}/decision",
             {"action": "APPROVE", "reason": "Capacity held for these dates."},
@@ -112,6 +116,9 @@ class TestCustomsClearance:
         return quote_id, sel_ref, CustomsClearance.objects.get(selection__reference=sel_ref)
 
     def _customs(self, clearance, decision, reason="", who=None):
+        # Clearing needs every paper opened and verified by customs first.
+        if decision == "CLEAR" and who is None:
+            customs_verifies(self.client, clearance.selection.reference, self.customs)
         return self.client.post(
             f"/api/customs-clearances/{clearance.reference}/decision",
             {"decision": decision, "reason": reason},

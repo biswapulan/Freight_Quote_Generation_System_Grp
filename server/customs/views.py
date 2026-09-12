@@ -1,3 +1,4 @@
+import logging
 import os
 
 from django.conf import settings
@@ -27,6 +28,22 @@ from .serializers import (
 )
 from .validator import CustomsComplianceEngine
 from .rag_engine import CustomsRAGEngine
+
+
+logger = logging.getLogger(__name__)
+
+
+def _quietly(send, *args, **kwargs):
+    """Send a notification without letting a failure undo the decision it reports.
+
+    The verdict is saved before anyone is told, so a notification backend
+    that falls over must not turn a recorded decision into an error.
+    """
+    try:
+        return send(*args, **kwargs)
+    except Exception:  # noqa: BLE001 - the decision is already recorded
+        logger.exception("Notification failed; the document decision stands.")
+        return None
 
 
 def _normalize_doc_name(name):
@@ -69,6 +86,13 @@ def _sync_quote_customs_analysis(shipment_id, check):
 
     items = list(check.checklist_items.all())
     outstanding = [i.item_name for i in items if i.status != "VERIFIED"]
+    # Outstanding splits in two: papers never uploaded, and papers on file that
+    # nobody has verified yet. Calling an uploaded paper missing told customers
+    # to upload it again.
+    not_uploaded = [
+        i.item_name for i in items if i.status != "VERIFIED" and not i.document_uploaded
+    ]
+    awaiting = [i.item_name for i in items if i.status != "VERIFIED" and i.document_uploaded]
 
     # Recompute readiness and status from the checklist as it stands now.
     # These were only ever recalculated inside the verify endpoint, using the
@@ -90,7 +114,8 @@ def _sync_quote_customs_analysis(shipment_id, check):
 
         customs["status"] = check.status
         customs["readiness_score"] = check.readiness_score
-        customs["missing_documents"] = outstanding
+        customs["missing_documents"] = not_uploaded
+        customs["awaiting_verification"] = awaiting
 
         by_name = {i.item_name: i.status for i in items}
         for entry in customs.get("checklist_items") or []:
@@ -544,9 +569,9 @@ class DocumentUploadView(APIView):
             mime_type=mime_type,
             file_size=file_size,
             uploaded_by=uploaded_by,
-            verification_status="VERIFIED",
-            verified_by="AutoComplianceValidator",
-            verified_at=timezone.now(),
+            # Waiting for review. A paper is verified only by a person who has
+            # opened it, never by its arrival.
+            verification_status="PENDING",
         )
 
         # Point file_url at the stored file unless the caller supplied their own.
@@ -555,22 +580,16 @@ class DocumentUploadView(APIView):
             doc.save(update_fields=["file_url"])
 
         if checklist_item:
-            checklist_item.status = "VERIFIED"
+            # On file, not yet checked.
             checklist_item.document_uploaded = True
             checklist_item.save()
 
-        # Recalculate readiness score based on verified items
-        if check:
-            total = check.checklist_items.count()
-            verified = check.checklist_items.filter(status="VERIFIED").count()
-            if total > 0:
-                check.readiness_score = round(70.0 + (verified / total) * 30.0, 1)
-                if verified == total:
-                    check.status = "APPROVED"
-                check.save()
+        # Readiness counts verified papers, so an upload alone does not move
+        # it; the quote's snapshot does learn that this paper is now on file.
+        _sync_quote_customs_analysis(shipment_id, check)
 
         return Response({
-            "message": "Document uploaded and verified successfully.",
+            "message": "Document uploaded. It is verified once a reviewer has opened it.",
             "document": ShipmentDocumentSerializer(doc).data,
             "compliance_check": CustomsComplianceCheckSerializer(check).data if check else None,
         }, status=status.HTTP_201_CREATED)
@@ -643,10 +662,8 @@ class DocumentDeleteView(APIView):
                 status=status.HTTP_403_FORBIDDEN,
             )
 
-        # Uploads are auto-verified today, so refusing to remove a VERIFIED
-        # document would block every deletion and leave duplicates stuck in the
-        # vault forever. Removal is allowed and audited instead, with the
-        # verification status recorded as it stood.
+        # Removal is allowed and audited, with the verification status recorded
+        # as it stood, so a duplicate never has to stay in the vault.
         was_verified = doc.verification_status == "VERIFIED"
         file_name = doc.file_name
         shipment_id = doc.shipment_id
@@ -684,6 +701,44 @@ class DocumentDeleteView(APIView):
         )
 
 
+class DocumentFileView(APIView):
+    """GET /customs/documents/<id>/file/ -> the uploaded file, for a reviewer to read.
+
+    Verification is manual, so opening the file here is recorded and a verdict
+    from anyone who has not opened it is refused. The file is streamed through
+    the API to people entitled to the shipment's papers, rather than from a
+    public media link, which the live server does not serve anyway.
+    """
+
+    authentication_classes = []
+    permission_classes = []
+
+    def get(self, request, document_id):
+        from django.http import FileResponse
+
+        user_id, role, email = _document_caller(request)
+        doc = _visible_documents(user_id, role, email).filter(id=document_id).first()
+        if not doc:
+            return Response({"error": "Document not found."}, status=status.HTTP_404_NOT_FOUND)
+        if not doc.file:
+            return Response(
+                {"error": "No file was uploaded for this document, so there is nothing to open."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        try:
+            handle = doc.file.open("rb")
+        except (FileNotFoundError, OSError, ValueError):
+            return Response(
+                {"error": "The stored file is no longer available. Ask the customer to upload it again."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        doc.record_view(email, role)
+        response = FileResponse(handle, content_type=doc.mime_type or "application/octet-stream")
+        response["Content-Disposition"] = f'inline; filename="{doc.file_name}"'
+        return response
+
+
 class DocumentVerifyView(APIView):
     """POST /customs/documents/<id>/verify -> officer verifies or rejects a document.
 
@@ -702,7 +757,7 @@ class DocumentVerifyView(APIView):
     def post(self, request, document_id):
         from audit import service as audit_service
 
-        _user_id, role, _email = _document_caller(request)
+        _user_id, role, email = _document_caller(request)
         if role not in DOCUMENT_REVIEW_ROLES:
             return Response(
                 {"error": "Only customs or the administrator may verify documents."},
@@ -722,13 +777,20 @@ class DocumentVerifyView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        officer = request.data.get("officer_name", "Customs Officer")
+        officer = request.data.get("officer_name") or email or "Customs Officer"
         remarks = request.data.get("remarks", "")
 
         if decision == "REJECTED" and not remarks:
             return Response(
                 {"error": "Remarks are required when rejecting a document."},
                 status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Verification is manual: the officer must have opened this file.
+        if decision in ("VERIFIED", "REJECTED") and not doc.was_viewed_by(email):
+            return Response(
+                {"error": "Open the document and read it before you verify or reject it."},
+                status=status.HTTP_409_CONFLICT,
             )
 
         previous = doc.verification_status
@@ -813,7 +875,8 @@ class DocumentVerifyView(APIView):
                 body = f'"{doc.file_name}" passed customs verification for shipment {doc.shipment_id}.'
                 severity = "INFO"
 
-            notify.notify_user(
+            _quietly(
+                notify.notify_user,
                 shipment.customer_id,
                 title,
                 body,
@@ -826,7 +889,8 @@ class DocumentVerifyView(APIView):
 
             # And once every required paper is cleared, say so plainly.
             if check and check.status == "NEEDS_REVIEW" and decision == "VERIFIED":
-                notify.notify_user(
+                _quietly(
+                    notify.notify_user,
                     shipment.customer_id,
                     "All documents verified",
                     f"Customs has checked every required document for shipment {doc.shipment_id}. "

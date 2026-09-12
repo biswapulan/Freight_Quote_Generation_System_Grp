@@ -106,6 +106,11 @@ class TestMilestone3Phase3CustomsRAG:
         assert val_res.status_code == 201
         item_id = val_res.data["checklist_items"][0]["id"]
 
+        from customs.models import CustomsComplianceCheck
+
+        check = CustomsComplianceCheck.objects.get(id=val_res.data["id"])
+        verified_before = check.checklist_items.filter(status="VERIFIED").count()
+
         document = {
             "shipment_id": "SHP-DOC-01",
             "checklist_item_id": item_id,
@@ -126,8 +131,10 @@ class TestMilestone3Phase3CustomsRAG:
             HTTP_X_USER_ROLE="customs",
         )
         assert upload_res.status_code == 201
-        assert upload_res.data["document"]["verification_status"] == "VERIFIED"
-        assert upload_res.data["compliance_check"]["readiness_score"] > 70.0
+        # Arriving is not being verified: the paper waits for a reviewer to
+        # open it, and no checklist line is marked verified by the upload.
+        assert upload_res.data["document"]["verification_status"] == "PENDING"
+        assert check.checklist_items.filter(status="VERIFIED").count() == verified_before
 
     def test_customs_sign_off_api_endpoint(self):
         client = APIClient()

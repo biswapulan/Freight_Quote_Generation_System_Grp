@@ -14,6 +14,7 @@ from accounts.tokens import create_token
 from booking import lifecycle
 from booking.models import Booking, QuoteSelection
 from companies.models import CompanyAgent, CompanyRateCard, FreightCompany
+from tests.paperwork_steps import customs_verifies, papers_ready_for_company
 
 SHIPMENT = {
     "origin": "Chennai, India",
@@ -102,7 +103,9 @@ class TestM4Roles:
         assert quote.status_code in (200, 201), quote.data
         return shipment.data["id"], quote.data["id"]
 
-    def _selected(self, company_name="Bravo Lines"):
+    def _selected(self, company_name="Bravo Lines", papers=True):
+        """Selected with the company; by default with its papers uploaded and
+        verified by the company's agent, which approving or revising needs."""
         shipment_id, quote_id = self._quote()
         offers = self.client.get(
             f"/api/quotes/{quote_id}/company-quotes", **self.customer
@@ -115,6 +118,11 @@ class TestM4Roles:
             **self.customer,
         )
         assert chosen.status_code == 200, chosen.data
+        if papers:
+            agent = {"Bravo Lines": self.agent_b, "Charlie Cargo": self.agent_c}[company_name]
+            papers_ready_for_company(
+                self.client, chosen.data["selection"]["reference"], self.customer, agent
+            )
         return shipment_id, chosen.data["selection"], chosen.data["verification"]
 
     def _decide(self, reference, payload, who):
@@ -126,8 +134,10 @@ class TestM4Roles:
         FreightCompany.objects.filter(id=company.id).update(**fields)
 
     def _book(self, selection_ref):
-        """Customs clears the approved request and the customer confirms it."""
+        """Customs opens and verifies each paper and clears it; the customer confirms."""
         from booking.models import CustomsClearance
+
+        customs_verifies(self.client, selection_ref, self.customs)
 
         clearance = CustomsClearance.objects.get(selection__reference=selection_ref)
         cleared = self.client.post(
@@ -287,7 +297,7 @@ class TestM4Roles:
     # -- What the agent sees when they open a request (process step 7) ---------
 
     def test_the_agent_sees_what_each_check_is_about(self):
-        shipment_id, _, verification = self._selected()
+        shipment_id, _, verification = self._selected(papers=False)
         ref = verification["reference"]
         detail = self.client.get(f"/api/verification-requests/{ref}", **self.agent_b).data
 
@@ -328,7 +338,7 @@ class TestM4Roles:
         return {doc["shipment_id"] for doc in response.data["results"]}
 
     def test_documents_follow_the_shipment_and_the_chosen_company(self):
-        shipment_id, _, verification = self._selected()
+        shipment_id, _, verification = self._selected(papers=False)
         assert self._upload(shipment_id, self.customer).status_code == 201
 
         assert shipment_id in self._listed(self.customer)
@@ -343,7 +353,7 @@ class TestM4Roles:
         assert [d["fileName"] for d in detail.data["documents"]] == ["invoice.pdf"]
 
     def test_only_the_owner_or_customs_may_add_remove_or_verify_documents(self):
-        shipment_id, _, _ = self._selected()
+        shipment_id, _, _ = self._selected(papers=False)
         assert self._upload(shipment_id, self.stranger).status_code == 403
         assert self._upload(shipment_id, self.agent_c).status_code == 403
 

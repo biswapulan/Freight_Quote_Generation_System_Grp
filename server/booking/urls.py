@@ -9,6 +9,7 @@ from .views import (
     BookingListView,
     CustomsClearanceDecisionView,
     CustomsClearanceQueueView,
+    DocumentReviewView,
     FinalDecisionView,
     MySelectionsView,
     ProvideInformationView,
@@ -77,6 +78,17 @@ urlpatterns += [
         "verification-requests/<str:reference>/decision/",
         VerificationDecisionView.as_view(),
         name="verification-decision-slash",
+    ),
+    # The agent's manual verdict on one document, after opening it.
+    path(
+        "verification-requests/<str:reference>/documents/<uuid:document_id>/review",
+        DocumentReviewView.as_view(),
+        name="verification-document-review",
+    ),
+    path(
+        "verification-requests/<str:reference>/documents/<uuid:document_id>/review/",
+        DocumentReviewView.as_view(),
+        name="verification-document-review-slash",
     ),
 ]
 
