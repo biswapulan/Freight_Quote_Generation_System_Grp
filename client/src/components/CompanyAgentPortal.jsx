@@ -224,7 +224,7 @@ export default function CompanyAgentPortal({ initialTab = "incoming" }) {
       type: decision === "VERIFIED" ? "success" : "info",
       text:
         decision === "VERIFIED"
-          ? `${doc.documentType} verified.`
+          ? `${doc.documentType} approved.`
           : `${doc.documentType} rejected. The customer has been asked for a corrected copy.`,
     });
   }
@@ -670,6 +670,8 @@ function RequestDetail(props) {
                 document={viewingDoc}
                 reviewerLabel="Your company's review"
                 currentStatus={viewingDoc.companyStatus}
+                approveLabel="Approve"
+                statusWords={COMPANY_WORDS}
                 onDecide={
                   detail.canCheck
                     ? (decision, remarks) => reviewDocument(viewingDoc, decision, remarks)
@@ -780,9 +782,9 @@ function RequestDetail(props) {
                   <div className="cap-note warn">
                     <FileText size={15} />
                     <div>
-                      <strong>Verify the documents first.</strong> Open each one under
-                      Documents and verify or reject it. Approving or revising needs every
-                      paper verified ({detail.documentReadiness.verified} of{" "}
+                      <strong>Review the documents first.</strong> Click each one under
+                      Documents to open it, then approve or reject it. Approving or revising
+                      this request needs every paper approved ({detail.documentReadiness.verified} of{" "}
                       {detail.documentReadiness.required} so far).
                     </div>
                   </div>
@@ -1085,8 +1087,11 @@ const DOC_TONE = { VERIFIED: "ok", REJECTED: "bad" };
 
 const REVIEW_WORDS = { VERIFIED: "verified", REJECTED: "rejected", PENDING: "awaiting review" };
 
+// The agent approves or rejects each paper; customs later verifies it.
+const COMPANY_WORDS = { VERIFIED: "approved", REJECTED: "rejected", PENDING: "awaiting review" };
+
 const REQUIRED_WORDS = {
-  VERIFIED: "verified by you",
+  VERIFIED: "approved by you",
   REJECTED: "rejected",
   PENDING: "on file · awaiting your review",
   MISSING: "not uploaded",
@@ -1105,7 +1110,7 @@ function DocumentsOnFile({ documents, required, readiness, canReview, onOpen }) 
         <FileText size={14} /> Documents
         <span className="cap-block-hint">
           {readiness
-            ? `${readiness.verified} of ${readiness.required} verified by your company`
+            ? `${readiness.verified} of ${readiness.required} approved by your company`
             : "Document checks"}
         </span>
       </h3>
@@ -1131,10 +1136,19 @@ function DocumentsOnFile({ documents, required, readiness, canReview, onOpen }) 
         <ul>
           {documents.map((doc) => (
             <li key={doc.id} className="cap-doc-row">
-              <span className="cap-doc-type">{doc.documentType}</span>
-              <span className="cap-doc-file">{doc.fileName}</span>
+              {/* Clicking the paper opens it in the viewer, where the agent
+                  approves or rejects it having read it. */}
+              <button
+                type="button"
+                className="cap-doc-link"
+                onClick={() => onOpen(doc)}
+                title="Open this document"
+              >
+                <span className="cap-doc-type">{doc.documentType}</span>
+                <span className="cap-doc-file">{doc.fileName}</span>
+              </button>
               <span className={`cap-pill ${DOC_TONE[doc.companyStatus] || "waiting"}`}>
-                Company: {REVIEW_WORDS[doc.companyStatus] || "awaiting review"}
+                Company: {COMPANY_WORDS[doc.companyStatus] || "awaiting review"}
               </span>
               <span className={`cap-pill ${DOC_TONE[doc.customsStatus] || "waiting"}`}>
                 Customs: {REVIEW_WORDS[doc.customsStatus] || "awaiting review"}

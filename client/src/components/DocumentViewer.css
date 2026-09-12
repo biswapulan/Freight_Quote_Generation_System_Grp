@@ -57,6 +57,12 @@
 /* The agent's document rows, where each paper is opened for review. */
 .cap-docs .cap-doc-row { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
 .cap-doc-file { font-size:12.5px; color:#475569; overflow-wrap:anywhere; }
+.cap-docs .cap-doc-link {
+  display:inline-flex; align-items:baseline; gap:8px; flex-wrap:wrap;
+  padding:0; border:0; background:none; font:inherit; text-align:left; cursor:pointer;
+}
+.cap-docs .cap-doc-link .cap-doc-file { color:#1d4ed8; text-decoration:underline; }
+.cap-docs .cap-doc-link:hover .cap-doc-file { color:#c2410c; }
 .cap-doc-open {
   margin-left:auto; padding:5px 11px; border:1px solid #cbd5e1; border-radius:7px;
   background:#fff; color:#0f172a; font-size:12px; font-weight:700; cursor:pointer;

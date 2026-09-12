@@ -370,10 +370,18 @@ function Clearance({ row, open, canDecide, onToggle, reason, setReason, busy, on
                 <ul className="ccd-docs">
                   {documents.map((doc) => (
                     <li key={doc.id}>
-                      <FileText size={13} /> {doc.documentType}
+                      <button
+                        type="button"
+                        className="ccd-doc-link"
+                        onClick={() => onOpenDoc(doc, canDecide)}
+                        title="Open this document"
+                      >
+                        <FileText size={13} /> {doc.documentType}
+                        <span className="ccd-muted"> · {doc.fileName}</span>
+                      </button>
                       <span className="ccd-muted">
                         {" "}
-                        · {doc.fileName} · {REVIEW_WORDS[doc.customsStatus] || "awaiting your check"}
+                        · {REVIEW_WORDS[doc.customsStatus] || "awaiting your check"}
                       </span>
                       <button
                         type="button"

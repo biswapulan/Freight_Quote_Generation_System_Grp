@@ -19,6 +19,9 @@ export default function DocumentViewer({
   currentStatus,
   onDecide,
   onClose,
+  // How this reviewer names a yes: the agent approves, customs verifies.
+  approveLabel = "Verify",
+  statusWords = WORDS,
 }) {
   const { token } = useAuth();
   const [url, setUrl] = useState(null);
@@ -81,7 +84,9 @@ export default function DocumentViewer({
             </strong>
             <span>
               {doc.fileName}
-              {currentStatus ? ` · ${reviewerLabel}: ${WORDS[currentStatus] || currentStatus.toLowerCase()}` : ""}
+              {currentStatus
+                ? ` · ${reviewerLabel}: ${statusWords[currentStatus] || currentStatus.toLowerCase()}`
+                : ""}
             </span>
           </div>
           <button type="button" className="dv-close" onClick={onClose} aria-label="Close">
@@ -114,7 +119,7 @@ export default function DocumentViewer({
             {problem && <div className="dv-problem">{problem}</div>}
             <div className="dv-actions">
               {!url && !error && (
-                <span className="dv-hint">Verify and Reject open up once the document has loaded.</span>
+                <span className="dv-hint">{approveLabel} and Reject open up once the document has loaded.</span>
               )}
               <button
                 type="button"
@@ -130,7 +135,7 @@ export default function DocumentViewer({
                 disabled={!url || busy}
                 onClick={() => decide("VERIFIED")}
               >
-                <ShieldCheck size={15} /> Verify
+                <ShieldCheck size={15} /> {approveLabel}
               </button>
             </div>
           </div>
