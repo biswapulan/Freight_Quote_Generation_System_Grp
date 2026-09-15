@@ -23,6 +23,8 @@ import {
 } from "lucide-react";
 import {
   listShipmentDocuments,
+  listCustomsClearances,
+  decideCustomsClearance,
   signOffCustomsCheck,
   verifyShipmentDocument,
 } from "../api/workflow";
@@ -32,7 +34,6 @@ import {
   formatMoney,
   updateQuoteStatusInStore,
   syncQuoteDocumentsToVault,
-  approveQuoteCustomsStep,
 } from "../utils/quoteWorkflow";
 import DocumentViewer from "./DocumentViewer";
 import "./CustomsOfficerPortal.css";
@@ -558,7 +559,38 @@ export default function CustomsOfficerPortal({ initialTab = "pending-reviews" })
 
       if (decision === "APPROVE") {
         const qId = selectedShipment.quoteNo || selectedShipment.id || selectedShipment.shipmentId;
-        await approveQuoteCustomsStep(qId, officerNotes || "Trade documents inspected and verified by Customs Officer.");
+        const clearances = await listCustomsClearances(token);
+        const clearance = (clearances.results || []).find(
+          (row) =>
+            row.status === "PENDING" &&
+            (row.selection?.quoteId === qId || row.selection?.shipmentId === selectedShipment.shipmentId),
+        );
+
+        if (clearance) {
+          await decideCustomsClearance(token, clearance.reference, {
+            decision: "CLEAR",
+            reason: officerNotes || "Trade documents inspected and verified by Customs Officer.",
+          });
+        } else {
+          // Older M1-M3 records do not have an M4 selection/clearance row.
+          await updateQuoteStatusInStore(qId, "SENT", {
+            reason: officerNotes || "Trade documents inspected and verified by Customs Officer.",
+          });
+        }
+      } else {
+        const qId = selectedShipment.quoteNo || selectedShipment.id || selectedShipment.shipmentId;
+        const clearances = await listCustomsClearances(token);
+        const clearance = (clearances.results || []).find(
+          (row) =>
+            row.status === "PENDING" &&
+            (row.selection?.quoteId === qId || row.selection?.shipmentId === selectedShipment.shipmentId),
+        );
+        if (clearance) {
+          await decideCustomsClearance(token, clearance.reference, {
+            decision: "REJECT",
+            reason: officerNotes,
+          });
+        }
       }
 
       await reload();

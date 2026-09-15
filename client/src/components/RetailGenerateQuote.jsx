@@ -636,7 +636,14 @@ export default function RetailGenerateQuote() {
   const printablePdfRef = useRef(null);
 
   function setField(key, val) {
-    setForm((f) => ({ ...f, [key]: val }));
+    const nextValue = ["custName", "custCompany", "custEmail", "custCountry"].includes(key)
+      ? String(val ?? "")
+      : val;
+    setForm((f) => ({ ...f, [key]: nextValue }));
+  }
+
+  function syncAutofillField(key, event) {
+    setField(key, event.currentTarget.value);
   }
 
   function updateReadyDate(value) {
@@ -1860,22 +1867,22 @@ export default function RetailGenerateQuote() {
             <div className="form-row">
               <div className="form-group">
                 <label>Full name <span className="req">*</span></label>
-                <input type="text" className="form-input" value={form.custName} onChange={(e) => setField("custName", e.target.value)} />
+                <input id="quote-customer-name" name="name" type="text" className="form-input" autoComplete="name" value={form.custName} onChange={(e) => setField("custName", e.target.value)} onInput={(e) => syncAutofillField("custName", e)} />
               </div>
               <div className="form-group">
                 <label>Company / Location <span className="req">*</span></label>
-                <input type="text" className="form-input" value={form.custCompany} onChange={(e) => setField("custCompany", e.target.value)} />
+                <input id="quote-company" name="organization" type="text" className="form-input" autoComplete="organization" value={form.custCompany} onChange={(e) => setField("custCompany", e.target.value)} onInput={(e) => syncAutofillField("custCompany", e)} />
               </div>
             </div>
 
             <div className="form-row">
               <div className="form-group">
                 <label>Email <span className="req">*</span></label>
-                <input type="email" className="form-input" value={form.custEmail} onChange={(e) => setField("custEmail", e.target.value)} />
+                <input id="quote-customer-email" name="email" type="email" className="form-input" autoComplete="email" value={form.custEmail} onChange={(e) => setField("custEmail", e.target.value)} onInput={(e) => syncAutofillField("custEmail", e)} />
               </div>
               <div className="form-group">
                 <label>Country <span className="req">*</span> <span className="badge-new">NEW</span></label>
-                <select className="form-select" value={form.custCountry} onChange={(e) => setField("custCountry", e.target.value)}>
+                <select id="quote-country" name="country" className="form-select" autoComplete="country-name" value={form.custCountry} onChange={(e) => setField("custCountry", e.target.value)} onInput={(e) => syncAutofillField("custCountry", e)}>
                   <option value="" disabled>Select country</option>
                   <option value="India">India</option>
                   <option value="UAE">United Arab Emirates</option>
