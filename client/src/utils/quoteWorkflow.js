@@ -50,6 +50,237 @@ export const STATUS_CONFIG = {
 };
 
 /**
+ * The company workflow (M4) stages, shown instead of the six above once a
+ * customer has picked a company.
+ *
+ * WORKFLOW_STAGES stops at the freight agent's approval. Once a company is
+ * chosen the sequence continues — the company verifies and approves the offer,
+ * a customs officer clears the consignment, and only then does the customer
+ * decide — and the backend mirrors that progress back onto the quote status
+ * (`QUOTE_STATUS_FOR` in booking/services.py), where a consignment sitting with
+ * customs reads APPROVED. The stepper therefore stalled on "4. Approved" and
+ * never showed the customs steps. These stages are derived from the quote's
+ * `m4` block, which is the authority on where the request actually is.
+ */
+export const COMPANY_WORKFLOW_STAGES = [
+  { id: "REQUESTED", name: "Requested", actor: "Customer", desc: "Shipment enquiry submitted by customer" },
+  { id: "GENERATED", name: "Generated", actor: "AI Engine", desc: "M1, M2 & M3 pricing and risk computed" },
+  { id: "PENDING_REVIEW", name: "Pending Review", actor: "Customs / Ops", desc: "Customs document validation and operational check" },
+  { id: "COMPANY_APPROVED", name: "Approved by company", actor: "Company", desc: "The selected company verifies and approves the offer" },
+  { id: "CUSTOMS_REVIEW", name: "Under Customs Officer Review", actor: "Customs Officer", desc: "Customs officer reviews the approved consignment" },
+  { id: "CUSTOMS_APPROVED", name: "Customs Officer Approved", actor: "Customs Officer", desc: "Customs officer clears the consignment for booking" },
+  { id: "DECISION", name: "Decision", actor: "Customer", desc: "Customer accepts or rejects the quote" },
+];
+
+const COMPANY_STEP_TOTAL = COMPANY_WORKFLOW_STAGES.length;
+
+// Pill colours for the company stages: amber while someone else is deciding,
+// blue in customs' hands, green once cleared, red once it is stopped.
+const COMPANY_TONE = {
+  waiting: "#d97706",
+  customs: "#0284c7",
+  cleared: "#059669",
+  stopped: "#b91c1c",
+  closed: "#64748b",
+};
+
+/** Work out the per-step states of a company flow from where it is. */
+function companyFlow(step, { doneThrough = step - 1, rejectedStep = null, label, reviewer, tone, note = "" }) {
+  const stepStates = [];
+  const stepChecked = [];
+  for (let n = 1; n <= COMPANY_STEP_TOTAL; n += 1) {
+    if (n === rejectedStep) {
+      stepStates.push("rejected");
+      stepChecked.push(false);
+    } else if (n === step) {
+      stepStates.push("active");
+      // A step can be lit up and already ticked: customs has cleared the
+      // consignment and the last decision is still with the customer.
+      stepChecked.push(n <= doneThrough);
+    } else if (n <= doneThrough) {
+      stepStates.push("done");
+      stepChecked.push(true);
+    } else {
+      stepStates.push("pending");
+      stepChecked.push(false);
+    }
+  }
+
+  return {
+    stepStates,
+    stepChecked,
+    notes: note ? { [step]: note } : {},
+    statusLabel: label,
+    statusColor: COMPANY_TONE[tone] || COMPANY_TONE.waiting,
+    activeReviewer: reviewer,
+  };
+}
+
+/**
+ * Where an M4 quote sits on the company workflow, read from its `m4` block.
+ *
+ * Returns null when the quote has no company workflow, so the caller keeps the
+ * plain M1-M3 stages.
+ */
+export function getCompanyWorkflowProgress(m4) {
+  const status = m4 && m4.status ? String(m4.status).toUpperCase() : "";
+  if (!status) return null;
+
+  const company = m4.companyName || "the company";
+  const stages = COMPANY_WORKFLOW_STAGES.map((stage, idx) => ({
+    ...stage,
+    // The company the customer chose names the approval step it is sitting on.
+    name: `${idx + 1}. ${stage.id === "COMPANY_APPROVED" ? `Approved by ${company}` : stage.name}`,
+  }));
+
+  // The company has the offer and has not approved it yet. The sub-label says
+  // exactly which part of its review is running.
+  const withCompany = (note, label, reviewer = company) =>
+    companyFlow(4, { label: label || note, reviewer, tone: "waiting", note });
+
+  let flow;
+  switch (status) {
+    case "QUOTE_OPTIONS_AVAILABLE":
+      flow = companyFlow(4, {
+        label: "Quote Options Available",
+        reviewer: "Customer",
+        tone: "waiting",
+        note: "Choose a company offer",
+      });
+      break;
+    case "QUOTE_SELECTED":
+    case "PENDING_COMPANY_VERIFICATION":
+      flow = withCompany(`Sent to ${company}`, `Sent to ${company}`);
+      break;
+    case "UNDER_VERIFICATION":
+      flow = withCompany(`Being checked by ${company}`, `Under ${company} Verification`);
+      break;
+    case "ESCALATED":
+      flow = withCompany(`With ${company}'s manager`, `Escalated at ${company}`);
+      break;
+    case "AWAITING_CUSTOMER_INFO":
+      flow = withCompany("Awaiting information from you", "Awaiting Your Information", "Customer");
+      break;
+    case "REVISION_PENDING_CUSTOMER":
+      flow = withCompany("Revised offer awaiting your decision", "Revised Offer Awaiting Your Decision", "Customer");
+      break;
+    case "REVISION_ACCEPTED":
+      flow = withCompany("Revision accepted, back with the company", "Revision Accepted");
+      break;
+
+    // The company approved: the consignment is with the customs officer. The
+    // backend maps both of these onto APPROVED, which is why the quote status
+    // alone could not show this step.
+    case "APPROVED":
+    case "PENDING_CUSTOMS_REVIEW":
+      flow = companyFlow(5, {
+        doneThrough: 4,
+        label: "Under Customs Officer Review",
+        reviewer: "Customs Officer",
+        tone: "customs",
+        note: "With the customs officer",
+      });
+      break;
+    case "CUSTOMS_CLEARED":
+      flow = companyFlow(6, {
+        doneThrough: 6,
+        label: "Customs Officer Approved",
+        reviewer: "Customer",
+        tone: "cleared",
+        note: "Awaiting your decision",
+      });
+      break;
+    case "BOOKING_CONFIRMED":
+      flow = companyFlow(7, { doneThrough: 7, label: "Booking Confirmed", reviewer: "Completed", tone: "cleared" });
+      break;
+
+    // Stopped, so the bar shows where it stopped rather than a step it never
+    // reached.
+    case "CUSTOMS_REJECTED":
+      flow = companyFlow(5, {
+        doneThrough: 4,
+        rejectedStep: 5,
+        label: "Rejected by Customs Officer",
+        reviewer: "Customs Officer",
+        tone: "stopped",
+        note: "Not cleared by the officer",
+      });
+      break;
+    case "REJECTED":
+      flow = companyFlow(4, {
+        doneThrough: 3,
+        rejectedStep: 4,
+        label: `Rejected by ${company}`,
+        reviewer: company,
+        tone: "stopped",
+        note: "The company declined the offer",
+      });
+      break;
+    case "RESELECT_QUOTE":
+    case "BOOKING_CANCELLED": {
+      // Closed at whichever stage stopped it: a clearance the officer approved
+      // means the customer reached the decision, a clearance the officer
+      // rejected stopped there, and no clearance at all means the company
+      // never got past its own review.
+      const stoppedAt =
+        m4.bookingReference || m4.customsStatus === "CLEARED" ? 7 : m4.customsStatus ? 5 : 4;
+      const cancelled = status === "BOOKING_CANCELLED";
+      flow = companyFlow(stoppedAt, {
+        doneThrough: stoppedAt - 1,
+        rejectedStep: stoppedAt,
+        label: cancelled ? "Booking Cancelled" : "Closed — Choose Another Company",
+        reviewer: cancelled ? "Completed" : "Customer",
+        tone: "closed",
+        note: cancelled ? "No booking was made" : "Pick another company to continue",
+      });
+      break;
+    }
+    default:
+      // A status this build does not know still sits at the company's
+      // approval, not back at the start: the customer has picked a company.
+      flow = withCompany(status.replaceAll("_", " "), status.replaceAll("_", " "));
+  }
+
+  return { stages, ...flow };
+}
+
+/**
+ * How one quote's status is worded and coloured, in one place.
+ *
+ * A quote inside the company workflow (M4) is shown by its M4 stage: the quote
+ * status is only a mirror of it, and reads APPROVED while the consignment is
+ * still with the customs officer, which is how the same record came to say
+ * "Quote: APPROVED" above a line saying it was with customs. The stepper, the
+ * list badge and the modal header all read this so they cannot disagree.
+ *
+ * Quotes without an `m4` block keep their plain STATUS_CONFIG label and
+ * colours. The M4 case borrows the stepper pill's tone, so the badge reads the
+ * same colour as the stage it names.
+ */
+export function getQuoteStatusDisplay(quote) {
+  const norm = normalizeWorkflowStatus(quote?.status);
+  const plain = STATUS_CONFIG[norm] || {
+    label: quote?.status ?? "",
+    badgeClass: "status-tag-draft",
+    color: "#64748b",
+    bg: "#f1f5f9",
+  };
+
+  const company = getCompanyWorkflowProgress(quote?.m4);
+  if (!company) return { ...plain, isCompanyStage: false };
+
+  return {
+    label: company.statusLabel,
+    color: company.statusColor,
+    // The stepper tints its pill with the stage colour at 8% alpha; the list
+    // badges are filled, so the fill is derived the same way.
+    bg: `${company.statusColor}15`,
+    badgeClass: "badge-company-stage",
+    isCompanyStage: true,
+  };
+}
+
+/**
  * Canonical Shipment Status Flow (PDF section 10)
  * DRAFT -> SUBMITTED -> PROCESSING -> ANALYZED -> QUOTED -> CLOSED / CANCELLED
  */

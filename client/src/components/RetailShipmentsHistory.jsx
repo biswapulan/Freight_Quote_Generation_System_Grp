@@ -27,16 +27,16 @@ import {
 } from "lucide-react";
 import { useRetailQuotes } from "../context/RetailQuotesContext";
 import {
-  STATUS_CONFIG,
   normalizeWorkflowStatus,
   SHIPMENT_STATUS_CONFIG,
   normalizeShipmentStatus,
   getShipmentStatusFromQuoteStatus,
+  getQuoteStatusDisplay,
   decideQuoteInStore,
   formatMoney,
   isRouteConfirmed,
 } from "../utils/quoteWorkflow";
-import { listShipmentDocuments, uploadShipmentDocument } from "../api/workflow";
+import { listShipmentDocuments, uploadShipmentDocument, submitFinalDecision } from "../api/workflow";
 import { useAuth } from "../context/AuthContext";
 import QuoteWorkflowStepper from "./QuoteWorkflowStepper";
 import "./RetailShipmentsHistory.css";
@@ -93,6 +93,10 @@ export default function RetailShipmentsHistory({ viewMode = "quotes" }) {
   const [dateFilter, setDateFilter] = useState("all");
   const [selectedQuote, setSelectedQuote] = useState(null);
   const [copied, setCopied] = useState(false);
+  // The customer's last word on a cleared request, answered in this record.
+  const [finalNote, setFinalNote] = useState("");
+  const [finalBusy, setFinalBusy] = useState(false);
+  const [finalError, setFinalError] = useState("");
 
   const isShipmentMode = viewMode === "shipments";
 
@@ -182,7 +186,23 @@ export default function RetailShipmentsHistory({ viewMode = "quotes" }) {
     if (!q) return;
     setSelectedQuote(q);
     setCopied(false);
+    // A note typed against the last record must not carry into the next one.
+    setFinalNote("");
+    setFinalError("");
   }
+
+  /**
+   * Keep the open record in step with the list behind it.
+   *
+   * Reloading replaces every quote object, so without this the modal keeps the
+   * copy it opened with — still "awaiting your decision" while the row behind
+   * it has moved on to Booked.
+   */
+  useEffect(() => {
+    if (!selectedQuote) return;
+    const fresh = quotations.find((item) => item.id === selectedQuote.id);
+    if (fresh && fresh !== selectedQuote) setSelectedQuote(fresh);
+  }, [quotations, selectedQuote]);
 
   /**
    * Documents actually on file for the open quote.
@@ -248,6 +268,49 @@ export default function RetailShipmentsHistory({ viewMode = "quotes" }) {
 
   const handleAcceptQuote = (quoteNo) => handleDecision(quoteNo, "ACCEPTED");
   const handleRejectQuote = (quoteNo) => handleDecision(quoteNo, "REJECTED");
+
+  /**
+   * The customer's final decision on a request the company approved and
+   * customs cleared (M4).
+   *
+   * This goes through the platform's own final-decision endpoint, which is the
+   * only thing that can create a booking, and which refuses a decline with no
+   * reason. Its refusal is shown here rather than swallowed, so a customer is
+   * never left thinking a decline was recorded when it was not.
+   */
+  async function submitCustomerFinalDecision(decision) {
+    const m4 = selectedQuote?.m4;
+    if (!m4?.selectionReference || finalBusy) return;
+
+    const note = finalNote.trim();
+    if (decision === "DECLINE" && !note) {
+      setFinalError("Tell the company why you are declining.");
+      return;
+    }
+
+    setFinalBusy(true);
+    setFinalError("");
+    try {
+      const res = await submitFinalDecision(token, m4.selectionReference, {
+        decision,
+        note,
+      });
+      setFinalNote("");
+      setWorkflowNotice(
+        decision === "ACCEPT"
+          ? `Booking confirmed${res?.booking?.reference ? ` · ${res.booking.reference}` : ""}. The company has been told.`
+          : "Declined. You can now choose another company for this shipment.",
+      );
+      setTimeout(() => setWorkflowNotice(""), 8000);
+      // Re-read the quote so both this record and the list behind it show
+      // Booked, rather than the state the modal opened with.
+      await reloadQuotes();
+    } catch (err) {
+      setFinalError(err.message || "Could not record your decision.");
+    } finally {
+      setFinalBusy(false);
+    }
+  }
 
   /**
    * Upload a trade document.
@@ -633,8 +696,7 @@ export default function RetailShipmentsHistory({ viewMode = "quotes" }) {
                     <td style={{ fontWeight: 800 }}>{q.totalFormatted}</td>
                     <td>
                       {(() => {
-                        const norm = normalizeWorkflowStatus(q.status);
-                        const cfg = STATUS_CONFIG[norm] || { label: q.status, badgeClass: "status-tag-draft", color: "#64748b", bg: "#f1f5f9" };
+                        const cfg = getQuoteStatusDisplay(q);
                         return (
                           <span
                             className="status-badge"
@@ -650,7 +712,7 @@ export default function RetailShipmentsHistory({ viewMode = "quotes" }) {
                               borderRadius: "6px",
                             }}
                           >
-                            {cfg.label || norm}
+                            {cfg.label || normalizeWorkflowStatus(q.status)}
                           </span>
                         );
                       })()}
@@ -735,8 +797,7 @@ export default function RetailShipmentsHistory({ viewMode = "quotes" }) {
                 </div>
                 <div className="rsh-header-badges">
                   {(() => {
-                    const norm = normalizeWorkflowStatus(selectedQuote.status);
-                    const cfg = STATUS_CONFIG[norm] || { label: selectedQuote.status, color: "#0284c7", bg: "#e0f2fe" };
+                    const cfg = getQuoteStatusDisplay(selectedQuote);
                     return (
                       <span
                         className="status-badge"
@@ -752,7 +813,7 @@ export default function RetailShipmentsHistory({ viewMode = "quotes" }) {
                           borderRadius: "6px",
                         }}
                       >
-                        Quote: {cfg.label || norm}
+                        Quote: {cfg.label || normalizeWorkflowStatus(selectedQuote.status)}
                       </span>
                     );
                   })()}
@@ -798,8 +859,10 @@ export default function RetailShipmentsHistory({ viewMode = "quotes" }) {
 
             {/* Modal Body */}
             <div className="rsh-modal-body">
-              {/* Multi-Role 5-Step Quote Lifecycle Stepper */}
-              <QuoteWorkflowStepper status={selectedQuote.status} />
+              {/* Multi-Role Quote Lifecycle Stepper. The company workflow
+                  (M4), when this quote has one, takes the bar past the
+                  agent's approval and through customs to the decision. */}
+              <QuoteWorkflowStepper status={selectedQuote.status} m4={selectedQuote.m4} />
 
               {/* Route Summary Ribbon */}
               <div className="rsh-route-ribbon">
@@ -957,6 +1020,26 @@ export default function RetailShipmentsHistory({ viewMode = "quotes" }) {
                           ["Fuel surcharge", selectedQuote.fuelSurcharge],
                         ];
                     const total = m4 ? m4.agreedTotal ?? m4.selectedTotal : selectedQuote.totalNum;
+                    // An agent prices a revision from a total, so the offer's
+                    // fee lines can still carry the original amounts. This is
+                    // what makes the lines above add up to the total below.
+                    // Anything under half a unit is the rounding of those lines
+                    // against a rounded total: it would show as a zero row.
+                    const adjustment = Number(m4?.offer?.adjustment || 0);
+                    const showAdjustment = Math.round(adjustment) !== 0;
+                    // The rows are shown in whole currency units, so each line is
+                    // rounded for display and four roundings do not add up to the
+                    // rounded total. Taking the row's amount from the figures on
+                    // screen is what makes the sum below close exactly, rather
+                    // than being a rupee out when the paise fall on either side
+                    // of a rounding.
+                    const displayedTotal = Math.round(Number(total) || 0);
+                    const displayedLines = lines.reduce(
+                      (sum, [, amount]) => sum + Math.round(Number(amount) || 0),
+                      0,
+                    );
+                    // The company's counter-offer, pending or already accepted.
+                    const revision = m4?.revision;
                     return (
                       <div className="rsh-fee-breakdown">
                         {lines.map(([label, amount]) => (
@@ -965,17 +1048,21 @@ export default function RetailShipmentsHistory({ viewMode = "quotes" }) {
                             <span>{formatMoney(amount, currency)}</span>
                           </div>
                         ))}
-                        {m4?.wasRevised && (
+                        {showAdjustment && (
                           <div className="rsh-fee-row">
-                            <span>Offer before revision</span>
-                            <span>{formatMoney(m4.selectedTotal, currency)}</span>
+                            <span>{revision ? "Revision adjustment" : "Price adjustment"}</span>
+                            <span>{formatMoney(displayedTotal - displayedLines, currency)}</span>
                           </div>
                         )}
                         <div className="rsh-fee-divider"></div>
                         <div className="rsh-fee-total-row">
                           <div>
                             <span className="rsh-total-label">
-                              {m4?.agreedTotal != null ? "Agreed total" : m4 ? `${m4.companyName} offer` : "Total quote"}
+                              {m4
+                                ? m4.bookingReference || m4.wasRevised
+                                  ? "Agreed total"
+                                  : `${m4.companyName} offer`
+                                : "Total quote"}
                             </span>
                             <span className="rsh-total-sub">
                               {m4 ? `${m4.companyName}'s rate card at the AI market rate` : "Platform rule-based pricing"}
@@ -983,6 +1070,37 @@ export default function RetailShipmentsHistory({ viewMode = "quotes" }) {
                           </div>
                           <div className="rsh-total-val">{formatMoney(total, currency)}</div>
                         </div>
+
+                        {/* What happened to the price. A record that quietly
+                            showed the original amount beside a revised one left
+                            the customer unable to tell which they were
+                            confirming. */}
+                        {revision && (
+                          <div className={`rsh-revision-note${revision.accepted ? "" : " pending"}`}>
+                            <AlertTriangle size={13} />
+                            <span>
+                              {revision.accepted ? (
+                                <>
+                                  Revised from {formatMoney(revision.originalTotal, currency)} to{" "}
+                                  {formatMoney(revision.revisedTotal, currency)}. This is the total
+                                  you are booking at.
+                                </>
+                              ) : (
+                                <>
+                                  {m4.companyName} has revised this offer to{" "}
+                                  {formatMoney(revision.revisedTotal, currency)} (was{" "}
+                                  {formatMoney(revision.originalTotal, currency)}). The total above is
+                                  still the original one — accept or decline the revision in{" "}
+                                  <Link to="/dashboard/selected-quotes" onClick={() => setSelectedQuote(null)}>
+                                    Selected Quotes
+                                  </Link>{" "}
+                                  to move it.
+                                </>
+                              )}
+                              {revision.reason ? <> Reason: {revision.reason}</> : null}
+                            </span>
+                          </div>
+                        )}
                       </div>
                     );
                   })()}
@@ -1192,6 +1310,63 @@ export default function RetailShipmentsHistory({ viewMode = "quotes" }) {
               </div>
 
             </div>
+
+            {/* The customer's final decision.
+                The company has verified this shipment and customs has cleared
+                it, so the only move left is the customer's: book it at the
+                agreed price, or decline it and choose another company. That
+                step lived only in Selected Quotes, so the record a customer
+                opened to check the final quote offered them no way to act on
+                it. Shown for this state alone — every other state belongs to
+                the company, customs or the legacy review flow. */}
+            {selectedQuote.m4?.status === "CUSTOMS_CLEARED" && (
+              <div className="rsh-final-decision">
+                <div className="rsh-final-decision-head">
+                  <ShieldCheck size={16} />
+                  <div>
+                    <strong>Final quote ready — confirm your booking</strong>
+                    <span>
+                      {selectedQuote.m4.companyName} approved this shipment and customs cleared
+                      it. Confirming books it at{" "}
+                      {formatMoney(
+                        selectedQuote.m4.agreedTotal ?? selectedQuote.m4.selectedTotal,
+                        selectedQuote.m4.currency,
+                      )}
+                      .
+                    </span>
+                  </div>
+                </div>
+                <div className="rsh-final-decision-form">
+                  <input
+                    type="text"
+                    value={finalNote}
+                    onChange={(e) => setFinalNote(e.target.value)}
+                    placeholder="Note for the company (a reason is required if you decline)"
+                    aria-label="Note for the company"
+                    disabled={finalBusy}
+                  />
+                  {finalError && <div className="rsh-final-decision-error">{finalError}</div>}
+                  <div className="rsh-final-decision-actions">
+                    <button
+                      type="button"
+                      className="btn-secondary-light"
+                      onClick={() => submitCustomerFinalDecision("DECLINE")}
+                      disabled={finalBusy}
+                    >
+                      <ThumbsDown size={14} /> Decline
+                    </button>
+                    <button
+                      type="button"
+                      className="btn-orange-primary"
+                      onClick={() => submitCustomerFinalDecision("ACCEPT")}
+                      disabled={finalBusy}
+                    >
+                      <ThumbsUp size={14} /> {finalBusy ? "Recording…" : "Confirm booking"}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Modal Footer with Customer Accept / Reject Actions */}
             <div className="rsh-modal-footer">

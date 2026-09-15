@@ -117,6 +117,46 @@ export default function CustomsOfficerPortal({ initialTab = "pending-reviews" })
   const { quotes, loading, error, reload } = usePlatformQuotes();
 
   /**
+   * Who cleared each consignment, keyed by quote and by shipment.
+   *
+   * The officer column read the quote's `reviewedBy`, which is the freight
+   * agent's reviewer and is blank on a cleared consignment, so every record
+   * showed "Unassigned". A customs officer's identity is recorded on the M4
+   * clearance they decided (`CustomsClearance.officer_email`) and nowhere on
+   * the quote itself, so it is read from the quote's M4 block — which the
+   * server fills from the clearance.
+   *
+   * The clearance queue below is only a fallback: records that predate the
+   * `customsOfficerEmail` field still need the join to name their officer.
+   */
+  const [officerByReference, setOfficerByReference] = useState({});
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!token) return undefined;
+
+    listCustomsClearances(token)
+      .then((data) => {
+        if (cancelled) return;
+        const byReference = {};
+        for (const row of data.results || []) {
+          if (!row.officerEmail) continue;
+          if (row.selection?.quoteId) byReference[row.selection.quoteId] = row.officerEmail;
+          if (row.selection?.shipmentId) byReference[row.selection.shipmentId] = row.officerEmail;
+        }
+        setOfficerByReference(byReference);
+      })
+      // The officer's name is a nicety: a failed lookup must not blank the desk.
+      .catch(() => {
+        if (!cancelled) setOfficerByReference({});
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [token]);
+
+  /**
    * The officer's worklist is derived from live platform quotes.
    *
    * It previously merged localStorage with a seeded array and filled the gaps
@@ -153,7 +193,12 @@ export default function CustomsOfficerPortal({ initialTab = "pending-reviews" })
               : customsAnalysis?.status === "APPROVED"
               ? "APPROVED"
               : "PENDING_REVIEW",
-          assignedOfficer: q.reviewedBy || "Unassigned",
+          // The officer who decided this consignment. The server puts them on
+          // the quote's M4 block; the clearance-queue join covers records made
+          // before that field existed. Left blank — not filled with the
+          // agent's reviewer — when no officer has cleared it yet.
+          assignedOfficer:
+            q.m4?.customsOfficerEmail || officerByReference[q.id] || officerByReference[q.shipmentId] || "",
           containers: q.containerType ? `${q.containerType} (${Number(q.weightKg).toLocaleString()} kg)` : "—",
           declaredValue: q.totalFormatted,
           dutyEstimate: formatMoney(Math.round(q.totalNum * dutyRate), q.currency),
@@ -170,7 +215,7 @@ export default function CustomsOfficerPortal({ initialTab = "pending-reviews" })
           slaUrgent: ["HIGH", "CRITICAL"].includes(q.overallRisk),
         };
       }),
-    [quotes],
+    [quotes, officerByReference],
   );
 
   const [selectedShipment, setSelectedShipment] = useState(null);
@@ -1024,7 +1069,7 @@ export default function CustomsOfficerPortal({ initialTab = "pending-reviews" })
                     </td>
                     <td>
                       <span style={{ fontSize: "12.5px", color: "#475569", fontWeight: 600 }}>
-                        {s.assignedOfficer || "Officer Sharma"}
+                        {s.assignedOfficer || "Unassigned"}
                       </span>
                     </td>
                     <td>
@@ -1287,7 +1332,7 @@ export default function CustomsOfficerPortal({ initialTab = "pending-reviews" })
                       </td>
                       <td>
                         <span className="cop-stamp-badge">
-                          <Stamp size={14} /> Stamped by {s.assignedOfficer || "Officer Sharma"}
+                          <Stamp size={14} /> Stamped by {s.assignedOfficer || "Unassigned"}
                         </span>
                       </td>
                       <td>

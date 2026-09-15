@@ -105,7 +105,7 @@ class QuoteSerializer(serializers.ModelSerializer):
 
         selections = QuoteSelection.objects.filter(quote=obj).select_related(
             "company", "company_quote"
-        )
+        ).prefetch_related("revisions")
         selection = (
             selections.filter(is_active=True).order_by("-created_at").first()
             or selections.order_by("-created_at").first()
@@ -117,6 +117,42 @@ class QuoteSerializer(serializers.ModelSerializer):
         clearance = getattr(selection, "customs_clearance", None)
         booking = getattr(selection, "booking", None)
         offer = selection.company_quote
+
+        # The latest counter-offer, whatever became of it. Both a pending and an
+        # accepted one matter here: one is the price the customer is being asked
+        # about, the other is the price they settled on.
+        revisions = list(selection.revisions.all())
+        revision = max(revisions, key=lambda r: r.revision_number, default=None)
+
+        # What the customer is deciding on. A booking carries the terms actually
+        # agreed; before there is one, the price on the table is the offer's own
+        # total, which accepting a revision moves. Reading only the booking left
+        # this null until the booking existed, so the record fell back to the
+        # frozen snapshot and showed a customer revising the original amount
+        # while asking them to confirm the revised one.
+        if booking is not None:
+            agreed_total = booking.agreed_total_price
+        elif offer is not None:
+            agreed_total = offer.total_price
+        else:
+            agreed_total = None
+
+        # An agent prices a revision from a total, so the offer's own fee lines
+        # can still sum to the original amount. This is the difference that
+        # makes the record's lines add up to its total.
+        adjustment = 0.0
+        if offer is not None:
+            adjustment = round(
+                offer.total_price
+                - (
+                    offer.base_freight
+                    + offer.fuel_surcharge
+                    + offer.handling_fee
+                    + offer.documentation_fee
+                ),
+                2,
+            )
+
         return {
             "selectionReference": selection.reference,
             "status": selection.status,
@@ -126,18 +162,39 @@ class QuoteSerializer(serializers.ModelSerializer):
             "customsReference": clearance.reference if clearance else None,
             "customsStatus": clearance.status if clearance else None,
             "customsReason": clearance.reason if clearance else "",
+            # The officer who decided the clearance. `CustomsClearance` is the
+            # authority on this and the quote carries no officer of its own, so
+            # the screens that name one (the customs desk) read it here instead
+            # of issuing a second request for the clearance queue.
+            "customsOfficerEmail": clearance.officer_email if clearance else "",
             "bookingReference": booking.reference if booking else None,
             "bookingStatus": booking.status if booking else None,
             "currency": selection.selected_currency,
             "selectedTotal": selection.selected_total_price,
-            "agreedTotal": booking.agreed_total_price if booking else None,
-            "wasRevised": bool(booking and booking.was_revised),
+            "agreedTotal": agreed_total,
+            # A revision the customer accepted counts even before the booking
+            # that records it, so the record can say the terms moved.
+            "wasRevised": bool(
+                any(r.status == "ACCEPTED" for r in revisions)
+                or (booking and booking.was_revised)
+            ),
+            "revision": {
+                "reference": revision.reference,
+                "originalTotal": revision.original_total_price,
+                "revisedTotal": revision.revised_total_price,
+                "currency": revision.currency,
+                "reason": revision.reason,
+                "accepted": revision.status == "ACCEPTED",
+            }
+            if revision
+            else None,
             "offer": {
                 "baseFreight": offer.base_freight,
                 "fuelSurcharge": offer.fuel_surcharge,
                 "handlingFee": offer.handling_fee,
                 "documentationFee": offer.documentation_fee,
                 "totalPrice": offer.total_price,
+                "adjustment": adjustment,
             }
             if offer
             else None,

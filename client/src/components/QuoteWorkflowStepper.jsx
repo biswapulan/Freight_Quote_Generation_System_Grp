@@ -1,6 +1,22 @@
 import React from "react";
-import { Check, Clock, AlertTriangle, ShieldCheck, Cpu, User, FileCheck } from "lucide-react";
-import { STATUS_CONFIG, normalizeWorkflowStatus, getShipmentStatusFromQuoteStatus } from "../utils/quoteWorkflow";
+import {
+  Check,
+  Clock,
+  AlertTriangle,
+  ShieldCheck,
+  Cpu,
+  User,
+  FileCheck,
+  Building2,
+  SearchCheck,
+  Stamp,
+} from "lucide-react";
+import {
+  STATUS_CONFIG,
+  normalizeWorkflowStatus,
+  getShipmentStatusFromQuoteStatus,
+  getCompanyWorkflowProgress,
+} from "../utils/quoteWorkflow";
 import "./QuoteWorkflowStepper.css";
 
 const STAGES = [
@@ -12,7 +28,18 @@ const STAGES = [
   { id: "ACCEPTED", name: "6. Decision", actor: "Customer", icon: Check },
 ];
 
-export default function QuoteWorkflowStepper({ status, requiresCustoms = true, compact = false }) {
+// Icons for the seven company-workflow (M4) stages, by stage id.
+const COMPANY_ICONS = {
+  REQUESTED: User,
+  GENERATED: Cpu,
+  PENDING_REVIEW: ShieldCheck,
+  COMPANY_APPROVED: Building2,
+  CUSTOMS_REVIEW: SearchCheck,
+  CUSTOMS_APPROVED: Stamp,
+  DECISION: Check,
+};
+
+export default function QuoteWorkflowStepper({ status, m4 = null, requiresCustoms = true, compact = false }) {
   const normStatus = normalizeWorkflowStatus(status);
   const currentConfig = STATUS_CONFIG[normStatus] || STATUS_CONFIG.REQUESTED;
   const currentStep = currentConfig.stepIndex || 1;
@@ -20,40 +47,75 @@ export default function QuoteWorkflowStepper({ status, requiresCustoms = true, c
   const isFlagged = normStatus === "CUSTOMS_FLAGGED";
   const shipmentStatus = getShipmentStatusFromQuoteStatus(normStatus);
 
-  const stagesList = STAGES.map((s, idx) => {
-    if (idx === 0) {
-      return {
-        ...s,
-        name: normStatus === "DRAFT" ? "1. Draft (Saved)" : "1. Requested",
-      };
-    }
-    return s;
-  });
+  // A quote inside the company workflow (M4) has stages of its own, and the
+  // M4 block drives them: the quote status is only a mirror of where the
+  // request is, so it cannot tell "approved and with customs" from "approved
+  // and on its way to the customer".
+  const company = getCompanyWorkflowProgress(m4);
+
+  const stagesList = company
+    ? company.stages.map((stage) => ({ ...stage, icon: COMPANY_ICONS[stage.id] || FileCheck }))
+    : STAGES.map((s, idx) =>
+        idx === 0
+          ? { ...s, name: normStatus === "DRAFT" ? "1. Draft (Saved)" : "1. Requested" }
+          : s,
+      );
+
+  // One state per step, so both flows render through the same markup. The
+  // plain flow keeps its original rule: everything before the current step is
+  // done and the status's own step is the one lit up.
+  const stepStates = company
+    ? company.stepStates
+    : stagesList.map((_, idx) => {
+        const stepNum = idx + 1;
+        const stepDone = currentStep > stepNum || (stepNum === 6 && normStatus === "ACCEPTED");
+        if (currentStep === stepNum) {
+          if (isRejected && stepNum === 6) return "rejected";
+          if (isFlagged && stepNum === 3) return "flagged";
+          return "active";
+        }
+        return stepDone ? "done" : "pending";
+      });
+
+  const stepChecked = company
+    ? company.stepChecked
+    : stagesList.map((_, idx) => currentStep > idx + 1 || (idx + 1 === 6 && normStatus === "ACCEPTED"));
+
+  const statusLabel = company ? company.statusLabel : currentConfig.label;
+  const statusColor = company ? company.statusColor : currentConfig.color;
+  const activeReviewer = company
+    ? company.activeReviewer
+    : stagesList[Math.min(currentStep - 1, stagesList.length - 1)]?.actor || "Customer";
+
+  // A connector follows the node it leaves. In the plain flow a flagged or
+  // rejected current step still lights its connector, as it always has.
+  const connectorClass = (state) => {
+    if (state === "done") return "done";
+    if (state === "active") return "active";
+    return company || state === "pending" ? "" : "active";
+  };
+
+  const containerClass = ["qws-container", compact && "compact", company && "company"]
+    .filter(Boolean)
+    .join(" ");
 
   return (
-    <div className={`qws-container ${compact ? "compact" : ""}`}>
+    <div className={containerClass}>
       <div className="qws-steps">
         {stagesList.map((stage, idx) => {
           const stepNum = idx + 1;
-          const isDone = currentStep > stepNum || (stepNum === 6 && normStatus === "ACCEPTED");
-          const isActive = currentStep === stepNum;
+          const state = stepStates[idx];
+          const isDone = stepChecked[idx];
           const Icon = stage.icon;
-
-          let stepClass = "pending";
-          if (isDone) stepClass = "done";
-          if (isActive) {
-            if (isRejected && stepNum === 6) stepClass = "rejected";
-            else if (isFlagged && stepNum === 3) stepClass = "flagged";
-            else stepClass = "active";
-          }
+          const note = company?.notes?.[stepNum];
 
           return (
             <React.Fragment key={stage.id}>
-              <div className={`qws-step-node ${stepClass}`}>
+              <div className={`qws-step-node ${state}`}>
                 <div className="qws-marker">
                   {isDone ? (
                     <Check size={14} strokeWidth={2.5} />
-                  ) : isActive && isRejected ? (
+                  ) : state === "rejected" ? (
                     <AlertTriangle size={14} />
                   ) : (
                     <Icon size={14} />
@@ -62,10 +124,11 @@ export default function QuoteWorkflowStepper({ status, requiresCustoms = true, c
                 <div className="qws-info">
                   <span className="qws-step-title">{stage.name}</span>
                   <span className="qws-actor-badge">{stage.actor}</span>
+                  {note && <span className="qws-step-sub">{note}</span>}
                 </div>
               </div>
               {idx < stagesList.length - 1 && (
-                <div className={`qws-connector ${isDone ? "done" : isActive ? "active" : ""}`} />
+                <div className={`qws-connector ${connectorClass(state)}`} />
               )}
             </React.Fragment>
           );
@@ -78,9 +141,9 @@ export default function QuoteWorkflowStepper({ status, requiresCustoms = true, c
             <span className="qws-meta-label">Quote Status:</span>
             <span
               className="qws-meta-val quote-pill"
-              style={{ backgroundColor: `${currentConfig.color}15`, color: currentConfig.color, borderColor: `${currentConfig.color}40` }}
+              style={{ backgroundColor: `${statusColor}15`, color: statusColor, borderColor: `${statusColor}40` }}
             >
-              {currentConfig.label}
+              {statusLabel}
             </span>
           </div>
           <div className="qws-meta-divider" />
@@ -93,9 +156,7 @@ export default function QuoteWorkflowStepper({ status, requiresCustoms = true, c
           <div className="qws-meta-divider" />
           <div className="qws-meta-item">
             <span className="qws-meta-label">Active Reviewer:</span>
-            <span className="qws-meta-actor">
-              {stagesList[Math.min(currentStep - 1, 5)]?.actor || "Customer"}
-            </span>
+            <span className="qws-meta-actor">{activeReviewer}</span>
           </div>
         </div>
       )}

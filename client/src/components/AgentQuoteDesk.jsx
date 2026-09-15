@@ -692,8 +692,9 @@ export default function AgentQuoteDesk() {
               </button>
             </div>
 
-            {/* Visual Workflow Stepper */}
-            <QuoteWorkflowStepper status={activeModalQuote.status} compact />
+            {/* Visual Workflow Stepper. A quote in the company workflow shows
+                its M4 stages (company approval, customs, decision). */}
+            <QuoteWorkflowStepper status={activeModalQuote.status} m4={activeModalQuote.m4} compact />
 
             {/* Customs Review Clearance Callout if available */}
             {activeModalQuote.customsRemarks && (

@@ -164,6 +164,8 @@ class TestQuoteFollowsTheCompanyWorkflow:
         clearance = CustomsClearance.objects.get(selection__reference=selection["reference"])
         assert m4["customsReference"] == clearance.reference
         assert m4["customsStatus"] == "CLEARED"
+        # Who cleared it travels with the quote, from the clearance itself.
+        assert m4["customsOfficerEmail"] == clearance.officer_email == "customs@freightai.com"
         assert m4["selectionReference"] == selection["reference"]
         assert m4["verificationReference"] == verification["reference"]
         assert m4["bookingReference"] == booking.reference
@@ -193,6 +195,135 @@ class TestQuoteFollowsTheCompanyWorkflow:
         self._final(selection["reference"], "ACCEPT")
         assert self._state(quote_id) == ("ACCEPTED", "CLOSED")
 
+    def _revise(self, selection, verification, total_price, reason="Bunker surcharge rose."):
+        """The agent's counter-offer, priced the way the agent desk sends it.
+
+        The desk sends a total and a transit time and nothing else, which is
+        what leaves the offer's own fee lines behind at the original amount.
+        """
+        self._decide(
+            verification["reference"],
+            {"action": "MODIFY", "reason": reason, "revision": {"total_price": total_price}},
+        )
+
+    def _accept_revision(self, selection):
+        response = self.client.post(
+            f"/api/selections/{selection['reference']}/revision-response",
+            {"decision": "ACCEPT"},
+            format="json",
+            **self.customer,
+        )
+        assert response.status_code == 200, response.data
+
+    def _m4(self, quote_id):
+        return QuoteSerializer(Quote.objects.get(id=quote_id)).data["m4"]
+
+    def test_an_accepted_revision_is_the_price_the_customer_decides_on(self):
+        """The final quote the customer sees is the revised one, and adds up.
+
+        The record used to read the price off the booking, and read the frozen
+        original selection before there was one, so a customer asked to confirm
+        a revised quote was shown the old price and fee lines that summed to the
+        old amount.
+        """
+        quote_id, selection, verification = self._select()
+        original = selection["selectedTotalPrice"]
+        revised = original + 10417.24
+        self._revise(selection, verification, revised)
+
+        # Waiting on the customer: nothing is agreed yet, and the revision says
+        # so, but the offer it will become is already readable.
+        waiting = self._m4(quote_id)
+        assert waiting["agreedTotal"] == pytest.approx(original)
+        assert waiting["wasRevised"] is False
+        assert waiting["revision"]["accepted"] is False
+        assert waiting["revision"]["revisedTotal"] == pytest.approx(round(revised, 2))
+
+        self._accept_revision(selection)
+        assert not Booking.objects.filter(selection__reference=selection["reference"]).exists()
+
+        m4 = self._m4(quote_id)
+        assert m4["agreedTotal"] == pytest.approx(round(revised, 2))
+        assert m4["wasRevised"] is True
+        # The snapshot of what was first selected must not move.
+        assert m4["selectedTotal"] == pytest.approx(original)
+
+        offer = m4["offer"]
+        assert offer["totalPrice"] == pytest.approx(round(revised, 2))
+        # The agent sends only a total, so the fee lines still carry the
+        # original amounts: the adjustment is what makes them reconcile.
+        assert offer["adjustment"] != 0
+        assert offer["adjustment"] == pytest.approx(
+            round(
+                offer["totalPrice"]
+                - (
+                    offer["baseFreight"]
+                    + offer["fuelSurcharge"]
+                    + offer["handlingFee"]
+                    + offer["documentationFee"]
+                ),
+                2,
+            )
+        )
+        assert (
+            offer["baseFreight"]
+            + offer["fuelSurcharge"]
+            + offer["handlingFee"]
+            + offer["documentationFee"]
+            + offer["adjustment"]
+        ) == pytest.approx(offer["totalPrice"])
+
+    def test_the_record_summarises_the_revision_the_customer_accepted(self):
+        quote_id, selection, verification = self._select()
+        original = selection["selectedTotalPrice"]
+        revised = original + 7500
+        self._revise(selection, verification, revised, reason="Peak season surcharge.")
+        self._accept_revision(selection)
+
+        revision = self._m4(quote_id)["revision"]
+        assert revision["reference"].startswith("REV-")
+        assert revision["originalTotal"] == pytest.approx(original)
+        assert revision["revisedTotal"] == pytest.approx(round(revised, 2))
+        assert revision["currency"] == selection["selectedCurrency"]
+        assert revision["reason"] == "Peak season surcharge."
+        assert revision["accepted"] is True
+
+    def test_a_quote_with_no_revision_reads_as_unchanged_and_adds_up(self):
+        quote_id, _, _ = self._select()
+        m4 = self._m4(quote_id)
+        assert m4["revision"] is None
+        assert m4["wasRevised"] is False
+        offer = m4["offer"]
+        # Nothing has moved the price, so the lines are the offer's own and any
+        # adjustment is the rounding of its fee lines against a rounded total —
+        # not an amount worth a line of its own.
+        assert abs(offer["adjustment"]) < 0.5
+        assert (
+            offer["baseFreight"]
+            + offer["fuelSurcharge"]
+            + offer["handlingFee"]
+            + offer["documentationFee"]
+            + offer["adjustment"]
+        ) == pytest.approx(offer["totalPrice"])
+        # With nothing booked yet the current offer is the price on the record.
+        assert m4["agreedTotal"] == pytest.approx(offer["totalPrice"])
+
+    def test_a_booking_keeps_the_revised_total_it_was_confirmed_at(self):
+        quote_id, selection, verification = self._select()
+        revised = selection["selectedTotalPrice"] + 9000
+        self._revise(selection, verification, revised)
+        self._accept_revision(selection)
+        self._customs(selection["reference"], "CLEAR")
+        self._final(selection["reference"], "ACCEPT")
+
+        booking = Booking.objects.get(selection__reference=selection["reference"])
+        m4 = self._m4(quote_id)
+        assert booking.was_revised is True
+        assert m4["agreedTotal"] == pytest.approx(booking.agreed_total_price)
+        assert m4["wasRevised"] is True
+        assert m4["revision"]["accepted"] is True
+        assert m4["revision"]["revisedTotal"] == pytest.approx(booking.agreed_total_price)
+
     def test_a_rejection_shows_until_another_company_is_chosen(self):
         quote_id, _, verification = self._select("Alpha Line")
         self._decide(verification["reference"], {"action": "REJECT", "reason": "No space."})
@@ -202,6 +333,9 @@ class TestQuoteFollowsTheCompanyWorkflow:
         assert self._state(quote_id) == ("PENDING_REVIEW", "QUOTED")
         m4 = QuoteSerializer(Quote.objects.get(id=quote_id)).data["m4"]
         assert m4["companyName"] == "Beta Freight"
+        # No clearance yet, so no officer to name: an empty string, not a null
+        # the client would have to guard against.
+        assert m4["customsOfficerEmail"] == ""
 
     def test_cancelling_the_booking_cancels_the_shipment(self):
         quote_id, selection, verification = self._select()
