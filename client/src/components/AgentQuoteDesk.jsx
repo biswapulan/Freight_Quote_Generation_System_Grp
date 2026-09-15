@@ -693,8 +693,15 @@ export default function AgentQuoteDesk() {
             </div>
 
             {/* Visual Workflow Stepper. A quote in the company workflow shows
-                its M4 stages (company approval, customs, decision). */}
-            <QuoteWorkflowStepper status={activeModalQuote.status} m4={activeModalQuote.m4} compact />
+                its M4 stages (company approval, customs, decision). The real
+                shipment status travels with it, so the meta bar cannot fall
+                back to deriving one from the quote status. */}
+            <QuoteWorkflowStepper
+              status={activeModalQuote.status}
+              m4={activeModalQuote.m4}
+              shipmentStatus={activeModalQuote.shipmentStatus}
+              compact
+            />
 
             {/* Customs Review Clearance Callout if available */}
             {activeModalQuote.customsRemarks && (

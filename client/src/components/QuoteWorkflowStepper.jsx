@@ -14,6 +14,7 @@ import {
 import {
   STATUS_CONFIG,
   normalizeWorkflowStatus,
+  normalizeShipmentStatus,
   getShipmentStatusFromQuoteStatus,
   getCompanyWorkflowProgress,
 } from "../utils/quoteWorkflow";
@@ -39,13 +40,24 @@ const COMPANY_ICONS = {
   DECISION: Check,
 };
 
-export default function QuoteWorkflowStepper({ status, m4 = null, requiresCustoms = true, compact = false }) {
+export default function QuoteWorkflowStepper({
+  status,
+  m4 = null,
+  requiresCustoms = true,
+  compact = false,
+  shipmentStatus = null,
+}) {
   const normStatus = normalizeWorkflowStatus(status);
   const currentConfig = STATUS_CONFIG[normStatus] || STATUS_CONFIG.REQUESTED;
   const currentStep = currentConfig.stepIndex || 1;
   const isRejected = normStatus === "REJECTED";
   const isFlagged = normStatus === "CUSTOMS_FLAGGED";
-  const shipmentStatus = getShipmentStatusFromQuoteStatus(normStatus);
+  // The real shipment status when the caller has one. Deriving it from the
+  // quote status is only a fallback: the two are separate flows, and a quote
+  // awaiting review is QUOTED at the shipment, not back at ANALYZED.
+  const shipmentStatusLabel = shipmentStatus
+    ? normalizeShipmentStatus(shipmentStatus)
+    : getShipmentStatusFromQuoteStatus(normStatus);
 
   // A quote inside the company workflow (M4) has stages of its own, and the
   // M4 block drives them: the quote status is only a mirror of where the
@@ -150,7 +162,7 @@ export default function QuoteWorkflowStepper({ status, m4 = null, requiresCustom
           <div className="qws-meta-item">
             <span className="qws-meta-label">Shipment Status:</span>
             <span className="qws-meta-val ship-pill">
-              {shipmentStatus}
+              {shipmentStatusLabel}
             </span>
           </div>
           <div className="qws-meta-divider" />

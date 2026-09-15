@@ -861,8 +861,14 @@ export default function RetailShipmentsHistory({ viewMode = "quotes" }) {
             <div className="rsh-modal-body">
               {/* Multi-Role Quote Lifecycle Stepper. The company workflow
                   (M4), when this quote has one, takes the bar past the
-                  agent's approval and through customs to the decision. */}
-              <QuoteWorkflowStepper status={selectedQuote.status} m4={selectedQuote.m4} />
+                  agent's approval and through customs to the decision.
+                  `shipmentStatus` is the same real value the header badge
+                  shows, so the two rows cannot disagree. */}
+              <QuoteWorkflowStepper
+                status={selectedQuote.status}
+                m4={selectedQuote.m4}
+                shipmentStatus={selectedQuote.shipmentStatus}
+              />
 
               {/* Route Summary Ribbon */}
               <div className="rsh-route-ribbon">
