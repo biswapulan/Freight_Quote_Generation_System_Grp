@@ -568,7 +568,13 @@ export default function CustomsOfficerPortal({ initialTab = "pending-reviews" })
 
   // Extracted so a verify/reject decision can refresh the real document state
   // immediately instead of waiting for the next quote reload.
-  const shipmentIdKey = shipments.map((s) => s.shipmentId).filter(Boolean).join(",");
+  const shipmentIdKey = Array.from(
+    new Set(
+      shipments
+        .flatMap((s) => [s.shipmentId, s.id, s.quoteNo])
+        .filter(Boolean),
+    ),
+  ).join(",");
 
   const loadUploadedDocs = useCallback(async () => {
     const ids = shipmentIdKey ? shipmentIdKey.split(",") : [];
@@ -590,9 +596,47 @@ export default function CustomsOfficerPortal({ initialTab = "pending-reviews" })
     loadUploadedDocs();
   }, [loadUploadedDocs]);
 
-  /** Match a checklist item name to an uploaded document, ignoring formatting. */
-  const normalizeDocName = (name) =>
-    (name || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+  /** Match a checklist item name to an uploaded document, ignoring formatting and canonicalizing aliases. */
+  const normalizeDocName = (name) => {
+    const clean = (name || "")
+      .toLowerCase()
+      .replace(/[^a-z0-9 ]/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+    const words = clean.split(" ");
+    if (
+      clean.includes("lading") ||
+      clean.includes("waybill") ||
+      words.includes("bl") ||
+      words.includes("awb")
+    ) {
+      return "bill_of_lading";
+    }
+    if (clean.includes("invoice")) return "commercial_invoice";
+    if (clean.includes("packing")) return "packing_list";
+    if (clean.includes("origin") || words.includes("coo")) return "certificate_of_origin";
+    return clean.replace(/\s+/g, "");
+  };
+
+  /**
+   * Helper to retrieve all uploaded files for a shipment record, checking both
+   * the shipment ID and the quote ID so nothing is missed.
+   */
+  function getUploadsForShipment(s) {
+    if (!s) return [];
+    const keys = [s.shipmentId, s.id, s.quoteNo].filter(Boolean);
+    const seen = new Set();
+    const res = [];
+    for (const key of keys) {
+      for (const u of uploadedDocs[key] || []) {
+        if (!seen.has(u.id)) {
+          seen.add(u.id);
+          res.push(u);
+        }
+      }
+    }
+    return res;
+  }
 
   /**
    * Live status of one checklist item for one shipment.
@@ -602,9 +646,15 @@ export default function CustomsOfficerPortal({ initialTab = "pending-reviews" })
    * every document as PENDING even after the officer had stamped all of them.
    * Resolve against the documents actually on file instead.
    */
-  function docItemStatus(shipmentId, docName) {
-    const match = (uploadedDocs[shipmentId] || []).find(
-      (u) => normalizeDocName(u.document_type) === normalizeDocName(docName),
+  function docItemStatus(shipmentId, docName, altId = null) {
+    const list = [
+      ...(uploadedDocs[shipmentId] || []),
+      ...(altId && uploadedDocs[altId] ? uploadedDocs[altId] : []),
+    ];
+    const match = list.find(
+      (u) =>
+        normalizeDocName(u.document_type) === normalizeDocName(docName) ||
+        normalizeDocName(u.file_name) === normalizeDocName(docName),
     );
     if (!match) return "PENDING";
     if (match.verification_status === "VERIFIED") return "VERIFIED";
@@ -628,10 +678,15 @@ export default function CustomsOfficerPortal({ initialTab = "pending-reviews" })
       return { tone: "neutral", allOnFile: false, label: "No checklist issued" };
     }
 
+    const sUploads = getUploadsForShipment(s);
     const arrived = new Set(
-      (uploadedDocs[s.shipmentId] || []).map((u) => normalizeDocName(u.document_type)),
+      sUploads.map((u) => normalizeDocName(u.document_type)),
     );
-    const outstanding = required.filter((name) => !arrived.has(normalizeDocName(name)));
+    const outstanding = required.filter(
+      (name) =>
+        !arrived.has(normalizeDocName(name)) &&
+        !sUploads.some((u) => normalizeDocName(u.file_name) === normalizeDocName(name)),
+    );
 
     if (outstanding.length) {
       return {
@@ -664,16 +719,22 @@ export default function CustomsOfficerPortal({ initialTab = "pending-reviews" })
 
     shipments.forEach((s) => {
       const docs = s.documents || [];
+      const sUploads = getUploadsForShipment(s);
+
       docs.forEach((d) => {
-        const uploaded = (uploadedDocs[s.shipmentId] || []).find(
-          (u) => normalizeDocName(u.document_type) === normalizeDocName(d.name),
+        const uploaded = sUploads.find(
+          (u) =>
+            normalizeDocName(u.document_type) === normalizeDocName(d.name) ||
+            normalizeDocName(u.file_name) === normalizeDocName(d.name),
         );
 
         // Find matching vault doc if any
         const vaultMatch = vaultDocs.find(
           (v) =>
             (v.shipmentRef === s.id || v.shipmentRef === s.quoteNo || v.shipmentRef === s.shipmentId) &&
-            (normalizeDocName(v.name) === normalizeDocName(d.name) || normalizeDocName(v.type) === normalizeDocName(d.name))
+            (normalizeDocName(v.name) === normalizeDocName(d.name) ||
+              normalizeDocName(v.type) === normalizeDocName(d.name) ||
+              normalizeDocName(v.fileName) === normalizeDocName(d.name)),
         );
 
         // Find fileDataUrl from all possible sources
@@ -1963,7 +2024,7 @@ export default function CustomsOfficerPortal({ initialTab = "pending-reviews" })
               <div className="cop-checklist">
                 <div className="cop-checklist-title">Mandatory Regulatory Documents Checklist</div>
                 {selectedShipment.documents.map((doc, idx) => {
-                  const liveStatus = docItemStatus(selectedShipment.shipmentId, doc.name);
+                  const liveStatus = docItemStatus(selectedShipment.shipmentId, doc.name, selectedShipment.id);
                   const statusClass = liveStatus.toLowerCase();
                   return (
                     <div
