@@ -10,13 +10,12 @@ import {
 } from "react-icons/fa";
 import { useAuth } from "../context/AuthContext";
 import { usePlatformQuotes } from "../hooks/usePlatformQuotes";
-import { approveQuoteAgentStep, formatMoney } from "../utils/quoteWorkflow";
+import { formatMoney } from "../utils/quoteWorkflow";
 import "./AgentOverview.css";
 
 export default function AgentOverview() {
   const { user } = useAuth();
   const { quotes, loading, error, reload } = usePlatformQuotes();
-  const [actionLoading, setActionLoading] = useState({});
   const [notice, setNotice] = useState(null);
 
   // Cross-tab reactive updates & background polling
@@ -196,33 +195,7 @@ export default function AgentOverview() {
     ];
   }, [quotes]);
 
-  // Quick Approve action with instant reactive feedback
-  async function handleQuickApprove(quoteId) {
-    setActionLoading((prev) => ({ ...prev, [quoteId]: true }));
-    try {
-      await approveQuoteAgentStep(quoteId);
-      setNotice({
-        type: "success",
-        text: `Quote ${quoteId} commercial tariff approved successfully.`,
-      });
 
-      try {
-        const ch = new BroadcastChannel("freight_quote_sync");
-        ch.postMessage({ type: "QUOTE_APPROVED", quoteId });
-        ch.close();
-      } catch {}
-
-      await reload();
-    } catch (err) {
-      console.error("Failed to quick approve quote:", err);
-      setNotice({
-        type: "error",
-        text: `Failed to approve quote ${quoteId}: ${err.message || "Unknown error"}`,
-      });
-    } finally {
-      setActionLoading((prev) => ({ ...prev, [quoteId]: false }));
-    }
-  }
 
   return (
     <div className="agent-overview">
@@ -414,14 +387,13 @@ export default function AgentOverview() {
                         </td>
                         <td>
                           {isPending ? (
-                            <button
-                              type="button"
+                            <Link
+                              to={`/quotes/${q.id}`}
                               className="agent-btn-sm"
-                              disabled={actionLoading[q.id]}
-                              onClick={() => handleQuickApprove(q.id)}
+                              style={{ textDecoration: "none", display: "inline-block" }}
                             >
-                              {actionLoading[q.id] ? "Approving..." : "Approve"}
-                            </button>
+                              Review &rarr;
+                            </Link>
                           ) : isApproved ? (
                             <span style={{ color: "#15803d", fontSize: "12px", fontWeight: 600 }}>
                               ✓ Approved
