@@ -23,6 +23,8 @@ import {
   AlertTriangle,
   Send,
   Upload,
+  FileUp,
+  RotateCw,
 } from "lucide-react";
 import { useRetailQuotes } from "../context/RetailQuotesContext";
 import {
@@ -108,6 +110,8 @@ export default function RetailShipmentsHistory({ viewMode = "quotes" }) {
   const [workflowError, setWorkflowError] = useState("");
   const [workflowNotice, setWorkflowNotice] = useState("");
   const [uploadingDoc, setUploadingDoc] = useState(null);
+  const [batchUploading, setBatchUploading] = useState(false);
+  const [batchProgress, setBatchProgress] = useState(null);
   const [search, setSearch] = useState("");
   const [laneFilter, setLaneFilter] = useState("all");
   const [modeFilter, setModeFilter] = useState("all");
@@ -366,14 +370,126 @@ export default function RetailShipmentsHistory({ viewMode = "quotes" }) {
     }
   }
 
+  const FOUR_TRADE_DOCS = [
+    {
+      name: "Commercial Invoice",
+      samplePath: "/sample_trade_documents/Commercial_Invoice_INV2026.pdf",
+      fileName: "Commercial_Invoice_INV2026.pdf",
+    },
+    {
+      name: "Packing List",
+      samplePath: "/sample_trade_documents/Packing_List_PL9921.pdf",
+      fileName: "Packing_List_PL9921.pdf",
+    },
+    {
+      name: "Bill of Lading Draft",
+      samplePath: "/sample_trade_documents/Bill_of_Lading_Draft_BL4810.pdf",
+      fileName: "Bill_of_Lading_Draft_BL4810.pdf",
+    },
+    {
+      name: "Certificate of Origin",
+      samplePath: "/sample_trade_documents/Certificate_of_Origin_COO2026.pdf",
+      fileName: "Certificate_of_Origin_COO2026.pdf",
+    },
+  ];
+
   /**
-   * Upload a trade document.
-   *
-   * The file is sent to the platform rather than being base64-encoded into
-   * localStorage, so the customs officer can actually open what was uploaded.
+   * Upload all 4 trade documents sequentially, updating the status of each
+   * document to "UPLOADED" one by one in real-time.
+   */
+  async function handleUploadAllFourDocs(customFiles = null) {
+    if (!selectedQuote || batchUploading) return;
+
+    const shipmentId = selectedQuote.shipmentId;
+    if (!shipmentId) {
+      setWorkflowError("This quote is not linked to a shipment, so documents cannot be attached.");
+      return;
+    }
+
+    setBatchUploading(true);
+    setWorkflowError("");
+    setWorkflowNotice("");
+
+    try {
+      for (let i = 0; i < FOUR_TRADE_DOCS.length; i++) {
+        const item = FOUR_TRADE_DOCS[i];
+        setBatchProgress({
+          current: i + 1,
+          total: FOUR_TRADE_DOCS.length,
+          docName: item.name,
+        });
+        setUploadingDoc(item.name);
+
+        let fileToUpload;
+        if (customFiles && customFiles[i]) {
+          fileToUpload = customFiles[i];
+        } else {
+          // Fetch the official sample PDF from public assets
+          const res = await fetch(item.samplePath);
+          const blob = await res.blob();
+          fileToUpload = new File([blob], item.fileName, { type: "application/pdf" });
+        }
+
+        // Cache blob in memory so DocumentViewer and Customs Officer open it instantly
+        if (typeof window !== "undefined") {
+          window.__freightai_uploaded_blobs = window.__freightai_uploaded_blobs || {};
+          window.__freightai_uploaded_blobs[fileToUpload.name] = URL.createObjectURL(fileToUpload);
+        }
+
+        const uploadResult = await uploadShipmentDocument(token, {
+          shipmentId,
+          documentType: item.name,
+          file: fileToUpload,
+          uploadedBy: user?.full_name || "Customer",
+        });
+
+        // Immediately update shipmentDocs so this document status turns to "UPLOADED" one by one
+        setShipmentDocs((prev) => {
+          const filtered = prev.filter(
+            (u) => normalizeDocName(u.document_type) !== normalizeDocName(item.name)
+          );
+          const newDoc = uploadResult?.document || {
+            id: uploadResult?.id || `doc-${Date.now()}-${i}`,
+            shipment_id: shipmentId,
+            document_type: item.name,
+            file_name: fileToUpload.name,
+            file_size: fileToUpload.size,
+            verification_status: "PENDING",
+            created_at: new Date().toISOString(),
+          };
+          return [...filtered, newDoc];
+        });
+
+        // Pause 650ms between uploads so the user visually sees each document change status to UPLOADED
+        await new Promise((resolve) => setTimeout(resolve, 650));
+      }
+
+      await Promise.all([reloadQuotes(), loadShipmentDocs()]);
+
+      // Broadcast to Customs Officer portal
+      try {
+        const bc = new BroadcastChannel("freight_quote_sync");
+        bc.postMessage({ type: "DOCUMENTS_UPLOADED", shipmentId });
+        bc.close();
+      } catch (e) {}
+
+      setWorkflowNotice("All 4 trade documents uploaded successfully! Sent to Customs Officer for verification.");
+      setTimeout(() => setWorkflowNotice(""), 6000);
+    } catch (err) {
+      console.error("Batch upload error:", err);
+      setWorkflowError(err.message || "Failed to upload all documents.");
+    } finally {
+      setBatchUploading(false);
+      setBatchProgress(null);
+      setUploadingDoc(null);
+    }
+  }
+
+  /**
+   * Upload a single trade document and immediately update status to UPLOADED.
    */
   async function handleFileSelected(docName, file) {
-    if (!selectedQuote || !file || uploadingDoc) return;
+    if (!selectedQuote || !file || uploadingDoc || batchUploading) return;
 
     const shipmentId = selectedQuote.shipmentId;
     if (!shipmentId) {
@@ -384,15 +500,43 @@ export default function RetailShipmentsHistory({ viewMode = "quotes" }) {
     setUploadingDoc(docName);
     setWorkflowError("");
     try {
-      await uploadShipmentDocument(token, {
+      if (typeof window !== "undefined") {
+        window.__freightai_uploaded_blobs = window.__freightai_uploaded_blobs || {};
+        window.__freightai_uploaded_blobs[file.name] = URL.createObjectURL(file);
+      }
+
+      const res = await uploadShipmentDocument(token, {
         shipmentId,
         documentType: docName,
         file,
         uploadedBy: user?.full_name || "Customer",
       });
-      // Refresh the real document list, not just the quotes: the checklist
-      // status comes from what is actually on file now.
+
+      // Optimistically update shipmentDocs immediately so status badge changes to UPLOADED
+      setShipmentDocs((prev) => {
+        const filtered = prev.filter(
+          (u) => normalizeDocName(u.document_type) !== normalizeDocName(docName)
+        );
+        const newDoc = res?.document || {
+          id: res?.id || `doc-${Date.now()}`,
+          shipment_id: shipmentId,
+          document_type: docName,
+          file_name: file.name,
+          file_size: file.size,
+          verification_status: "PENDING",
+          created_at: new Date().toISOString(),
+        };
+        return [...filtered, newDoc];
+      });
+
       await Promise.all([reloadQuotes(), loadShipmentDocs()]);
+
+      try {
+        const bc = new BroadcastChannel("freight_quote_sync");
+        bc.postMessage({ type: "DOCUMENTS_UPLOADED", shipmentId });
+        bc.close();
+      } catch (e) {}
+
       setWorkflowNotice(`"${file.name}" uploaded for ${docName}. Queued for customs verification.`);
       setTimeout(() => setWorkflowNotice(""), 5000);
     } catch (err) {
@@ -1132,7 +1276,7 @@ export default function RetailShipmentsHistory({ viewMode = "quotes" }) {
 
                 {/* Trade & Customs Documents Panel */}
                 <div className="rsh-card-panel docs-panel" style={{ gridColumn: "1 / -1", marginTop: "16px", background: "#ffffff", border: "1px solid #e2e8f0", borderRadius: "14px", padding: "18px" }}>
-                  <div className="rsh-panel-head" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "14px" }}>
+                  <div className="rsh-panel-head" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "14px", flexWrap: "wrap", gap: "10px" }}>
                     <div style={{ display: "flex", alignItems: "center", gap: "8px", fontWeight: "700", color: "#0f172a" }}>
                       <FileText size={17} style={{ color: "#0284c7" }} />
                       <h4 style={{ margin: 0, fontSize: "14px", fontWeight: "800" }}>Trade &amp; Customs Documents (Regulatory Clearance Gate)</h4>
@@ -1142,7 +1286,7 @@ export default function RetailShipmentsHistory({ viewMode = "quotes" }) {
                         HS Code: <strong style={{ color: "#0f172a" }}>{selectedQuote.hsCode || "8471.30"}</strong> &bull; Cargo: <strong style={{ color: "#0f172a" }}>{selectedQuote.cargoType || "General Commercial Goods"}</strong>
                       </span>
                       <span style={{ color: "#cbd5e1" }}>&bull;</span>
-                      <span style={{ fontSize: "11px", color: "#64748b", fontWeight: 600 }}>Get Sample Docs:</span>
+                      <span style={{ fontSize: "11px", color: "#64748b", fontWeight: 600 }}>Sample Templates:</span>
                       <a href="/sample_trade_documents/Commercial_Invoice_INV2026.pdf" download style={{ fontSize: "11px", color: "#0284c7", fontWeight: 700, textDecoration: "underline" }}>Invoice</a>
                       <a href="/sample_trade_documents/Packing_List_PL9921.pdf" download style={{ fontSize: "11px", color: "#0284c7", fontWeight: 700, textDecoration: "underline" }}>Packing List</a>
                       <a href="/sample_trade_documents/Bill_of_Lading_Draft_BL4810.pdf" download style={{ fontSize: "11px", color: "#0284c7", fontWeight: 700, textDecoration: "underline" }}>B/L Draft</a>
@@ -1150,16 +1294,142 @@ export default function RetailShipmentsHistory({ viewMode = "quotes" }) {
                     </div>
                   </div>
 
+                  {/* Batch Upload Action Controls */}
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      gap: "12px",
+                      flexWrap: "wrap",
+                      padding: "10px 14px",
+                      background: "#f8fafc",
+                      border: "1px solid #e2e8f0",
+                      borderRadius: "10px",
+                      marginBottom: "14px",
+                    }}
+                  >
+                    <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
+                      <button
+                        type="button"
+                        className="rsh-upload-all-btn"
+                        onClick={() => handleUploadAllFourDocs()}
+                        disabled={batchUploading || !!uploadingDoc}
+                        style={{
+                          background: "linear-gradient(135deg, #0284c7 0%, #0369a1 100%)",
+                          color: "#ffffff",
+                          border: "none",
+                          borderRadius: "8px",
+                          padding: "8px 16px",
+                          fontSize: "12px",
+                          fontWeight: 700,
+                          cursor: batchUploading ? "wait" : "pointer",
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: "8px",
+                          boxShadow: "0 2px 6px rgba(2, 132, 199, 0.25)",
+                          transition: "all 0.2s ease",
+                        }}
+                      >
+                        {batchUploading ? (
+                          <>
+                            <RotateCw size={14} className="spin-icon" />
+                            <span>Uploading {batchProgress?.current || 1}/4: {batchProgress?.docName || "..."}</span>
+                          </>
+                        ) : (
+                          <>
+                            <FileUp size={14} />
+                            <span>Upload All 4 Documents</span>
+                          </>
+                        )}
+                      </button>
+
+                      <label
+                        style={{
+                          background: "#ffffff",
+                          color: "#334155",
+                          border: "1px solid #cbd5e1",
+                          borderRadius: "8px",
+                          padding: "7px 14px",
+                          fontSize: "12px",
+                          fontWeight: 600,
+                          cursor: batchUploading || !!uploadingDoc ? "not-allowed" : "pointer",
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: "6px",
+                          transition: "all 0.2s ease",
+                        }}
+                      >
+                        <Upload size={13} style={{ color: "#64748b" }} />
+                        <span>Choose 4 Local Files</span>
+                        <input
+                          type="file"
+                          multiple
+                          accept=".pdf,.doc,.docx,.png,.jpg,.jpeg,.xlsx,.csv"
+                          style={{ display: "none" }}
+                          disabled={batchUploading || !!uploadingDoc}
+                          onChange={(e) => {
+                            const files = Array.from(e.target.files || []);
+                            if (files.length > 0) handleUploadAllFourDocs(files);
+                            e.target.value = "";
+                          }}
+                        />
+                      </label>
+                    </div>
+
+                    <div style={{ fontSize: "11px", color: "#64748b", fontWeight: 500 }}>
+                      ⚡ Uploads documents sequentially and transitions each status badge to <strong>UPLOADED</strong> in real-time.
+                    </div>
+                  </div>
+
+                  {/* Sequential Upload Progress Banner */}
+                  {batchUploading && batchProgress && (
+                    <div
+                      style={{
+                        background: "#eff6ff",
+                        border: "1px solid #bfdbfe",
+                        borderRadius: "10px",
+                        padding: "12px 16px",
+                        marginBottom: "14px",
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: "8px",
+                      }}
+                    >
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: "8px", color: "#1e40af", fontWeight: 700, fontSize: "12.5px" }}>
+                          <RotateCw size={15} className="spin-icon" style={{ color: "#2563eb" }} />
+                          <span>Uploading document {batchProgress.current} of {batchProgress.total}: <strong style={{ color: "#0f172a" }}>{batchProgress.docName}</strong></span>
+                        </div>
+                        <span style={{ fontSize: "12px", fontWeight: 700, color: "#2563eb" }}>
+                          {Math.round((batchProgress.current / batchProgress.total) * 100)}%
+                        </span>
+                      </div>
+                      <div style={{ width: "100%", height: "6px", background: "#dbeafe", borderRadius: "999px", overflow: "hidden" }}>
+                        <div
+                          style={{
+                            width: `${(batchProgress.current / batchProgress.total) * 100}%`,
+                            height: "100%",
+                            background: "linear-gradient(90deg, #2563eb 0%, #0284c7 100%)",
+                            borderRadius: "999px",
+                            transition: "width 0.4s ease",
+                          }}
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Document Cards Grid */}
                   <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: "12px", marginBottom: "12px" }}>
-                    {(selectedQuote.documents || [
-                      { name: "Commercial Invoice", status: "PENDING" },
-                      { name: "Packing List", status: "PENDING" },
-                      { name: "Bill of Lading Draft", status: "PENDING" },
-                      { name: "Certificate of Origin", status: "PENDING" },
-                    ]).map((doc, idx) => {
+                    {FOUR_TRADE_DOCS.map((doc, idx) => {
+                      const match = shipmentDocs.find(
+                        (u) => normalizeDocName(u.document_type) === normalizeDocName(doc.name),
+                      );
                       const effective = checklistStatus(doc);
                       const isVerified = effective === "VERIFIED";
                       const isUploaded = effective === "UPLOADED";
+                      const isCurrentUploading = uploadingDoc === doc.name;
+
                       return (
                         <div
                           key={idx}
@@ -1168,27 +1438,56 @@ export default function RetailShipmentsHistory({ viewMode = "quotes" }) {
                             alignItems: "center",
                             justifyContent: "space-between",
                             padding: "12px 14px",
-                            background: isVerified ? "#fafffb" : isUploaded ? "#f0f9ff" : "#f8fafc",
-                            border: `1px solid ${isVerified ? "#86efac" : isUploaded ? "#93c5fd" : "#e2e8f0"}`,
+                            background: isVerified
+                              ? "#fafffb"
+                              : isCurrentUploading
+                              ? "#f0f9ff"
+                              : isUploaded
+                              ? "#f0f9ff"
+                              : "#f8fafc",
+                            border: `1px solid ${
+                              isVerified
+                                ? "#86efac"
+                                : isCurrentUploading
+                                ? "#38bdf8"
+                                : isUploaded
+                                ? "#93c5fd"
+                                : "#e2e8f0"
+                            }`,
                             borderRadius: "10px",
                             gap: "12px",
+                            transition: "all 0.3s ease",
                           }}
                         >
                           <div style={{ display: "flex", alignItems: "center", gap: "10px", minWidth: 0 }}>
                             <div
                               style={{
-                                width: "32px",
-                                height: "32px",
+                                width: "34px",
+                                height: "34px",
                                 borderRadius: "8px",
-                                background: isVerified ? "#dcfce7" : isUploaded ? "#e0f2fe" : "#f1f5f9",
-                                color: isVerified ? "#16a34a" : isUploaded ? "#0284c7" : "#64748b",
+                                background: isVerified
+                                  ? "#dcfce7"
+                                  : isCurrentUploading
+                                  ? "#e0f2fe"
+                                  : isUploaded
+                                  ? "#e0f2fe"
+                                  : "#f1f5f9",
+                                color: isVerified
+                                  ? "#16a34a"
+                                  : isCurrentUploading
+                                  ? "#0284c7"
+                                  : isUploaded
+                                  ? "#0284c7"
+                                  : "#64748b",
                                 display: "flex",
                                 alignItems: "center",
                                 justifyContent: "center",
                                 flexShrink: 0,
                               }}
                             >
-                              {isVerified ? (
+                              {isCurrentUploading ? (
+                                <RotateCw size={16} className="spin-icon" />
+                              ) : isVerified ? (
                                 <CheckCircle2 size={16} />
                               ) : isUploaded ? (
                                 <Clock size={16} />
@@ -1200,9 +1499,13 @@ export default function RetailShipmentsHistory({ viewMode = "quotes" }) {
                               <div style={{ fontSize: "13px", fontWeight: 700, color: "#0f172a", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                                 {doc.name}
                               </div>
-                              {doc.fileName ? (
-                                <div style={{ fontSize: "11px", color: "#64748b", maxWidth: "160px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                                  {doc.fileName} {doc.fileSize ? `(${doc.fileSize})` : ""}
+                              {isCurrentUploading ? (
+                                <div style={{ fontSize: "11px", color: "#0284c7", fontWeight: 600 }}>
+                                  Uploading document file...
+                                </div>
+                              ) : isUploaded && match?.file_name ? (
+                                <div style={{ fontSize: "11px", color: "#0369a1", maxWidth: "170px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontWeight: 500 }}>
+                                  {match.file_name} {match.file_size ? `(${Math.round(match.file_size / 1024)} KB)` : ""}
                                 </div>
                               ) : (
                                 <div style={{ fontSize: "11px", color: isVerified ? "#16a34a" : isUploaded ? "#0284c7" : "#d97706" }}>
@@ -1213,14 +1516,18 @@ export default function RetailShipmentsHistory({ viewMode = "quotes" }) {
                           </div>
 
                           <div style={{ display: "flex", alignItems: "center", gap: "8px", flexShrink: 0 }}>
-                            {isVerified ? (
-                              <span style={{ fontSize: "11px", fontWeight: 700, color: "#15803d", background: "#dcfce7", padding: "4px 9px", borderRadius: "6px" }}>
-                                VERIFIED
+                            {isCurrentUploading ? (
+                              <span style={{ fontSize: "11px", fontWeight: 700, color: "#0284c7", background: "#e0f2fe", padding: "4px 9px", borderRadius: "6px", display: "inline-flex", alignItems: "center", gap: "4px" }}>
+                                <RotateCw size={11} className="spin-icon" /> UPLOADING
+                              </span>
+                            ) : isVerified ? (
+                              <span style={{ fontSize: "11px", fontWeight: 700, color: "#15803d", background: "#dcfce7", padding: "4px 9px", borderRadius: "6px", display: "inline-flex", alignItems: "center", gap: "4px" }}>
+                                <CheckCircle2 size={11} /> VERIFIED
                               </span>
                             ) : isUploaded ? (
                               <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                                <span style={{ fontSize: "11px", fontWeight: 700, color: "#0369a1", background: "#e0f2fe", padding: "4px 8px", borderRadius: "6px" }}>
-                                  UPLOADED
+                                <span style={{ fontSize: "11px", fontWeight: 700, color: "#0369a1", background: "#e0f2fe", padding: "4px 8px", borderRadius: "6px", display: "inline-flex", alignItems: "center", gap: "4px" }}>
+                                  <Check size={11} /> UPLOADED
                                 </span>
                                 <label
                                   style={{
@@ -1231,7 +1538,7 @@ export default function RetailShipmentsHistory({ viewMode = "quotes" }) {
                                     border: "1px solid #cbd5e1",
                                     padding: "3px 8px",
                                     borderRadius: "6px",
-                                    cursor: "pointer",
+                                    cursor: batchUploading ? "not-allowed" : "pointer",
                                     display: "inline-flex",
                                     alignItems: "center",
                                     gap: "3px",
@@ -1242,6 +1549,7 @@ export default function RetailShipmentsHistory({ viewMode = "quotes" }) {
                                     type="file"
                                     accept=".pdf,.doc,.docx,.png,.jpg,.jpeg,.xlsx,.csv"
                                     style={{ display: "none" }}
+                                    disabled={batchUploading || !!uploadingDoc}
                                     onChange={(e) => {
                                       const file = e.target.files?.[0];
                                       if (file) handleFileSelected(doc.name, file);
@@ -1260,7 +1568,7 @@ export default function RetailShipmentsHistory({ viewMode = "quotes" }) {
                                   border: "none",
                                   padding: "5px 12px",
                                   borderRadius: "6px",
-                                  cursor: "pointer",
+                                  cursor: batchUploading ? "not-allowed" : "pointer",
                                   display: "inline-flex",
                                   alignItems: "center",
                                   gap: "5px",
@@ -1272,6 +1580,7 @@ export default function RetailShipmentsHistory({ viewMode = "quotes" }) {
                                   type="file"
                                   accept=".pdf,.doc,.docx,.png,.jpg,.jpeg,.xlsx,.csv"
                                   style={{ display: "none" }}
+                                  disabled={batchUploading || !!uploadingDoc}
                                   onChange={(e) => {
                                     const file = e.target.files?.[0];
                                     if (file) handleFileSelected(doc.name, file);

@@ -1046,3 +1046,18 @@
   .rsh-final-decision-form { justify-content: stretch; }
   .rsh-final-decision-error { text-align: left; }
 }
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.spin-icon {
+  animation: spin 1s linear infinite;
+}
+
+.rsh-upload-all-btn:hover:not(:disabled) {
+  opacity: 0.95;
+  transform: translateY(-1px);
+}
+
