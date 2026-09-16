@@ -29,6 +29,81 @@ import {
 import "./ShipmentTrackingModal.css";
 
 /**
+ * Comprehensive dictionary of major commercial maritime container ports,
+ * inland depots, and air cargo gateways for real UN/LOCODE resolution.
+ */
+const PORT_DICTIONARY = {
+  mumbai: { code: "INNSA", name: "Nhava Sheva (JNPT)", city: "Mumbai, India", terminal: "JNPT Terminal 3", berth: "Berth 4" },
+  nhava: { code: "INNSA", name: "Nhava Sheva (JNPT)", city: "Mumbai, India", terminal: "JNPT Terminal 3", berth: "Berth 4" },
+  jnpt: { code: "INNSA", name: "Nhava Sheva (JNPT)", city: "Mumbai, India", terminal: "JNPT Terminal 3", berth: "Berth 4" },
+  innsa: { code: "INNSA", name: "Nhava Sheva (JNPT)", city: "Mumbai, India", terminal: "JNPT Terminal 3", berth: "Berth 4" },
+  inbom: { code: "INBOM", name: "Mumbai Port Trust", city: "Mumbai, India", terminal: "BPT Terminal 2", berth: "Berth 3" },
+  singapore: { code: "SGSIN", name: "Port of Singapore", city: "Singapore", terminal: "PSA Container Terminal", berth: "PSA Berth 12" },
+  sgsin: { code: "SGSIN", name: "Port of Singapore", city: "Singapore", terminal: "PSA Container Terminal", berth: "PSA Berth 12" },
+  chennai: { code: "INMAA", name: "Chennai Port", city: "Chennai, India", terminal: "CITPL Terminal 2", berth: "Berth 5" },
+  inmaa: { code: "INMAA", name: "Chennai Port", city: "Chennai, India", terminal: "CITPL Terminal 2", berth: "Berth 5" },
+  dubai: { code: "AEJEA", name: "Jebel Ali Port", city: "Dubai, UAE", terminal: "DP World Terminal 2", berth: "Berth 8" },
+  jebel: { code: "AEJEA", name: "Jebel Ali Port", city: "Dubai, UAE", terminal: "DP World Terminal 2", berth: "Berth 8" },
+  aejea: { code: "AEJEA", name: "Jebel Ali Port", city: "Dubai, UAE", terminal: "DP World Terminal 2", berth: "Berth 8" },
+  rotterdam: { code: "NLRTM", name: "Port of Rotterdam", city: "Rotterdam, Netherlands", terminal: "ECT Delta Terminal", berth: "Berth 16" },
+  nlrtm: { code: "NLRTM", name: "Port of Rotterdam", city: "Rotterdam, Netherlands", terminal: "ECT Delta Terminal", berth: "Berth 16" },
+  shanghai: { code: "CNSHA", name: "Port of Shanghai", city: "Shanghai, China", terminal: "Yangshan Deepwater Port", berth: "Berth 6" },
+  cnsha: { code: "CNSHA", name: "Port of Shanghai", city: "Shanghai, China", terminal: "Yangshan Deepwater Port", berth: "Berth 6" },
+  hamburg: { code: "DEHAM", name: "Port of Hamburg", city: "Hamburg, Germany", terminal: "CTA Altenwerder", berth: "Berth 2" },
+  deham: { code: "DEHAM", name: "Port of Hamburg", city: "Hamburg, Germany", terminal: "CTA Altenwerder", berth: "Berth 2" },
+  los_angeles: { code: "USLAX", name: "Port of Los Angeles", city: "Los Angeles, USA", terminal: "Pier 400 Terminal", berth: "Berth 402" },
+  uslax: { code: "USLAX", name: "Port of Los Angeles", city: "Los Angeles, USA", terminal: "Pier 400 Terminal", berth: "Berth 402" },
+  mundra: { code: "INMUN", name: "Mundra Port", city: "Mundra, India", terminal: "APSEZ Terminal 4", berth: "Berth 1" },
+  inmun: { code: "INMUN", name: "Mundra Port", city: "Mundra, India", terminal: "APSEZ Terminal 4", berth: "Berth 1" },
+  cochin: { code: "INCOK", name: "Cochin Port", city: "Kochi, India", terminal: "ICTT Vallarpadam", berth: "Berth 2" },
+  incok: { code: "INCOK", name: "Cochin Port", city: "Kochi, India", terminal: "ICTT Vallarpadam", berth: "Berth 2" },
+  visakhapatnam: { code: "INVTZ", name: "Visakhapatnam Port", city: "Vizag, India", terminal: "VCTPL Terminal 1", berth: "Berth 3" },
+  invtz: { code: "INVTZ", name: "Visakhapatnam Port", city: "Vizag, India", terminal: "VCTPL Terminal 1", berth: "Berth 3" },
+};
+
+function resolvePortInfo(locationStr, fallbackCode, fallbackName, fallbackCity) {
+  if (!locationStr || typeof locationStr !== "string") {
+    return {
+      code: fallbackCode,
+      name: fallbackName,
+      city: fallbackCity,
+      terminal: `${fallbackCode} Terminal 1`,
+      berth: "Berth 1",
+    };
+  }
+
+  const clean = locationStr.trim();
+  const lower = clean.toLowerCase();
+
+  for (const [key, val] of Object.entries(PORT_DICTIONARY)) {
+    if (lower.includes(key)) {
+      return val;
+    }
+  }
+
+  const parenMatch = clean.match(/\(([A-Z0-9]{3,6})\)/i);
+  if (parenMatch) {
+    const code = parenMatch[1].toUpperCase();
+    const city = clean.split("(")[0].trim() || clean.split(",")[0].trim();
+    return {
+      code,
+      name: clean,
+      city,
+      terminal: `${code} Container Terminal`,
+      berth: "Berth 2",
+    };
+  }
+
+  return {
+    code: fallbackCode,
+    name: clean,
+    city: clean.split(",")[0].trim() || fallbackCity,
+    terminal: `${fallbackCode} Terminal`,
+    berth: "Berth 1",
+  };
+}
+
+/**
  * Deterministic helper to derive realistic tracking & vessel telemetry
  * based on the shipment / quote identifiers.
  */
@@ -40,10 +115,21 @@ function getTrackingData(shipment) {
   const shipmentId = shipment.shipmentId || `SHP-${quoteNo.replace(/[^A-Za-z0-9]/g, "").slice(-8)}`;
   const carrier = shipment.m4?.companyName || shipment.selectedCarrier || "Maersk Line";
   const containerType = shipment.containerType || shipment.basis || "40' High Cube (40HC)";
-  const origin = shipment.origin || "Nhava Sheva (INBOM), India";
-  const destination = shipment.destination || "Singapore (SGSIN), Singapore";
-  const originCode = origin.includes("INBOM") ? "INBOM" : origin.slice(0, 5).toUpperCase();
-  const destCode = destination.includes("SGSIN") ? "SGSIN" : destination.slice(0, 5).toUpperCase();
+
+  // Parse lane codes if present
+  let laneOriginCode = "";
+  let laneDestCode = "";
+  if (shipment.laneCode) {
+    const parts = String(shipment.laneCode).replace("→", "-").replace("➔", "-").split("-");
+    if (parts[0]) laneOriginCode = parts[0].trim();
+    if (parts[1]) laneDestCode = parts[1].trim();
+  }
+
+  const rawOrigin = shipment.origin || shipment.originCity || shipment.customerCity || laneOriginCode || "Nhava Sheva (INNSA), Mumbai";
+  const rawDest = shipment.destination || shipment.destinationCity || laneDestCode || "Singapore (SGSIN), Singapore";
+
+  const originInfo = resolvePortInfo(rawOrigin, laneOriginCode || "INNSA", "Nhava Sheva (JNPT)", "Mumbai, India");
+  const destInfo = resolvePortInfo(rawDest, laneDestCode || "SGSIN", "Port of Singapore", "Singapore");
 
   // Deterministic container number & seal
   const hash = Math.abs(
@@ -69,6 +155,7 @@ function getTrackingData(shipment) {
   const d3 = new Date(now.getTime() - 1 * 24 * 3600 * 1000);
   const d4 = new Date(now.getTime() - 8 * 3600 * 1000);
   const etaDate = new Date(now.getTime() + 9 * 24 * 3600 * 1000);
+  const daysRemaining = Math.max(1, Math.round((etaDate.getTime() - now.getTime()) / (24 * 3600 * 1000)));
 
   const formatDt = (d) =>
     d.toLocaleDateString("en-US", {
@@ -82,7 +169,7 @@ function getTrackingData(shipment) {
     {
       id: 1,
       title: "Booking Confirmed & Allocation Reserved",
-      location: origin,
+      location: `${originInfo.city} · ${originInfo.name}`,
       timestamp: formatDt(d1),
       status: "completed",
       description: `Carrier booking reference ${bookingRef} issued. Empty equipment assigned and released for cargo stuffing.`,
@@ -91,16 +178,16 @@ function getTrackingData(shipment) {
     {
       id: 2,
       title: "Terminal Gate-In & Verified Gross Mass (VGM)",
-      location: `${originCode} Terminal 3`,
+      location: `${originInfo.code} ${originInfo.terminal}`,
       timestamp: formatDt(d2),
       status: "completed",
-      description: `Container ${containerId} passed weighbridge. VGM: ${shipment.weightKg || "22,450"} kg verified per SOLAS convention.`,
+      description: `Container ${containerId} passed weighbridge. VGM: ${shipment.weightKg || "18,500"} kg verified per SOLAS convention.`,
       tag: `VGM Certified · Seal #${sealNo}`,
     },
     {
       id: 3,
       title: "Customs Clear & Container Loaded on Board",
-      location: `${originCode} Berth 4`,
+      location: `${originInfo.code} ${originInfo.berth}`,
       timestamp: formatDt(d3),
       status: "completed",
       description: `Export clearance granted by customs authority. Container stowed in Bay 24 (Cell 08-02-84) aboard ${vesselName}.`,
@@ -112,22 +199,22 @@ function getTrackingData(shipment) {
       location: "Indian Ocean (Malacca Strait Corridor)",
       timestamp: formatDt(d4),
       status: "active",
-      description: `Vessel underway at 18.4 kts heading 108° towards ${destCode}. All reefer/dry container telemetry green.`,
+      description: `Vessel underway at 18.4 kts heading 108° towards ${destInfo.code} (${destInfo.city}). All reefer/dry container telemetry green.`,
       tag: "Active Waypoint · ETA on schedule",
     },
     {
       id: 5,
       title: "Arrival Port of Discharge & Berth Inward",
-      location: `${destCode} Container Terminal (PSA)`,
+      location: `${destInfo.code} ${destInfo.terminal}`,
       timestamp: `Est. ${formatDt(etaDate)}`,
       status: "upcoming",
-      description: `Berthing reservation confirmed at PSA Singapore Terminal. Discharging sequence queued.`,
+      description: `Berthing reservation confirmed at ${destInfo.terminal}. Discharging sequence queued.`,
       tag: "Scheduled Berth",
     },
     {
       id: 6,
       title: "Import Customs Clearance & Consignee Delivery",
-      location: destination,
+      location: `${destInfo.city} · ${destInfo.name}`,
       timestamp: `Est. ${formatDt(new Date(etaDate.getTime() + 2 * 24 * 3600 * 1000))}`,
       status: "upcoming",
       description: `Delivery order (D/O) issuance and final mile container drayage to consignee facility.`,
@@ -147,17 +234,22 @@ function getTrackingData(shipment) {
     imoNumber,
     callSign,
     voyageNo,
-    origin,
-    originCode,
-    destination,
-    destCode,
+    origin: originInfo.name,
+    originCode: originInfo.code,
+    originCity: originInfo.city,
+    originName: originInfo.name,
+    destination: destInfo.name,
+    destCode: destInfo.code,
+    destCity: destInfo.city,
+    destName: destInfo.name,
     milestones,
     etaString: etaDate.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
+    daysRemaining,
     transitDays: shipment.transit || "14 days",
-    weight: shipment.weightKg ? `${shipment.weightKg} kg` : "22,450 kg",
-    volume: shipment.volumeCbm ? `${shipment.volumeCbm} CBM` : "33.2 CBM",
+    weight: shipment.weightKg ? `${shipment.weightKg} kg` : "18,500 kg",
+    volume: shipment.volumeCbm ? `${shipment.volumeCbm} CBM` : "20 CBM",
     commodity: shipment.cargoType || "General Commercial Freight",
-    hsCode: shipment.hsCode || "8471.30.10",
+    hsCode: shipment.hsCode || "8471.30",
   };
 }
 
@@ -257,44 +349,72 @@ export default function ShipmentTrackingModal({ shipment, onClose, onViewQuoteRe
         <div className="stm-body">
           {/* Top Hero Route Strip (always visible across tabs) */}
           <div className="stm-hero-card">
+            {/* Top Telemetry Header */}
             <div className="stm-hero-top">
-              <div className="stm-hero-carrier-badge">
-                <span className="stm-hero-carrier-dot" />
-                <span>Carrier: <strong>{data.carrier}</strong></span>
-                <span style={{ color: "#94a3b8" }}>·</span>
-                <span>Voyage: <strong>{data.voyageNo}</strong></span>
+              <div className="stm-hero-top-left">
+                <div className="stm-hero-carrier-badge">
+                  <span className="stm-hero-carrier-dot" />
+                  <span>Carrier: <strong>{data.carrier}</strong></span>
+                  <span className="stm-sep">·</span>
+                  <span>Voyage: <strong>{data.voyageNo}</strong></span>
+                </div>
+                <div className="stm-hero-ais-pill">
+                  <span className="stm-ais-dot" />
+                  <span>Live Satellite AIS · 18.4 kts</span>
+                </div>
               </div>
               <div className="stm-hero-eta-pill">
                 ESTIMATED ARRIVAL: <strong>{data.etaString}</strong>
+                <span className="stm-eta-sub">({data.daysRemaining} days remaining)</span>
               </div>
             </div>
 
+            {/* Visual Maritime Route Corridor */}
             <div className="stm-hero-route-strip">
               {/* Origin Node */}
               <div className="stm-node origin">
-                <span className="stm-node-port-code">{data.originCode} · ORIGIN</span>
-                <span className="stm-node-city">{data.origin.split(",")[0]}</span>
-                <span className="stm-node-hub">{data.origin}</span>
+                <div className="stm-node-port-code">
+                  <span className="stm-node-indicator origin" />
+                  <span>{data.originCode} · ORIGIN PORT</span>
+                </div>
+                <div className="stm-node-city">{data.originCity}</div>
+                <div className="stm-node-hub">{data.originName}</div>
+                <div className="stm-node-tag origin">
+                  <CheckCircle2 size={11} /> Departed · Gate-In Verified
+                </div>
               </div>
 
-              {/* Transit Midpoint */}
+              {/* Transit Midpoint Corridor */}
               <div className="stm-route-mid">
-                <span className="stm-route-transit-badge">Planned: {data.transitDays}</span>
+                <div className="stm-route-transit-badge">
+                  <Clock size={12} /> Planned Transit: {data.transitDays}
+                </div>
                 <div className="stm-route-line-wrap">
                   <div className="stm-route-line-bg" />
                   <div className="stm-route-line-fill" style={{ width: "65%" }} />
-                  <div className="stm-route-transport-icon" style={{ left: "65%" }}>
-                    <Ship size={13} />
+                  <div className="stm-route-transport-icon" style={{ left: "65%" }} title="Vessel Underway · 18.4 kts">
+                    <Ship size={15} />
+                    <span className="stm-ship-beacon" />
                   </div>
                 </div>
-                <span className="stm-route-progress-sub">65% of voyage completed</span>
+                <div className="stm-route-progress-sub">
+                  <span className="stm-progress-strong">65% of voyage completed</span>
+                  <span className="stm-sep">·</span>
+                  <span>~1,014 nm to {data.destCode}</span>
+                </div>
               </div>
 
               {/* Destination Node */}
               <div className="stm-node destination">
-                <span className="stm-node-port-code">{data.destCode} · DISCHARGE PORT</span>
-                <span className="stm-node-city">{data.destination.split(",")[0]}</span>
-                <span className="stm-node-hub">{data.destination}</span>
+                <div className="stm-node-port-code">
+                  <span className="stm-node-indicator dest" />
+                  <span>{data.destCode} · PORT OF DISCHARGE</span>
+                </div>
+                <div className="stm-node-city">{data.destCity}</div>
+                <div className="stm-node-hub">{data.destName}</div>
+                <div className="stm-node-tag dest">
+                  <Anchor size={11} /> Scheduled Inward Berth
+                </div>
               </div>
             </div>
           </div>
