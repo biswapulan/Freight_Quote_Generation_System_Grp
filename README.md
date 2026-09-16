@@ -7,6 +7,7 @@
 [![React](https://img.shields.io/badge/React-19.2-61DAFB?style=for-the-badge&logo=react&logoColor=black)](https://react.dev/)
 [![Vite](https://img.shields.io/badge/Vite-6.0-646CFF?style=for-the-badge&logo=vite&logoColor=white)](https://vitejs.dev/)
 [![Pytest](https://img.shields.io/badge/Pytest-63%2F63_Passed_(100%25)-464646?style=for-the-badge&logo=pytest&logoColor=white)](#-empirical-testing--verification)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](./LICENSE)
 
 ---
 
@@ -409,5 +410,6 @@ Frontend Web App runs at: `http://localhost:5173`
 ---
 
 ## 📜 License & Credits
+This project is licensed under the **MIT License** — see the [LICENSE](./LICENSE) file for details.
 
 Built for the **Infosys Freight Quote Generation System** project initiative. Powered by Django, React, Vite, Open-Meteo API, Scikit-Learn, and Vercel.
