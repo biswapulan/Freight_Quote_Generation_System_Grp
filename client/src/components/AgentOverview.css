@@ -213,6 +213,62 @@
 .status-pending { background: #fef3c7; color: #b45309; }
 .status-approved { background: #dcfce7; color: #15803d; }
 .status-transit { background: #e0f2fe; color: #0369a1; }
+.status-sent { background: #dbeafe; color: #1d4ed8; }
+.status-accepted { background: #ecfdf5; color: #047857; }
+
+.agent-quote-link {
+  color: #0f172a;
+  text-decoration: none;
+  font-weight: 700;
+  transition: color 0.15s ease;
+}
+
+.agent-quote-link:hover {
+  color: #0284c7;
+  text-decoration: underline;
+}
+
+.agent-refresh-btn {
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: #ffffff;
+  padding: 8px 14px;
+  border-radius: 20px;
+  font-size: 12.5px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.agent-refresh-btn:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.agent-notification {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 18px;
+  margin-bottom: 20px;
+  border-radius: 12px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.agent-notification.success {
+  background: #ecfdf5;
+  border: 1px solid #a7f3d0;
+  color: #065f46;
+}
+
+.agent-notification.error {
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #991b1b;
+}
 
 .agent-btn-sm {
   background: #f1f5f9;
@@ -226,10 +282,15 @@
   transition: all 0.2s ease;
 }
 
-.agent-btn-sm:hover {
+.agent-btn-sm:hover:not(:disabled) {
   background: #0284c7;
   border-color: #0284c7;
   color: #ffffff;
+}
+
+.agent-btn-sm:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 /* Capacity Widget */
