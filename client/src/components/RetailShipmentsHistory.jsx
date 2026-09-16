@@ -42,6 +42,7 @@ import { useAuth } from "../context/AuthContext";
 import QuoteWorkflowStepper from "./QuoteWorkflowStepper";
 import ListFilterBar from "./ListFilterBar";
 import { filterRows } from "../utils/listFilters";
+import ShipmentTrackingModal from "./ShipmentTrackingModal";
 import "./RetailShipmentsHistory.css";
 
 const MODE_CLASS = { ocean_fcl: "ocean-fcl", air: "air-freight", ocean_lcl: "ocean-lcl", ocean: "ocean-fcl" };
@@ -118,6 +119,7 @@ export default function RetailShipmentsHistory({ viewMode = "quotes" }) {
   const [statusFilter, setStatusFilter] = useState("all");
   const [dateFilter, setDateFilter] = useState("all");
   const [selectedQuote, setSelectedQuote] = useState(null);
+  const [trackingShipment, setTrackingShipment] = useState(null);
   const [copied, setCopied] = useState(false);
   // The customer's last word on a cleared request, answered in this record.
   const [finalNote, setFinalNote] = useState("");
@@ -135,6 +137,7 @@ export default function RetailShipmentsHistory({ viewMode = "quotes" }) {
     function handleKeyDown(e) {
       if (e.key === "Escape") {
         setSelectedQuote(null);
+        setTrackingShipment(null);
       }
     }
     window.addEventListener("keydown", handleKeyDown);
@@ -835,7 +838,12 @@ export default function RetailShipmentsHistory({ viewMode = "quotes" }) {
                       })()}
                     </td>
                     <td>
-                      <button type="button" className="btn-open-quote" onClick={() => openQuoteDetail(q.quoteNo)}>
+                      <button
+                        type="button"
+                        className="btn-open-quote"
+                        onClick={() => setTrackingShipment(q)}
+                        title="Open real-time cargo tracking console"
+                      >
                         Track & Details
                       </button>
                     </td>
@@ -1849,6 +1857,18 @@ export default function RetailShipmentsHistory({ viewMode = "quotes" }) {
 
           </div>
         </div>
+      )}
+
+      {/* Real-World Logistics & Cargo Shipment Tracking Console */}
+      {trackingShipment && (
+        <ShipmentTrackingModal
+          shipment={trackingShipment}
+          onClose={() => setTrackingShipment(null)}
+          onViewQuoteRecord={(shipment) => {
+            setTrackingShipment(null);
+            openQuoteDetail(shipment.quoteNo || shipment.id);
+          }}
+        />
       )}
     </div>
   );

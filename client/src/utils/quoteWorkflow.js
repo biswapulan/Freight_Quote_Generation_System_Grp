@@ -300,7 +300,11 @@ export const SHIPMENT_STATUS_CONFIG = {
   PROCESSING: { label: "PROCESSING", color: "#6366f1", bg: "#e0e7ff" },
   ANALYZED: { label: "ANALYZED", color: "#d97706", bg: "#fef3c7" },
   QUOTED: { label: "QUOTED", color: "#0284c7", bg: "#dbeafe" },
-  CLOSED: { label: "CLOSED", color: "#059669", bg: "#ecfdf5" },
+  BOOKED: { label: "BOOKED", color: "#059669", bg: "#ecfdf5" },
+  CONFIRMED: { label: "BOOKED", color: "#059669", bg: "#ecfdf5" },
+  IN_TRANSIT: { label: "IN TRANSIT", color: "#0284c7", bg: "#e0f2fe" },
+  DELIVERED: { label: "DELIVERED", color: "#10b981", bg: "#d1fae5" },
+  CLOSED: { label: "BOOKED", color: "#059669", bg: "#ecfdf5" },
   CANCELLED: { label: "CANCELLED", color: "#991b1b", bg: "#fef2f2" },
 };
 
@@ -312,7 +316,9 @@ export function normalizeShipmentStatus(raw) {
   if (upper === "PROCESSING" || upper === "IN_PROGRESS" || upper === "ROUTING") return "PROCESSING";
   if (upper === "ANALYZED" || upper === "EVALUATED" || upper === "REVIEWED") return "ANALYZED";
   if (upper === "QUOTED" || upper === "QUOTE_ISSUED" || upper === "OFFERED") return "QUOTED";
-  if (upper === "CLOSED" || upper === "ACCEPTED" || upper === "BOOKED" || upper === "COMPLETED") return "CLOSED";
+  if (upper === "IN_TRANSIT" || upper === "TRANSIT" || upper === "ON_VESSEL" || upper === "SAILING") return "IN_TRANSIT";
+  if (upper === "DELIVERED" || upper === "COMPLETED") return "DELIVERED";
+  if (upper === "CLOSED" || upper === "ACCEPTED" || upper === "BOOKED" || upper === "CONFIRMED" || upper === "BOOKING_CONFIRMED") return "BOOKED";
   if (upper === "CANCELLED" || upper === "REJECTED" || upper === "EXPIRED") return "CANCELLED";
   return "SUBMITTED";
 }
@@ -333,7 +339,7 @@ export function getShipmentStatusFromQuoteStatus(quoteStatus) {
     case "SENT":
       return "QUOTED";
     case "ACCEPTED":
-      return "CLOSED";
+      return "BOOKED";
     case "REJECTED":
     case "EXPIRED":
       return "CANCELLED";
