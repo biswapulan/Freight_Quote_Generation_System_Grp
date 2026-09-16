@@ -9,11 +9,16 @@ import {
   ArrowRight,
   RotateCw,
   Ship,
+  Upload,
+  FileUp,
+  FileText,
+  Check,
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import {
   listBookings,
   listMySelections,
+  listShipmentDocuments,
   provideSelectionInformation,
   respondToRevision,
   submitFinalDecision,
@@ -89,6 +94,35 @@ const DOC_TYPES = [
   "Other supporting document",
 ];
 
+const FOUR_TRADE_DOCS = [
+  {
+    name: "Commercial Invoice",
+    docType: "Commercial Invoice",
+    samplePath: "/sample_trade_documents/Commercial_Invoice_INV2026.pdf",
+    fileName: "Commercial_Invoice_INV2026.pdf",
+  },
+  {
+    name: "Packing List",
+    docType: "Packing List",
+    samplePath: "/sample_trade_documents/Packing_List_PL9921.pdf",
+    fileName: "Packing_List_PL9921.pdf",
+  },
+  {
+    name: "Bill of Lading Draft",
+    docType: "Bill of Lading / Sea Waybill (B/L)",
+    samplePath: "/sample_trade_documents/Bill_of_Lading_Draft_BL4810.pdf",
+    fileName: "Bill_of_Lading_Draft_BL4810.pdf",
+  },
+  {
+    name: "Certificate of Origin",
+    docType: "Certificate of Origin (COO)",
+    samplePath: "/sample_trade_documents/Certificate_of_Origin_COO2026.pdf",
+    fileName: "Certificate_of_Origin_COO2026.pdf",
+  },
+];
+
+const normalizeDocName = (name) => (name || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+
 function money(amount, currency) {
   const value = Number(amount || 0);
   return `${currency === "INR" ? "₹ " : `${currency || ""} `}${value.toLocaleString("en-IN", { maximumFractionDigits: 0 })}`;
@@ -110,11 +144,70 @@ export default function CustomerSelections() {
   const [note, setNote] = useState("");
   const [files, setFiles] = useState([]);
   const [docType, setDocType] = useState(DOC_TYPES[0]);
+  const [modalDocs, setModalDocs] = useState({});
+  const [batchUploading, setBatchUploading] = useState(false);
+  const [batchProgress, setBatchProgress] = useState(null);
+  const [uploadingDoc, setUploadingDoc] = useState(null);
 
   function closeInfo() {
     setInfoFor(null);
     setFiles([]);
+    setModalDocs({});
+    setBatchUploading(false);
+    setBatchProgress(null);
+    setUploadingDoc(null);
   }
+
+  // Load existing documents for the active shipment when modal opens
+  useEffect(() => {
+    if (!infoFor?.shipmentId || !token) {
+      setModalDocs({});
+      setBatchUploading(false);
+      setBatchProgress(null);
+      setUploadingDoc(null);
+      return;
+    }
+
+    let active = true;
+    listShipmentDocuments(token, infoFor.shipmentId)
+      .then((data) => {
+        if (!active) return;
+        const initial = {};
+        const existing = data.results || [];
+        FOUR_TRADE_DOCS.forEach((d) => {
+          const match = existing.find(
+            (u) =>
+              normalizeDocName(u.document_type) === normalizeDocName(d.name) ||
+              normalizeDocName(u.document_type) === normalizeDocName(d.docType),
+          );
+          if (match) {
+            initial[d.name] = {
+              status: "UPLOADED",
+              fileName: match.file_name,
+              fileSize: match.file_size,
+            };
+          } else {
+            initial[d.name] = {
+              status: "PENDING",
+              fileName: null,
+              fileSize: null,
+            };
+          }
+        });
+        setModalDocs(initial);
+      })
+      .catch(() => {
+        const initial = {};
+        FOUR_TRADE_DOCS.forEach((d) => {
+          initial[d.name] = { status: "PENDING" };
+        });
+        setModalDocs(initial);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [infoFor, token]);
 
   const load = useCallback(async () => {
     if (!token) return;
@@ -209,26 +302,163 @@ export default function CustomerSelections() {
 
   }
 
+  /**
+   * Upload all 4 trade documents sequentially, updating the status of each
+   * document to "UPLOADED" one by one in real-time.
+   */
+  async function handleUploadAllFourDocs(customFiles = null) {
+    if (!infoFor?.shipmentId || batchUploading) return;
+    const shipmentId = infoFor.shipmentId;
+    setBatchUploading(true);
+    setNotice(null);
+
+    try {
+      for (let i = 0; i < FOUR_TRADE_DOCS.length; i++) {
+        const item = FOUR_TRADE_DOCS[i];
+        setUploadingDoc(item.name);
+        setBatchProgress({
+          current: i + 1,
+          total: FOUR_TRADE_DOCS.length,
+          docName: item.name,
+        });
+
+        // 1. Visually mark document as UPLOADING
+        setModalDocs((prev) => ({
+          ...prev,
+          [item.name]: {
+            ...prev[item.name],
+            status: "UPLOADING",
+          },
+        }));
+
+        let fileToUpload;
+        if (customFiles && customFiles[i]) {
+          fileToUpload = customFiles[i];
+        } else {
+          const res = await fetch(item.samplePath);
+          const blob = await res.blob();
+          fileToUpload = new File([blob], item.fileName, { type: "application/pdf" });
+        }
+
+        if (typeof window !== "undefined") {
+          window.__freightai_uploaded_blobs = window.__freightai_uploaded_blobs || {};
+          window.__freightai_uploaded_blobs[fileToUpload.name] = URL.createObjectURL(fileToUpload);
+        }
+
+        await uploadShipmentDocument(token, {
+          shipmentId,
+          documentType: item.name,
+          file: fileToUpload,
+        });
+
+        // 2. Visually transition status to UPLOADED one by one
+        setModalDocs((prev) => ({
+          ...prev,
+          [item.name]: {
+            status: "UPLOADED",
+            fileName: fileToUpload.name,
+            fileSize: fileToUpload.size,
+          },
+        }));
+
+        setFiles((prev) => [...prev.filter((f) => f.name !== fileToUpload.name), fileToUpload]);
+
+        // Pause 650ms so user visibly sees each status change one by one
+        await new Promise((resolve) => setTimeout(resolve, 650));
+      }
+
+      setNote((prev) =>
+        prev.trim()
+          ? prev
+          : "All 4 required trade documents (Commercial Invoice, Packing List, Bill of Lading Draft, Certificate of Origin) attached.",
+      );
+
+      try {
+        const bc = new BroadcastChannel("freight_quote_sync");
+        bc.postMessage({ type: "DOCUMENTS_UPLOADED", shipmentId });
+        bc.close();
+      } catch (e) {}
+
+      setNotice({
+        type: "success",
+        text: `All 4 trade documents uploaded successfully! Click "Send to ${infoFor.companyName}" to submit.`,
+      });
+    } catch (err) {
+      console.error("Batch upload error:", err);
+      setNotice({
+        type: "error",
+        text: err.message || "Failed to upload all documents.",
+      });
+    } finally {
+      setBatchUploading(false);
+      setBatchProgress(null);
+      setUploadingDoc(null);
+    }
+  }
+
+  /**
+   * Upload an individual trade document.
+   */
+  async function handleUploadSingleModalDoc(docItem, file) {
+    if (!infoFor?.shipmentId || !file || batchUploading) return;
+    const shipmentId = infoFor.shipmentId;
+    setUploadingDoc(docItem.name);
+    setModalDocs((prev) => ({
+      ...prev,
+      [docItem.name]: { ...prev[docItem.name], status: "UPLOADING" },
+    }));
+
+    try {
+      if (typeof window !== "undefined") {
+        window.__freightai_uploaded_blobs = window.__freightai_uploaded_blobs || {};
+        window.__freightai_uploaded_blobs[file.name] = URL.createObjectURL(file);
+      }
+      await uploadShipmentDocument(token, {
+        shipmentId,
+        documentType: docItem.name,
+        file,
+      });
+      setModalDocs((prev) => ({
+        ...prev,
+        [docItem.name]: {
+          status: "UPLOADED",
+          fileName: file.name,
+          fileSize: file.size,
+        },
+      }));
+      setFiles((prev) => [...prev.filter((f) => f.name !== file.name), file]);
+      try {
+        const bc = new BroadcastChannel("freight_quote_sync");
+        bc.postMessage({ type: "DOCUMENTS_UPLOADED", shipmentId });
+        bc.close();
+      } catch (e) {}
+    } catch (err) {
+      setModalDocs((prev) => ({
+        ...prev,
+        [docItem.name]: { ...prev[docItem.name], status: "PENDING" },
+      }));
+      setNotice({ type: "error", text: err.message || "Failed to upload document." });
+    } finally {
+      setUploadingDoc(null);
+    }
+  }
+
   async function sendInformation() {
     if (!infoFor || busy) return;
-    if (!note.trim() && !files.length) {
-      setNotice({ type: "error", text: "Attach a file or describe what you are providing." });
+    const hasAnyUploaded = FOUR_TRADE_DOCS.some((d) => modalDocs[d.name]?.status === "UPLOADED");
+    if (!note.trim() && !files.length && !hasAnyUploaded) {
+      setNotice({ type: "error", text: "Attach documents or describe what you are providing." });
       return;
     }
     setBusy(infoFor.reference);
     try {
-      // Files go onto the shipment first, where the company's agent sees them
-      // in their request window; the response then names them.
-      const names = [];
-      for (const file of files) {
-        await uploadShipmentDocument(token, {
-          shipmentId: infoFor.shipmentId,
-          documentType: docType,
-          file,
-        });
-        names.push(file.name);
-      }
-      const attached = names.length ? `Attached ${docType}: ${names.join(", ")}.` : "";
+      const names = files.map((f) => f.name);
+      FOUR_TRADE_DOCS.forEach((d) => {
+        if (modalDocs[d.name]?.fileName && !names.includes(modalDocs[d.name].fileName)) {
+          names.push(modalDocs[d.name].fileName);
+        }
+      });
+      const attached = names.length ? `Attached: ${names.join(", ")}.` : "";
       await provideSelectionInformation(token, infoFor.reference, {
         note: [note.trim(), attached].filter(Boolean).join(" "),
         provided: names,
@@ -242,6 +472,11 @@ export default function CustomerSelections() {
       closeInfo();
       setNote("");
       await load();
+      try {
+        const bc = new BroadcastChannel("freight_quote_sync");
+        bc.postMessage({ type: "INFO_PROVIDED", selectionRef: infoFor.reference });
+        bc.close();
+      } catch (e) {}
     } catch (err) {
       setNotice({ type: "error", text: err.message || "Could not send that." });
     } finally {
@@ -652,45 +887,279 @@ export default function CustomerSelections() {
             The company&apos;s agent sees the files straight away, and your request goes
             back to their desk.
           </p>
+
+          {/* Action header with Upload All 4 Documents */}
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: "10px",
+              flexWrap: "wrap",
+              padding: "12px 14px",
+              background: "#f8fafc",
+              border: "1px solid #e2e8f0",
+              borderRadius: "10px",
+              margin: "14px 0 12px",
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+              <button
+                type="button"
+                className="csel-primary"
+                onClick={() => handleUploadAllFourDocs()}
+                disabled={batchUploading || !!uploadingDoc}
+                style={{
+                  padding: "7px 14px",
+                  fontSize: "12px",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "6px",
+                  cursor: batchUploading ? "wait" : "pointer",
+                }}
+              >
+                {batchUploading ? (
+                  <>
+                    <RotateCw size={13} className="spin-icon" />
+                    <span>Uploading {batchProgress?.current || 1}/4: {batchProgress?.docName || "..."}</span>
+                  </>
+                ) : (
+                  <>
+                    <FileUp size={13} />
+                    <span>Upload All 4 Documents</span>
+                  </>
+                )}
+              </button>
+
+              <label
+                style={{
+                  background: "#ffffff",
+                  color: "#334155",
+                  border: "1px solid #cbd5e1",
+                  borderRadius: "7px",
+                  padding: "6px 12px",
+                  fontSize: "12px",
+                  fontWeight: 600,
+                  cursor: batchUploading || !!uploadingDoc ? "not-allowed" : "pointer",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "5px",
+                }}
+              >
+                <Upload size={12} style={{ color: "#64748b" }} />
+                <span>Choose 4 Local Files</span>
+                <input
+                  type="file"
+                  multiple
+                  accept=".pdf,.png,.jpg,.jpeg,.xlsx,.csv,.doc,.docx"
+                  style={{ display: "none" }}
+                  disabled={batchUploading || !!uploadingDoc}
+                  onChange={(e) => {
+                    const filesArr = Array.from(e.target.files || []);
+                    if (filesArr.length > 0) handleUploadAllFourDocs(filesArr);
+                    e.target.value = "";
+                  }}
+                />
+              </label>
+            </div>
+
+            <div style={{ fontSize: "11px", color: "#64748b" }}>
+              Sample Docs:{" "}
+              <a href="/sample_trade_documents/Commercial_Invoice_INV2026.pdf" download style={{ color: "#0284c7", fontWeight: 600, textDecoration: "underline" }}>Invoice</a> &bull;{" "}
+              <a href="/sample_trade_documents/Packing_List_PL9921.pdf" download style={{ color: "#0284c7", fontWeight: 600, textDecoration: "underline" }}>Packing</a> &bull;{" "}
+              <a href="/sample_trade_documents/Bill_of_Lading_Draft_BL4810.pdf" download style={{ color: "#0284c7", fontWeight: 600, textDecoration: "underline" }}>B/L</a> &bull;{" "}
+              <a href="/sample_trade_documents/Certificate_of_Origin_COO2026.pdf" download style={{ color: "#0284c7", fontWeight: 600, textDecoration: "underline" }}>Origin</a>
+            </div>
+          </div>
+
+          {/* Sequential Progress Banner */}
+          {batchUploading && batchProgress && (
+            <div
+              style={{
+                background: "#eff6ff",
+                border: "1px solid #bfdbfe",
+                borderRadius: "8px",
+                padding: "10px 14px",
+                marginBottom: "12px",
+                display: "flex",
+                flexDirection: "column",
+                gap: "6px",
+              }}
+            >
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "7px", color: "#1e40af", fontWeight: 700, fontSize: "12px" }}>
+                  <RotateCw size={14} className="spin-icon" style={{ color: "#2563eb" }} />
+                  <span>Uploading {batchProgress.current} of {batchProgress.total}: <strong>{batchProgress.docName}</strong></span>
+                </div>
+                <span style={{ fontSize: "11.5px", fontWeight: 700, color: "#2563eb" }}>
+                  {Math.round((batchProgress.current / batchProgress.total) * 100)}%
+                </span>
+              </div>
+              <div style={{ width: "100%", height: "5px", background: "#dbeafe", borderRadius: "999px", overflow: "hidden" }}>
+                <div
+                  style={{
+                    width: `${(batchProgress.current / batchProgress.total) * 100}%`,
+                    height: "100%",
+                    background: "#2563eb",
+                    borderRadius: "999px",
+                    transition: "width 0.4s ease",
+                  }}
+                />
+              </div>
+            </div>
+          )}
+
+          {/* 4 Trade Document Status Cards */}
+          <div style={{ display: "flex", flexDirection: "column", gap: "8px", marginBottom: "14px" }}>
+            {FOUR_TRADE_DOCS.map((docItem) => {
+              const info = modalDocs[docItem.name] || { status: "PENDING" };
+              const isUploaded = info.status === "UPLOADED";
+              const isCurrentUploading = uploadingDoc === docItem.name || info.status === "UPLOADING";
+
+              return (
+                <div
+                  key={docItem.name}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    padding: "9px 12px",
+                    background: isUploaded ? "#f0fdf4" : isCurrentUploading ? "#eff6ff" : "#f8fafc",
+                    border: `1px solid ${isUploaded ? "#86efac" : isCurrentUploading ? "#93c5fd" : "#e2e8f0"}`,
+                    borderRadius: "8px",
+                    gap: "10px",
+                    transition: "all 0.3s ease",
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", gap: "9px", minWidth: 0 }}>
+                    <div
+                      style={{
+                        width: "28px",
+                        height: "28px",
+                        borderRadius: "6px",
+                        background: isUploaded ? "#dcfce7" : isCurrentUploading ? "#dbeafe" : "#f1f5f9",
+                        color: isUploaded ? "#16a34a" : isCurrentUploading ? "#2563eb" : "#64748b",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        flexShrink: 0,
+                      }}
+                    >
+                      {isCurrentUploading ? (
+                        <RotateCw size={14} className="spin-icon" />
+                      ) : isUploaded ? (
+                        <CheckCircle2 size={15} />
+                      ) : (
+                        <Clock size={15} />
+                      )}
+                    </div>
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontSize: "12.5px", fontWeight: 700, color: "#0f172a" }}>
+                        {docItem.name}
+                      </div>
+                      <div style={{ fontSize: "11px", color: isUploaded ? "#16a34a" : isCurrentUploading ? "#2563eb" : "#64748b", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        {isCurrentUploading
+                          ? "Uploading file to shipment..."
+                          : isUploaded
+                          ? info.fileName ? `${info.fileName} (${info.fileSize ? Math.round(info.fileSize / 1024) + " KB" : "Ready"})` : "Uploaded successfully"
+                          : "Required trade document"}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div style={{ display: "flex", alignItems: "center", gap: "6px", flexShrink: 0 }}>
+                    {isCurrentUploading ? (
+                      <span style={{ fontSize: "10.5px", fontWeight: 700, color: "#1d4ed8", background: "#dbeafe", padding: "3px 8px", borderRadius: "5px", display: "inline-flex", alignItems: "center", gap: "3px" }}>
+                        <RotateCw size={10} className="spin-icon" /> UPLOADING...
+                      </span>
+                    ) : isUploaded ? (
+                      <div style={{ display: "flex", alignItems: "center", gap: "5px" }}>
+                        <span style={{ fontSize: "10.5px", fontWeight: 700, color: "#15803d", background: "#dcfce7", padding: "3px 8px", borderRadius: "5px", display: "inline-flex", alignItems: "center", gap: "3px" }}>
+                          <Check size={11} /> UPLOADED
+                        </span>
+                        <label
+                          style={{
+                            fontSize: "10.5px",
+                            fontWeight: 600,
+                            color: "#475569",
+                            background: "#ffffff",
+                            border: "1px solid #cbd5e1",
+                            padding: "3px 7px",
+                            borderRadius: "5px",
+                            cursor: batchUploading ? "not-allowed" : "pointer",
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: "3px",
+                          }}
+                        >
+                          <Upload size={10} /> Replace
+                          <input
+                            type="file"
+                            accept=".pdf,.png,.jpg,.jpeg,.xlsx,.csv,.doc,.docx"
+                            style={{ display: "none" }}
+                            disabled={batchUploading || !!uploadingDoc}
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (file) handleUploadSingleModalDoc(docItem, file);
+                              e.target.value = "";
+                            }}
+                          />
+                        </label>
+                      </div>
+                    ) : (
+                      <label
+                        style={{
+                          fontSize: "10.5px",
+                          fontWeight: 700,
+                          color: "#ffffff",
+                          background: "#f97316",
+                          border: "none",
+                          padding: "4px 10px",
+                          borderRadius: "5px",
+                          cursor: batchUploading ? "not-allowed" : "pointer",
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: "4px",
+                        }}
+                      >
+                        <Upload size={11} /> Upload
+                        <input
+                          type="file"
+                          accept=".pdf,.png,.jpg,.jpeg,.xlsx,.csv,.doc,.docx"
+                          style={{ display: "none" }}
+                          disabled={batchUploading || !!uploadingDoc}
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) handleUploadSingleModalDoc(docItem, file);
+                            e.target.value = "";
+                          }}
+                        />
+                      </label>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
           <label className="csel-field">
             Your response
             <textarea
-              rows={4}
+              rows={3}
               value={note}
               onChange={(e) => setNote(e.target.value)}
-              placeholder="e.g. Commercial invoice and packing list attached."
+              placeholder="e.g. Commercial invoice, packing list, bill of lading, and certificate of origin attached."
             />
           </label>
-          <label className="csel-field">
-            Attach documents (optional)
-            <select value={docType} onChange={(e) => setDocType(e.target.value)}>
-              {DOC_TYPES.map((type) => (
-                <option key={type} value={type}>
-                  {type}
-                </option>
-              ))}
-            </select>
-            <input
-              type="file"
-              multiple
-              accept=".pdf,.png,.jpg,.jpeg,.tif,.tiff,.webp"
-              onChange={(e) => setFiles(Array.from(e.target.files || []))}
-            />
-          </label>
-          {files.length > 0 && (
-            <p className="csel-modal-text">
-              {files.length} file{files.length === 1 ? "" : "s"} ready:{" "}
-              {files.map((f) => f.name).join(", ")}
-            </p>
-          )}
+
           <div className="csel-modal-actions">
-            <button type="button" className="csel-secondary" onClick={closeInfo}>
+            <button type="button" className="csel-secondary" onClick={closeInfo} disabled={batchUploading}>
               Cancel
             </button>
             <button
               type="button"
               className="csel-primary"
-              disabled={Boolean(busy)}
+              disabled={Boolean(busy) || batchUploading}
               onClick={sendInformation}
             >
               Send to {infoFor.companyName}

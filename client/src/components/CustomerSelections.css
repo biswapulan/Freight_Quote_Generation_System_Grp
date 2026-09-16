@@ -184,8 +184,11 @@
   padding:50px 16px; z-index:1000; overflow-y:auto;
 }
 .csel-modal {
-  width:100%; max-width:560px; background:#fff; border-radius:14px;
+  width:100%; max-width:640px; background:#fff; border-radius:14px;
   box-shadow:0 22px 60px rgba(15,23,42,.3);
+}
+.spin-icon {
+  animation: csel-rotate 1s linear infinite;
 }
 .csel-modal-head {
   display:flex; align-items:center; justify-content:space-between;
