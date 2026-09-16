@@ -1,55 +1,88 @@
 @import "./styles/theme.css";
 @import "./styles/sections.css";
 
-*{
-
-margin:0;
-
-padding:0;
-
-box-sizing:border-box;
-
-font-family:
-"Inter",
-"Segoe UI",
-sans-serif;
-
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  font-family: var(--fa-font, "Inter", system-ui, -apple-system, sans-serif);
 }
 
-
-
-html{
-
-scroll-behavior:smooth;
-
+html {
+  scroll-behavior: smooth;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
-
-
-body{
-
-overflow-x:hidden;
-
-background:white;
-
+body {
+  overflow-x: hidden;
+  background: var(--fa-cloud, #F8FAFC);
+  color: var(--fa-body, #334155);
 }
 
-
-
-button{
-
-font-family:inherit;
-
+/* Accessibility: Clear high-contrast focus rings for keyboard users */
+:focus-visible {
+  outline: 2px solid #0284c7;
+  outline-offset: 2px;
 }
 
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid #0284c7;
+  outline-offset: 2px;
+}
 
+/* Tabular numbers for financial and cargo telemetry */
+.tabular-nums,
+.dash-table td,
+.bl-track-code,
+.price-value,
+.stat-num,
+.stm-info-value {
+  font-feature-settings: "tnum" 1, "cv02" 1, "cv03" 1, "cv04" 1;
+  font-variant-numeric: tabular-nums;
+}
 
-img{
+/* Scrollbar refinement */
+::-webkit-scrollbar {
+  width: 7px;
+  height: 7px;
+}
 
-max-width:100%;
+::-webkit-scrollbar-track {
+  background: #f1f5f9;
+}
 
-display:block;
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 9999px;
+}
 
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* Media query for reduced motion compliance */
+@media (prefers-reduced-motion: reduce) {
+  *, ::before, ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+button {
+  font-family: inherit;
+}
+
+img {
+  max-width: 100%;
+  display: block;
 }
 
 .route-loading {

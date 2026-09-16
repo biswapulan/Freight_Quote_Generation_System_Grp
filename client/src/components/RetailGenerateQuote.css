@@ -98,7 +98,12 @@
   border-radius: 16px;
   padding: 24px 28px;
   margin-bottom: 24px;
-  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.03);
+  box-shadow: 0 1px 3px 0 rgba(15, 23, 42, 0.05), 0 8px 24px -4px rgba(15, 23, 42, 0.06);
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s ease;
+}
+
+.enquiryView .section-card:hover {
+  box-shadow: 0 4px 6px -1px rgba(15, 23, 42, 0.07), 0 14px 28px -4px rgba(15, 23, 42, 0.1);
 }
 
 .enquiryView .section-header { display: flex; align-items: flex-start; gap: 14px; margin-bottom: 22px; }
@@ -134,23 +139,23 @@
 .enquiryView .form-select,
 .enquiryView .form-textarea {
   width: 100%;
-  padding: 10px 14px;
+  padding: 11px 14px;
   background: #ffffff;
   border: 1px solid #cbd5e1;
-  border-radius: 8px;
+  border-radius: 9px;
   font-size: 14px;
   font-weight: 500;
   color: #0f172a;
   outline: none;
-  transition: all 0.2s ease;
+  transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
   font-family: inherit;
 }
 
 .enquiryView .form-input:focus,
 .enquiryView .form-select:focus,
 .enquiryView .form-textarea:focus {
-  border-color: #ff9800;
-  box-shadow: 0 0 0 3px rgba(255, 152, 0, 0.15);
+  border-color: #0284c7;
+  box-shadow: 0 0 0 3px rgba(2, 132, 199, 0.18);
 }
 
 .enquiryView .subtext { font-size: 11px; color: #64748b; margin-top: 2px; }

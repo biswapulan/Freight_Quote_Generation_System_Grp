@@ -29,7 +29,12 @@
   background: var(--fa-white);
   border: 1px solid var(--fa-border);
   border-radius: 16px;
-  box-shadow: var(--fa-shadow-card);
+  box-shadow: var(--fa-shadow-diffused);
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s ease;
+}
+
+.ov-card:hover {
+  box-shadow: var(--fa-shadow-card-hover);
 }
 
 .ov-card-head {

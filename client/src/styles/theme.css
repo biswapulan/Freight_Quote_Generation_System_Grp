@@ -34,10 +34,26 @@
 
   /* Shape */
   --fa-radius-sm: 10px;
+  --fa-radius-md: 14px;
   --fa-radius-lg: 20px;
-  --fa-shadow-card: 0 10px 30px rgba(15, 23, 42, 0.07);
-  --fa-shadow-card-hover: 0 20px 45px rgba(15, 23, 42, 0.14);
-  --fa-shadow-navy: 0 20px 45px rgba(15, 23, 42, 0.28);
+  
+  /* FAANG Spatial Depth & Multi-Layer Ambient Shadows */
+  --fa-shadow-card: 0 1px 3px 0 rgba(15, 23, 42, 0.05), 0 6px 16px -2px rgba(15, 23, 42, 0.06);
+  --fa-shadow-card-hover: 0 4px 6px -1px rgba(15, 23, 42, 0.07), 0 16px 32px -4px rgba(15, 23, 42, 0.12);
+  --fa-shadow-navy: 0 20px 45px -5px rgba(15, 23, 42, 0.35), 0 0 0 1px rgba(255, 255, 255, 0.1) inset;
+  --fa-shadow-diffused: 0 1px 2px 0 rgba(15, 23, 42, 0.05), 0 12px 24px -4px rgba(15, 23, 42, 0.08), 0 24px 48px -12px rgba(15, 23, 42, 0.04);
+  --fa-shadow-glass: 0 8px 32px 0 rgba(15, 23, 42, 0.08), 0 0 0 1px rgba(255, 255, 255, 0.4) inset;
 
-  --fa-font: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  /* Typography & Tabular Numerics */
+  --fa-font: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --fa-font-tnum: "Inter", system-ui, monospace;
+  --fa-font-features: "tnum" 1, "cv02" 1, "cv03" 1, "cv04" 1;
+
+  /* Smooth Kinetic Transitions */
+  --fa-transition-fast: 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+  --fa-transition-smooth: 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  --fa-transition-bounce: 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  /* Accessibility & Focus Tokens */
+  --fa-focus-ring: 0 0 0 2px #ffffff, 0 0 0 4px #0284c7;
 }
