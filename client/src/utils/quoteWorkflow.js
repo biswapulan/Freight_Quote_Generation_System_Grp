@@ -548,20 +548,211 @@ export function mapApiQuote(apiQuote) {
 // ---------------------------------------------------------------------------
 
 export function generateRouteOptions(quote) {
+  const rawMode = String(
+    quote?.transportMode ||
+    quote?.transport_mode ||
+    quote?.mode ||
+    quote?.serverQuote?.transportMode ||
+    quote?.serverQuote?.transport_mode ||
+    quote?.shipment?.transportMode ||
+    quote?.shipment?.transport_mode ||
+    "ocean"
+  ).toLowerCase().trim();
+
+  let mode = "ocean";
+  if (rawMode.includes("express")) {
+    mode = "express";
+  } else if (rawMode.includes("air")) {
+    mode = "air";
+  } else if (rawMode.includes("ground") || rawMode.includes("rail") || rawMode.includes("road")) {
+    mode = "ground";
+  }
+
   const baseTotal = Number(
     quote?.totalNum ||
     quote?.total_price ||
     quote?.serverQuote?.totalPrice ||
     quote?.breakdown?.total ||
-    282021
+    (mode === "express" ? 68000 : mode === "air" ? 42000 : mode === "ground" ? 32000 : 282021)
   );
+
+  const defaultDays = mode === "express" ? 2 : mode === "air" ? 4 : mode === "ground" ? 6 : 14;
   const transitBase = Number(
     quote?.transitDays ||
     quote?.estimatedTransitDays ||
     quote?.transit_days ||
-    14
+    defaultDays
   );
 
+  if (mode === "express") {
+    return [
+      {
+        id: "dhl-express",
+        carrier: "DHL Express",
+        agentName: "DHL Express World Desk (Agent Marcus)",
+        agentEmail: "agent.dhl@freightai.com",
+        recommended: true,
+        service: "Time Definite International (TDI 12:00)",
+        transitDays: Math.max(1, transitBase),
+        price: Math.round(baseTotal),
+        transitScore: 0.98,
+        costScore: 0.82,
+        reliability: 0.98,
+        congestion: 0.15,
+        docFee: 5000,
+        dwellDays: 0.5,
+        co2Kg: 580,
+      },
+      {
+        id: "fedex-express",
+        carrier: "FedEx Express",
+        agentName: "FedEx Global Logistics (Agent Bradley)",
+        agentEmail: "agent.fedex@freightai.com",
+        recommended: false,
+        service: "FedEx International Priority (IP Direct)",
+        transitDays: Math.max(1, transitBase),
+        price: Math.round(baseTotal * 0.94),
+        transitScore: 0.95,
+        costScore: 0.88,
+        reliability: 0.96,
+        congestion: 0.20,
+        docFee: 4800,
+        dwellDays: 0.8,
+        co2Kg: 595,
+      },
+      {
+        id: "ups-express",
+        carrier: "UPS Express",
+        agentName: "UPS Supply Chain Solutions (Agent Nathan)",
+        agentEmail: "agent.ups@freightai.com",
+        recommended: false,
+        service: "UPS Worldwide Express Saver",
+        transitDays: Math.max(1, transitBase + 1),
+        price: Math.round(baseTotal * 0.91),
+        transitScore: 0.92,
+        costScore: 0.91,
+        reliability: 0.95,
+        congestion: 0.22,
+        docFee: 4500,
+        dwellDays: 0.9,
+        co2Kg: 575,
+      },
+    ];
+  }
+
+  if (mode === "air") {
+    return [
+      {
+        id: "emirates-skycargo",
+        carrier: "Emirates SkyCargo",
+        agentName: "SkyLink Aviation Logistics (Agent Farhan)",
+        agentEmail: "agent.skycargo@freightai.com",
+        recommended: true,
+        service: "SkyCargo Priority Cargo — Daily Flights",
+        transitDays: Math.max(2, transitBase),
+        price: Math.round(baseTotal),
+        transitScore: 0.94,
+        costScore: 0.86,
+        reliability: 0.95,
+        congestion: 0.35,
+        docFee: 4000,
+        dwellDays: 1.0,
+        co2Kg: 520,
+      },
+      {
+        id: "lufthansa-cargo",
+        carrier: "Lufthansa Cargo",
+        agentName: "AeroTrans Global Forwarding (Agent Hans)",
+        agentEmail: "agent.lufthansa@freightai.com",
+        recommended: false,
+        service: "td.Pro Air Cargo — Direct European Hub Feeder",
+        transitDays: Math.max(2, transitBase + 1),
+        price: Math.round(baseTotal * 1.08),
+        transitScore: 0.90,
+        costScore: 0.79,
+        reliability: 0.92,
+        congestion: 0.38,
+        docFee: 4500,
+        dwellDays: 1.2,
+        co2Kg: 510,
+      },
+      {
+        id: "qatar-cargo",
+        carrier: "Qatar Airways Cargo",
+        agentName: "Al-Maha Freight Network (Agent Yasmin)",
+        agentEmail: "agent.qatarcargo@freightai.com",
+        recommended: false,
+        service: "QR Global Cargo Connect — Scheduled Freighter",
+        transitDays: Math.max(2, transitBase),
+        price: Math.round(baseTotal * 0.92),
+        transitScore: 0.91,
+        costScore: 0.93,
+        reliability: 0.93,
+        congestion: 0.32,
+        docFee: 3800,
+        dwellDays: 1.1,
+        co2Kg: 535,
+      },
+    ];
+  }
+
+  if (mode === "ground") {
+    return [
+      {
+        id: "concor-rail",
+        carrier: "CONCOR Rail Express",
+        agentName: "Northern Rail Freight Lines (Agent Rajesh)",
+        agentEmail: "agent.concor@freightai.com",
+        recommended: true,
+        service: "CONCOR Liner Rail Express — Daily Scheduled Rakes",
+        transitDays: Math.max(3, transitBase),
+        price: Math.round(baseTotal),
+        transitScore: 0.86,
+        costScore: 0.94,
+        reliability: 0.89,
+        congestion: 0.45,
+        docFee: 2000,
+        dwellDays: 1.8,
+        co2Kg: 180,
+      },
+      {
+        id: "db-cargo",
+        carrier: "DB Cargo",
+        agentName: "EuroRail Intermodal (Agent Stefan)",
+        agentEmail: "agent.dbcargo@freightai.com",
+        recommended: false,
+        service: "DB Trans-Eurasia Intermodal Rail Shuttle",
+        transitDays: Math.max(3, transitBase + 1),
+        price: Math.round(baseTotal * 1.06),
+        transitScore: 0.82,
+        costScore: 0.88,
+        reliability: 0.88,
+        congestion: 0.50,
+        docFee: 2500,
+        dwellDays: 2.0,
+        co2Kg: 195,
+      },
+      {
+        id: "bnsf-rail",
+        carrier: "BNSF Railway Intermodal",
+        agentName: "Prairie States Intermodal (Agent Cole)",
+        agentEmail: "agent.bnsf@freightai.com",
+        recommended: false,
+        service: "BNSF Coast-to-Coast Rail Shuttle",
+        transitDays: Math.max(3, transitBase),
+        price: Math.round(baseTotal * 0.97),
+        transitScore: 0.85,
+        costScore: 0.91,
+        reliability: 0.90,
+        congestion: 0.42,
+        docFee: 2200,
+        dwellDays: 1.6,
+        co2Kg: 210,
+      },
+    ];
+  }
+
+  // Ocean Freight (default)
   return [
     {
       id: "maersk",

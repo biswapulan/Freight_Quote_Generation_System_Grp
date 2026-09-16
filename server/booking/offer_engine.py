@@ -22,10 +22,50 @@ from quotes.insights import market_factor
 from .models import CompanyQuote
 
 
+def _matches_mode(requested_mode: str, company_modes: list) -> bool:
+    """Check if a company's supported modes match the shipment's transport mode."""
+    if not company_modes:
+        return True
+    req = (requested_mode or "ocean").lower().strip()
+    c_modes = [m.lower().strip() for m in company_modes]
+
+    if req in ("express", "express_air", "air_express"):
+        return "express" in c_modes
+    if req in ("air", "air_cargo", "air_standard", "air_gen"):
+        return "air" in c_modes and "express" not in c_modes
+    if req in ("ground", "rail", "road", "ground_rail", "truck"):
+        return any(m in ("ground", "rail", "road") for m in c_modes)
+    if req in ("ocean", "sea", "ocean_fcl", "ocean_lcl"):
+        return any(m in ("ocean", "sea") for m in c_modes)
+
+    return req in c_modes
+
+
 def _rate_card_for(company, mode):
-    """The company's terms for this mode, falling back to its ocean card."""
+    """The company's terms for this mode, falling back to its primary card."""
     cards = company.rate_cards.filter(is_active=True)
-    card = cards.filter(mode__iexact=mode).first() or cards.filter(mode="ocean").first()
+    req = (mode or "ocean").lower().strip()
+
+    card = cards.filter(mode__iexact=req).first()
+    if card and card.is_effective():
+        return card
+
+    aliases = []
+    if req in ("express", "express_air"):
+        aliases = ["express", "air"]
+    elif req in ("air", "air_cargo"):
+        aliases = ["air"]
+    elif req in ("ground", "rail", "road"):
+        aliases = ["ground", "rail", "road"]
+    elif req in ("ocean", "sea"):
+        aliases = ["ocean", "sea"]
+
+    for alias in aliases:
+        card = cards.filter(mode__iexact=alias).first()
+        if card and card.is_effective():
+            return card
+
+    card = cards.first()
     if card and card.is_effective():
         return card
     return None
@@ -96,7 +136,7 @@ def generate_company_quotes(quote, *, replace=False):
     offers = []
 
     for company in FreightCompany.objects.filter(status="ACTIVE"):
-        if company.modes and mode not in [m.lower() for m in company.modes]:
+        if not _matches_mode(mode, company.modes):
             continue
 
         card = _rate_card_for(company, mode)

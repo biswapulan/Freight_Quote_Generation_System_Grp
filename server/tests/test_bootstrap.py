@@ -20,14 +20,14 @@ class FakeUsers:
 @pytest.mark.django_db
 def test_companies_are_seeded_once_and_admin_edits_survive_a_restart():
     bootstrap.ensure_companies()
-    assert FreightCompany.objects.count() == 3
+    assert FreightCompany.objects.count() == 12
 
     card = CompanyRateCard.objects.get(company__code="maersk")
     card.rate_per_km = 99.0
     card.save()
 
     bootstrap.ensure_companies()  # the next start
-    assert FreightCompany.objects.count() == 3
+    assert FreightCompany.objects.count() == 12
     assert CompanyRateCard.objects.get(company__code="maersk").rate_per_km == 99.0
 
 

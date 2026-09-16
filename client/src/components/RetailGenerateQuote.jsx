@@ -1245,7 +1245,7 @@ export default function RetailGenerateQuote() {
     const originCity = cityByPort[originKey] || oPort?.name?.split(",")[0] || "Mumbai";
     const destCity = cityByPort[destKey] || dPort?.name?.split(",")[0] || "Singapore";
 
-    const apiMode = effectiveMode === "ground" ? "road" : effectiveMode === "express" ? "air" : effectiveMode;
+    const apiMode = effectiveMode;
     const cargoType = form.chkHazardous ? "hazardous" : form.chkTemp ? "cold_chain" : effectiveMode === "express" ? "express" : "general";
 
     const startedAt = Date.now();

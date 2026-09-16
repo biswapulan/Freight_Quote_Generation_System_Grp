@@ -6,49 +6,102 @@ import "./Carriers.css";
 // `GET /api/v1/carriers` call once that endpoint exists — the shape below
 // (name, scac, mode, onTime, reliability, lanes[]) is what the UI expects.
 const CARRIER_DATA = [
+  // ---- OCEAN FREIGHT ----
   {
-    name: "Maersk Line", scac: "MAEU", mode: "OCEAN", onTime: 82, reliability: 0.82,
+    name: "Maersk Line", scac: "MAEU", mode: "OCEAN", onTime: 94, reliability: 0.94,
     lanes: [
-      { route: "Mumbai (INBOM) → Rotterdam (NLRTM)", service: "AE7", sailingsPerWeek: 1, reefer: true, hazmat: true },
+      { route: "Mumbai (INBOM) → Rotterdam (NLRTM)", service: "MECL Service", sailingsPerWeek: 1, reefer: true, hazmat: true },
       { route: "Mumbai (INBOM) → Shanghai (CNSHA)", service: "IN2C", sailingsPerWeek: 1, reefer: false, hazmat: true },
       { route: "Mumbai (INBOM) → Felixstowe (GBFXT)", service: "AE10", sailingsPerWeek: 1, reefer: false, hazmat: true },
       { route: "Singapore (SGSIN) → Rotterdam (NLRTM)", service: "AE2-SIN-RTM", sailingsPerWeek: 2, reefer: true, hazmat: true },
     ],
   },
   {
-    name: "MSC", scac: "MSCU", mode: "OCEAN", onTime: 78, reliability: 0.78,
+    name: "CMA CGM", scac: "CMDU", mode: "OCEAN", onTime: 88, reliability: 0.88,
     lanes: [
-      { route: "Mumbai (INBOM) → Rotterdam (NLRTM)", service: "Swan", sailingsPerWeek: 1, reefer: true, hazmat: false },
-      { route: "Mumbai (INBOM) → Jebel Ali (AEJEA)", service: "Gulf Express", sailingsPerWeek: 3, reefer: true, hazmat: true },
-    ],
-  },
-  {
-    name: "CMA CGM", scac: "CMDU", mode: "OCEAN", onTime: 80, reliability: 0.80,
-    lanes: [
-      { route: "Mumbai (INBOM) → Singapore (SGSIN)", service: "IPAK2", sailingsPerWeek: 2, reefer: true, hazmat: true },
+      { route: "Mumbai (INBOM) → Singapore (SGSIN)", service: "via Salalah", sailingsPerWeek: 2, reefer: true, hazmat: true },
       { route: "Mumbai (INBOM) → Los Angeles (USLAX)", service: "NWX", sailingsPerWeek: 1, reefer: true, hazmat: false },
       { route: "Chennai (INMAA) → Singapore (SGSIN)", service: "IPAK2-MAA", sailingsPerWeek: 2, reefer: true, hazmat: true },
     ],
   },
   {
-    name: "Emirates SkyCargo", scac: "EK", mode: "AIR", onTime: 91, reliability: 0.91,
+    name: "Hapag-Lloyd", scac: "HLAG", mode: "OCEAN", onTime: 91, reliability: 0.91,
     lanes: [
-      { route: "Mumbai (BOM) → Dubai (DXB)", service: "EK-CARGO-BOMDXB", sailingsPerWeek: 14, reefer: true, hazmat: true },
-      { route: "Mumbai (BOM) → London (LHR)", service: "EK-CARGO-BOMLHR", sailingsPerWeek: 7, reefer: true, hazmat: false },
-      { route: "Delhi (DEL) → New York (JFK)", service: "EK-CARGO-DELJFK", sailingsPerWeek: 7, reefer: true, hazmat: true },
+      { route: "Nhava Sheva (INNSA) → Rotterdam (NLRTM)", service: "IMEX Service", sailingsPerWeek: 1, reefer: true, hazmat: true },
+      { route: "Nhava Sheva (INNSA) → Hamburg (DEHAM)", service: "IOS Service", sailingsPerWeek: 1, reefer: true, hazmat: false },
+    ],
+  },
+
+  // ---- AIR FREIGHT ----
+  {
+    name: "Emirates SkyCargo", scac: "EK", mode: "AIR", onTime: 95, reliability: 0.95,
+    lanes: [
+      { route: "Mumbai (BOM) → Dubai (DXB)", service: "SkyCargo Priority BOMDXB", sailingsPerWeek: 14, reefer: true, hazmat: true },
+      { route: "Mumbai (BOM) → London (LHR)", service: "SkyCargo Daily BOMLHR", sailingsPerWeek: 7, reefer: true, hazmat: false },
+      { route: "Delhi (DEL) → New York (JFK)", service: "SkyCargo Express DELJFK", sailingsPerWeek: 7, reefer: true, hazmat: true },
     ],
   },
   {
-    name: "DHL Global Forwarding", scac: "DHL", mode: "EXPRESS_AIR", onTime: 93, reliability: 0.93,
+    name: "Lufthansa Cargo", scac: "LH", mode: "AIR", onTime: 92, reliability: 0.92,
     lanes: [
-      { route: "Mumbai (BOM) → London (LHR)", service: "DHL-EXPRESS-BOMLHR", sailingsPerWeek: 7, reefer: false, hazmat: false },
-      { route: "Mumbai (BOM) → Singapore (SIN)", service: "DHL-EXPRESS-BOMSIN", sailingsPerWeek: 7, reefer: false, hazmat: false },
+      { route: "Mumbai (BOM) → Frankfurt (FRA)", service: "td.Pro Cargo BOMFRA", sailingsPerWeek: 7, reefer: true, hazmat: true },
+      { route: "Delhi (DEL) → Frankfurt (FRA)", service: "td.Pro Cargo DELFRA", sailingsPerWeek: 7, reefer: true, hazmat: true },
+      { route: "Bengaluru (BLR) → Frankfurt (FRA)", service: "td.Pro Pharma BLRFRA", sailingsPerWeek: 5, reefer: true, hazmat: false },
     ],
   },
   {
-    name: "Indian Rail Freight Corp", scac: "IRFC", mode: "GROUND_RAIL", onTime: 74, reliability: 0.74,
+    name: "Qatar Airways Cargo", scac: "QR", mode: "AIR", onTime: 93, reliability: 0.93,
     lanes: [
-      { route: "Mumbai Hub → Delhi Hub", service: "IR-BOM-DEL", sailingsPerWeek: 7, reefer: false, hazmat: true },
+      { route: "Mumbai (BOM) → Doha (DOH)", service: "QR Cargo Connect BOMDOH", sailingsPerWeek: 14, reefer: true, hazmat: true },
+      { route: "Delhi (DEL) → Chicago (ORD)", service: "QR Cargo Transatlantic", sailingsPerWeek: 5, reefer: true, hazmat: false },
+    ],
+  },
+
+  // ---- EXPRESS AIR ----
+  {
+    name: "DHL Express", scac: "DHL", mode: "EXPRESS_AIR", onTime: 98, reliability: 0.98,
+    lanes: [
+      { route: "Mumbai (BOM) → Leipzig (LEJ)", service: "Time Definite Int'l (TDI 12:00)", sailingsPerWeek: 7, reefer: false, hazmat: false },
+      { route: "Mumbai (BOM) → Singapore (SIN)", service: "DHL Express Asia Priority", sailingsPerWeek: 7, reefer: false, hazmat: false },
+      { route: "Delhi (DEL) → London (LHR)", service: "DHL Express Euro Shuttle", sailingsPerWeek: 7, reefer: false, hazmat: false },
+    ],
+  },
+  {
+    name: "FedEx Express", scac: "FDX", mode: "EXPRESS_AIR", onTime: 96, reliability: 0.96,
+    lanes: [
+      { route: "Mumbai (BOM) → Memphis (MEM)", service: "FedEx International Priority (IP)", sailingsPerWeek: 7, reefer: false, hazmat: false },
+      { route: "Delhi (DEL) → Paris (CDG)", service: "FedEx Europe Direct Express", sailingsPerWeek: 7, reefer: false, hazmat: false },
+    ],
+  },
+  {
+    name: "UPS Express", scac: "UPS", mode: "EXPRESS_AIR", onTime: 96, reliability: 0.96,
+    lanes: [
+      { route: "Mumbai (BOM) → Cologne (CGN)", service: "UPS Worldwide Express Saver", sailingsPerWeek: 7, reefer: false, hazmat: false },
+      { route: "Delhi (DEL) → Louisville (SDF)", service: "UPS Trans-Pacific Express", sailingsPerWeek: 6, reefer: false, hazmat: false },
+    ],
+  },
+
+  // ---- GROUND & RAIL ----
+  {
+    name: "CONCOR Rail Express", scac: "CONCOR", mode: "GROUND_RAIL", onTime: 89, reliability: 0.89,
+    lanes: [
+      { route: "Tughlakabad ICD (DEL) → Nhava Sheva (INNSA)", service: "CONCOR DFC Rake Express", sailingsPerWeek: 14, reefer: true, hazmat: true },
+      { route: "Dadri ICD → Mundra Port (INMUN)", service: "CONCOR Gujarat Corridor", sailingsPerWeek: 12, reefer: false, hazmat: true },
+      { route: "Bengaluru ICD → Chennai Port (INMAA)", service: "CONCOR South Rail Shuttle", sailingsPerWeek: 7, reefer: false, hazmat: false },
+    ],
+  },
+  {
+    name: "DB Cargo", scac: "DBC", mode: "GROUND_RAIL", onTime: 88, reliability: 0.88,
+    lanes: [
+      { route: "Hamburg Hub → Duisburg Terminal", service: "DB Rail Intermodal Shuttle", sailingsPerWeek: 10, reefer: true, hazmat: true },
+      { route: "Rotterdam Gateway → Munich Hub", service: "DB Trans-Alps Shuttle", sailingsPerWeek: 7, reefer: false, hazmat: true },
+    ],
+  },
+  {
+    name: "BNSF Railway Intermodal", scac: "BNSF", mode: "GROUND_RAIL", onTime: 90, reliability: 0.90,
+    lanes: [
+      { route: "Los Angeles (Port LA) → Chicago Intermodal", service: "BNSF Transcon Double-Stack", sailingsPerWeek: 21, reefer: true, hazmat: true },
+      { route: "Long Beach → Dallas Logistics Hub", service: "BNSF Southern Corridor", sailingsPerWeek: 14, reefer: false, hazmat: true },
     ],
   },
 ];

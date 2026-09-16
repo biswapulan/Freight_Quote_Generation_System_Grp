@@ -57,13 +57,13 @@ def ensure_demo_users():
 
 
 def ensure_companies():
-    """Create the freight companies, but only when there are none.
+    """Create the freight companies, but only when missing.
 
-    Re-seeding on every start would reset rate cards an administrator edited.
+    Ensures all 12 carriers across ocean, air, express, and ground exist.
     """
     from companies.models import FreightCompany
 
-    if not FreightCompany.objects.exists():
+    if FreightCompany.objects.count() < 12:
         call_command("seed_companies", stdout=io.StringIO())
 
 
