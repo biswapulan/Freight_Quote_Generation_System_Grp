@@ -1082,6 +1082,35 @@ def decide_customs(clearance, *, decision, actor, reason=""):
         context={"customs_reference": clearance.reference},
     )
 
+    if cleared and selection.quote:
+        try:
+            quote = selection.quote
+            analysis = quote.analysis or {}
+            customs = analysis.get("customs") or {}
+            customs["status"] = "APPROVED"
+            customs["readiness_score"] = 100.0
+            analysis["customs"] = customs
+            quote.analysis = analysis
+            quote.save(update_fields=["analysis", "updated_at"])
+
+            from customs.models import CustomsComplianceCheck
+            from customs.views import _sync_quote_customs_analysis
+            from django.db.models import Q as _Q
+            check = CustomsComplianceCheck.objects.filter(
+                _Q(shipment_id=selection.shipment_id) |
+                _Q(quote_id=quote.id) |
+                _Q(shipment_id=quote.id)
+            ).first()
+            if check:
+                check.status = "APPROVED"
+                check.readiness_score = max(check.readiness_score, 100.0)
+                check.reviewed_by = actor.get("email") or "Customs Officer"
+                check.save(update_fields=["status", "readiness_score", "reviewed_by", "updated_at"])
+                _sync_quote_customs_analysis(selection.shipment_id, check)
+        except Exception:
+            pass
+
+
     from notifications import service as notify
 
     company = selection.company.name
@@ -1219,6 +1248,15 @@ def confirm_booking(selection, *, actor, note=""):
         reason=note or f"Booking {booking.reference} confirmed.",
         context={"booking": booking.reference, "price": booking.agreed_total_price},
     )
+
+    if selection.quote:
+        selection.quote.status = "ACCEPTED"
+        selection.quote.save(update_fields=["status", "updated_at"])
+
+    if selection.shipment:
+        selection.shipment.status = "CLOSED"
+        selection.shipment.save(update_fields=["status", "updated_at"])
+
 
     from notifications import service as notify
     from companies.access import resolve_user_id

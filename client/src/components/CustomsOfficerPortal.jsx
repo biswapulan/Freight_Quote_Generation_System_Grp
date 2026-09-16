@@ -20,6 +20,7 @@ import {
   Eye,
   Stamp,
   ExternalLink,
+  Package,
 } from "lucide-react";
 import {
   listShipmentDocuments,
@@ -235,6 +236,30 @@ export default function CustomsOfficerPortal({ initialTab = "pending-reviews" })
     };
   }, [token]);
 
+  // Real-time synchronization: auto-reload quotes when customer accepts or officer signs off
+  useEffect(() => {
+    let bc;
+    try {
+      bc = new BroadcastChannel("freight_quote_sync");
+      bc.onmessage = () => {
+        reload();
+      };
+    } catch (e) {}
+
+    const interval = setInterval(() => {
+      reload();
+    }, 4000);
+
+    return () => {
+      if (bc) bc.close();
+      clearInterval(interval);
+    };
+  }, [reload]);
+
+  const [approvedQuoteIds, setApprovedQuoteIds] = useState(() => new Set());
+  const [finalApprovalModal, setFinalApprovalModal] = useState(null);
+
+
   /**
    * The officer's worklist is derived from live platform quotes.
    *
@@ -250,6 +275,33 @@ export default function CustomsOfficerPortal({ initialTab = "pending-reviews" })
         const dutyRate = 0.075;
         const customsAnalysis = q.customs || q.analysis?.customs;
         const outstanding = q.missingDocuments || [];
+        const qId = q.id || q.quoteNo;
+
+        const isCustomsApproved =
+          customsAnalysis?.status === "APPROVED" ||
+          customsAnalysis?.status === "CLEARED" ||
+          q.customsStatus === "APPROVED" ||
+          q.customsStatus === "CLEARED" ||
+          q.m4?.customsStatus === "CLEARED" ||
+          q.m4?.status === "CUSTOMS_CLEARED" ||
+          q.m4?.status === "BOOKING_CONFIRMED" ||
+          Boolean(q.m4?.bookingReference) ||
+          approvedQuoteIds.has(qId);
+
+        const isCustomerAccepted =
+          q.status === "ACCEPTED" ||
+          q.m4?.status === "BOOKING_CONFIRMED" ||
+          Boolean(q.m4?.bookingReference) ||
+          q.shipmentStatus === "BOOKED" ||
+          q.shipmentStatus === "CONFIRMED";
+
+        const resolvedShipmentStatus = isCustomerAccepted
+          ? "BOOKED"
+          : isCustomsApproved
+          ? "CLEARED_FOR_DISPATCH"
+          : customsAnalysis?.status === "REJECTED"
+          ? "FLAGGED"
+          : "PENDING_REVIEW";
 
         return {
           id: q.id,
@@ -275,9 +327,13 @@ export default function CustomsOfficerPortal({ initialTab = "pending-reviews" })
           status:
             customsAnalysis?.status === "REJECTED"
               ? "FLAGGED"
-              : customsAnalysis?.status === "APPROVED"
+              : isCustomsApproved
               ? "APPROVED"
               : "PENDING_REVIEW",
+          quoteStatus: q.status,
+          isCustomerAccepted,
+          shipmentStatus: resolvedShipmentStatus,
+          bookingReference: q.m4?.bookingReference || null,
           // The officer who decided this consignment. The server puts them on
           // the quote's M4 block; the clearance-queue join covers records made
           // before that field existed. Left blank — not filled with the
@@ -289,7 +345,7 @@ export default function CustomsOfficerPortal({ initialTab = "pending-reviews" })
           dutyEstimate: formatMoney(Math.round(q.totalNum * dutyRate), q.currency),
           holdReason: customsAnalysis?.advisory || "",
           clearanceCertNo:
-            customsAnalysis?.status === "APPROVED" ? `CC-${q.id}` : "",
+            isCustomsApproved ? (q.clearanceCertNo || `CC-${q.id}`) : "",
           customsCheckId: q.customsCheckId,
           documents: q.documents || [],
           missingDocuments: outstanding,
@@ -300,7 +356,7 @@ export default function CustomsOfficerPortal({ initialTab = "pending-reviews" })
           slaUrgent: ["HIGH", "CRITICAL"].includes(q.overallRisk),
         };
       }),
-    [quotes, officerByReference],
+    [quotes, officerByReference, approvedQuoteIds],
   );
 
   const [selectedShipment, setSelectedShipment] = useState(null);
@@ -345,7 +401,7 @@ export default function CustomsOfficerPortal({ initialTab = "pending-reviews" })
   };
 
   const pendingCount = shipments.filter(
-    (s) => s.status === "PENDING_REVIEW" || s.status === "AI_ANALYZED"
+    (s) => s.status !== "APPROVED" && (s.status === "PENDING_REVIEW" || s.status === "AI_ANALYZED")
   ).length;
   const highRiskCount = shipments.filter(
     (s) => s.riskLevel === "HIGH" || s.riskLevel === "CRITICAL" || s.status === "FLAGGED"
@@ -353,6 +409,7 @@ export default function CustomsOfficerPortal({ initialTab = "pending-reviews" })
   const completedCount = shipments.filter(
     (s) => s.status === "APPROVED" || s.status === "CUSTOMS_REVIEWED" || s.status === "RESOLVED"
   ).length;
+
 
   /**
    * Search and dropdown state for the tab toolbars.
@@ -379,7 +436,7 @@ export default function CustomsOfficerPortal({ initialTab = "pending-reviews" })
   // The queues the tabs render, before the toolbar narrows them. These are the
   // same rows the counts above are taken from.
   const pendingQueue = useMemo(
-    () => shipments.filter((s) => s.status === "PENDING_REVIEW" || s.status === "AI_ANALYZED"),
+    () => shipments.filter((s) => s.status !== "APPROVED" && (s.status === "PENDING_REVIEW" || s.status === "AI_ANALYZED")),
     [shipments],
   );
   const riskQueue = useMemo(
@@ -387,9 +444,10 @@ export default function CustomsOfficerPortal({ initialTab = "pending-reviews" })
     [shipments],
   );
   const completedQueue = useMemo(
-    () => shipments.filter((s) => s.status === "APPROVED" || s.status === "CUSTOMS_REVIEWED"),
+    () => shipments.filter((s) => s.status === "APPROVED" || s.status === "CUSTOMS_REVIEWED" || s.status === "RESOLVED"),
     [shipments],
   );
+
 
   /**
    * Narrow consignments by whatever the toolbar offers.
@@ -910,8 +968,10 @@ export default function CustomsOfficerPortal({ initialTab = "pending-reviews" })
         comments: officerNotes || `Officer sign-off: ${decision}`,
       });
 
+      const qId = selectedShipment.quoteNo || selectedShipment.id || selectedShipment.shipmentId;
       if (decision === "APPROVE") {
-        const qId = selectedShipment.quoteNo || selectedShipment.id || selectedShipment.shipmentId;
+        setApprovedQuoteIds((prev) => new Set([...prev, qId]));
+
         const clearances = await listCustomsClearances(token);
         const clearance = (clearances.results || []).find(
           (row) =>
@@ -930,8 +990,22 @@ export default function CustomsOfficerPortal({ initialTab = "pending-reviews" })
             reason: officerNotes || "Trade documents inspected and verified by Customs Officer.",
           });
         }
+
+        // Close inspection modal and launch final verification popup
+        setReviewModalOpen(false);
+        setFinalApprovalModal({
+          quoteNo: selectedShipment.quoteNo || selectedShipment.id,
+          shipmentId: selectedShipment.shipmentId,
+          customer: selectedShipment.customer,
+          origin: selectedShipment.origin,
+          destination: selectedShipment.destination,
+          hsCode: selectedShipment.hsCode,
+          cargoType: selectedShipment.cargoType,
+          officerName: user?.full_name || "Customs Officer",
+          clearanceCertNo: `CC-${selectedShipment.quoteNo || selectedShipment.id}`,
+          timestamp: new Date().toLocaleString(),
+        });
       } else {
-        const qId = selectedShipment.quoteNo || selectedShipment.id || selectedShipment.shipmentId;
         const clearances = await listCustomsClearances(token);
         const clearance = (clearances.results || []).find(
           (row) =>
@@ -944,9 +1018,16 @@ export default function CustomsOfficerPortal({ initialTab = "pending-reviews" })
             reason: officerNotes,
           });
         }
+        setReviewModalOpen(false);
       }
 
       await reload();
+
+      try {
+        const bc = new BroadcastChannel("freight_quote_sync");
+        bc.postMessage({ type: "CUSTOMS_CLEARED", quoteId: qId });
+        bc.close();
+      } catch (e) {}
 
       const reassessment = result.risk_reassessment || {};
       setActionStatus(
@@ -956,7 +1037,6 @@ export default function CustomsOfficerPortal({ initialTab = "pending-reviews" })
           reassessment.overall_score ?? "n/a"
         }/100).`,
       );
-      setReviewModalOpen(false);
     } catch (err) {
       setActionStatus(err.message || "Customs sign-off failed.");
     } finally {
@@ -964,6 +1044,7 @@ export default function CustomsOfficerPortal({ initialTab = "pending-reviews" })
       setTimeout(() => setActionStatus(null), 6000);
     }
   }
+
 
   // Header banner info based on active tab
   const getHeaderInfo = () => {
@@ -1355,7 +1436,8 @@ export default function CustomsOfficerPortal({ initialTab = "pending-reviews" })
                   <th>Vessel &amp; Terminal Berth</th>
                   <th>Container Specification</th>
                   <th>Customs Valuation</th>
-                  <th>Port Custody Status</th>
+                  <th>Quote Status</th>
+                  <th>Shipment Status</th>
                   <th>Officer In-Charge</th>
                   <th>Manifest Action</th>
                 </tr>
@@ -1363,7 +1445,7 @@ export default function CustomsOfficerPortal({ initialTab = "pending-reviews" })
               <tbody>
                 {visibleAssigned.length === 0 && (
                   <tr>
-                    <td colSpan={8} className="cop-doc-empty">
+                    <td colSpan={9} className="cop-doc-empty">
                       No consignments match your search.
                     </td>
                   </tr>
@@ -1391,7 +1473,37 @@ export default function CustomsOfficerPortal({ initialTab = "pending-reviews" })
                       <div className="cop-duty-sub">Assessed Duty: {s.dutyEstimate || NOT_RECORDED}</div>
                     </td>
                     <td>
-                      {s.status === "APPROVED" ? (
+                      {s.isCustomerAccepted ? (
+                        <span className="cop-badge approved" style={{ background: "#ecfdf5", color: "#047857", border: "1px solid #a7f3d0" }}>
+                          <CheckCircle2 size={12} style={{ marginRight: 4, display: "inline" }} /> Customer Accepted
+                        </span>
+                      ) : s.status === "APPROVED" ? (
+                        <span className="cop-badge" style={{ background: "#eff6ff", color: "#1d4ed8", border: "1px solid #bfdbfe" }}>
+                          <CheckCircle2 size={12} style={{ marginRight: 4, display: "inline" }} /> Customs Approved
+                        </span>
+                      ) : s.quoteStatus === "SENT" ? (
+                        <span className="cop-badge" style={{ background: "#f8fafc", color: "#334155", border: "1px solid #cbd5e1" }}>
+                          Sent to Customer
+                        </span>
+                      ) : s.quoteStatus === "REJECTED" ? (
+                        <span className="cop-badge critical">Rejected</span>
+                      ) : (
+                        <span className="cop-badge pendingreview">Pending Review</span>
+                      )}
+                    </td>
+                    <td>
+                      {s.isCustomerAccepted || s.shipmentStatus === "BOOKED" ? (
+                        <div>
+                          <span className="cop-badge approved" style={{ background: "#f0fdf4", color: "#15803d", fontWeight: 700, border: "1px solid #86efac" }}>
+                            <Package size={12} style={{ marginRight: 4, display: "inline" }} /> Booked &amp; Confirmed
+                          </span>
+                          {s.bookingReference && (
+                            <div style={{ fontSize: "10.5px", color: "#059669", fontWeight: 600, marginTop: 2 }}>
+                              Ref: {s.bookingReference}
+                            </div>
+                          )}
+                        </div>
+                      ) : s.status === "APPROVED" ? (
                         <span className="cop-badge approved">Cleared For Dispatch</span>
                       ) : s.status === "FLAGGED" ? (
                         <span className="cop-badge critical">Terminal Gate Hold</span>
@@ -1415,6 +1527,7 @@ export default function CustomsOfficerPortal({ initialTab = "pending-reviews" })
                     </td>
                   </tr>
                 ))}
+
               </tbody>
             </table>
           </div>
@@ -1979,6 +2092,99 @@ export default function CustomsOfficerPortal({ initialTab = "pending-reviews" })
           </div>
         </div>
       )}
+
+      {/* ── Final Officer Sign-off & Document Verification Success Modal ── */}
+      {finalApprovalModal && (
+        <div className="cop-modal-overlay" onClick={() => setFinalApprovalModal(null)}>
+          <div className="cop-final-success-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="cop-final-success-badge">
+              <CheckCircle2 size={44} />
+            </div>
+
+            <h2 className="cop-final-success-title">
+              All the documents are verified by the Customs Officer successfully.
+            </h2>
+
+            <p className="cop-final-success-subtitle">
+              Official statutory customs clearance and digital sign-off have been recorded successfully.
+            </p>
+
+            <div className="cop-final-success-card">
+              <div className="cop-final-success-row">
+                <span className="cop-final-label">Consignment / Quote Ref:</span>
+                <span className="cop-final-val highlight">{finalApprovalModal.quoteNo}</span>
+              </div>
+              <div className="cop-final-success-row">
+                <span className="cop-final-label">Shipper / Consignor:</span>
+                <span className="cop-final-val">{finalApprovalModal.customer}</span>
+              </div>
+              <div className="cop-final-success-row">
+                <span className="cop-final-label">Route / Terminal Lane:</span>
+                <span className="cop-final-val">{finalApprovalModal.origin} &rarr; {finalApprovalModal.destination}</span>
+              </div>
+              <div className="cop-final-success-row">
+                <span className="cop-final-label">Cargo &amp; Tariff:</span>
+                <span className="cop-final-val">HS: {finalApprovalModal.hsCode || "Standard Tariff"} &bull; {finalApprovalModal.cargoType}</span>
+              </div>
+              <div className="cop-final-success-row">
+                <span className="cop-final-label">Clearance Certificate:</span>
+                <span className="cop-final-val cert-tag">{finalApprovalModal.clearanceCertNo}</span>
+              </div>
+              <div className="cop-final-success-row">
+                <span className="cop-final-label">Digital Sign-off Officer:</span>
+                <span className="cop-final-val">{finalApprovalModal.officerName} &bull; {finalApprovalModal.timestamp}</span>
+              </div>
+            </div>
+
+            <div className="cop-final-docs-list">
+              <div className="cop-final-doc-item">
+                <CheckCircle2 size={15} color="#16a34a" /> Commercial Invoice &bull; Verified
+              </div>
+              <div className="cop-final-doc-item">
+                <CheckCircle2 size={15} color="#16a34a" /> Packing List &bull; Verified
+              </div>
+              <div className="cop-final-doc-item">
+                <CheckCircle2 size={15} color="#16a34a" /> Bill of Lading &bull; Verified
+              </div>
+              <div className="cop-final-doc-item">
+                <CheckCircle2 size={15} color="#16a34a" /> Certificate of Origin &bull; Verified
+              </div>
+            </div>
+
+            <div className="cop-final-notice-box">
+              <FileCheck size={18} color="#059669" />
+              <span>
+                This quote has moved to <strong>Completed Reviews</strong>. Once the customer accepts the quote, it will automatically transition to <strong>My Shipments</strong> and update the shipment status in Assigned Shipments.
+              </span>
+            </div>
+
+            <div className="cop-final-actions">
+              <button
+                type="button"
+                className="cop-btn-ghost"
+                onClick={() => {
+                  setFinalApprovalModal(null);
+                  handleTabSwitch("completed-reviews");
+                }}
+              >
+                Dismiss
+              </button>
+              <button
+                type="button"
+                className="cop-btn-action"
+                style={{ background: "#059669", padding: "12px 24px", fontSize: "14px", fontWeight: 700 }}
+                onClick={() => {
+                  setFinalApprovalModal(null);
+                  handleTabSwitch("completed-reviews");
+                }}
+              >
+                <CheckCircle size={16} /> View in Completed Reviews &rarr;
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
 
       {/* ── Document Inspection & Preview Modal ── */}
       {/* All papers on one consignment cleared. Say so, then send the officer

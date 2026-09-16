@@ -934,3 +934,146 @@
   font-weight: 600;
   line-height: 1.5;
 }
+
+/* ── Final Officer Sign-off & Document Verification Success Modal ── */
+.cop-final-success-modal {
+  width: 100%;
+  max-width: 540px;
+  background: #ffffff;
+  border-radius: 18px;
+  padding: 32px 28px 24px;
+  text-align: center;
+  box-shadow: 0 25px 60px -15px rgba(15, 23, 42, 0.35), 0 0 0 1px rgba(16, 185, 129, 0.2);
+  animation: copModalPopIn 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes copModalPopIn {
+  from {
+    opacity: 0;
+    transform: scale(0.92) translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.cop-final-success-badge {
+  width: 76px;
+  height: 76px;
+  margin: 0 auto 16px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #dcfce7 0%, #bbf7d0 100%);
+  color: #059669;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 8px 20px rgba(16, 185, 129, 0.25);
+}
+
+.cop-final-success-title {
+  margin: 0 0 8px;
+  font-size: 21px;
+  font-weight: 800;
+  color: #0f172a;
+  line-height: 1.35;
+  letter-spacing: -0.01em;
+}
+
+.cop-final-success-subtitle {
+  margin: 0 0 20px;
+  font-size: 13.5px;
+  color: #475569;
+  line-height: 1.5;
+}
+
+.cop-final-success-card {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 14px 18px;
+  margin-bottom: 16px;
+  text-align: left;
+}
+
+.cop-final-success-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 0;
+  border-bottom: 1px solid #f1f5f9;
+  font-size: 12.5px;
+}
+
+.cop-final-success-row:last-child {
+  border-bottom: none;
+}
+
+.cop-final-label {
+  color: #64748b;
+  font-weight: 600;
+}
+
+.cop-final-val {
+  color: #1e293b;
+  font-weight: 700;
+  text-align: right;
+}
+
+.cop-final-val.highlight {
+  color: #0369a1;
+  font-family: monospace;
+  font-size: 13.5px;
+}
+
+.cop-final-val.cert-tag {
+  background: #ecfdf5;
+  color: #047857;
+  padding: 2px 8px;
+  border-radius: 6px;
+  border: 1px solid #a7f3d0;
+  font-family: monospace;
+}
+
+.cop-final-docs-list {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.cop-final-doc-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  color: #166534;
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 11.5px;
+  font-weight: 700;
+  text-align: left;
+}
+
+.cop-final-notice-box {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  background: #f0fdfa;
+  border: 1px solid #99f6e4;
+  border-radius: 10px;
+  padding: 12px 14px;
+  margin-bottom: 22px;
+  font-size: 12.5px;
+  color: #115e59;
+  line-height: 1.5;
+  text-align: left;
+}
+
+.cop-final-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+}
+

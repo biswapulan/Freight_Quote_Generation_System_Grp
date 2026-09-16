@@ -485,6 +485,8 @@ class CustomerQuoteDecisionView(APIView):
             lifecycle.QUOTE_STATUS_SENT,
             lifecycle.QUOTE_STATUS_APPROVED,
         ):
+
+
             return Response(
                 {
                     "error": (

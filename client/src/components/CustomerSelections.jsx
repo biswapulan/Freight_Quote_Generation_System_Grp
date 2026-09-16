@@ -21,6 +21,7 @@ import {
 } from "../api/workflow";
 import ListFilterBar from "./ListFilterBar";
 import { filterRows, optionsFrom } from "../utils/listFilters";
+import { refreshPlatformQuotes } from "../utils/quoteWorkflow";
 import "./CustomerSelections.css";
 
 /**
@@ -191,12 +192,21 @@ export default function CustomerSelections() {
       });
       setFinalFor(null);
       setNote("");
+      try {
+        const bc = new BroadcastChannel("freight_quote_sync");
+        bc.postMessage({ type: "BOOKING_CONFIRMED", selectionRef: finalFor.reference });
+        bc.close();
+      } catch (e) {}
       await load();
+      try {
+        await refreshPlatformQuotes();
+      } catch (e) {}
     } catch (err) {
       setNotice({ type: "error", text: err.message || "Could not record your decision." });
     } finally {
       setBusy(null);
     }
+
   }
 
   async function sendInformation() {

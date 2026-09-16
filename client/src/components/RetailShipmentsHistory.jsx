@@ -159,14 +159,22 @@ export default function RetailShipmentsHistory({ viewMode = "quotes" }) {
   // If in shipments mode, focus on confirmed/booked cargo orders
   const baseList = useMemo(() => {
     if (isShipmentMode) {
-      // A shipment exists once the customer accepts the quote. This used to
-      // filter on "Booked", "confirmed" and "Issued", none of which the status
-      // normaliser can ever produce, so My Shipments was permanently empty no
-      // matter how many bookings had been confirmed.
-      return quotations.filter((q) => normalizeWorkflowStatus(q.status) === "ACCEPTED");
+      return quotations.filter(
+        (q) =>
+          normalizeWorkflowStatus(q.status) === "ACCEPTED" ||
+          q.status === "ACCEPTED" ||
+          q.status === "BOOKED" ||
+          q.m4?.status === "BOOKING_CONFIRMED" ||
+          Boolean(q.m4?.bookingReference) ||
+          q.shipmentStatus === "BOOKED" ||
+          q.shipmentStatus === "CONFIRMED" ||
+          q.shipmentStatus === "CLOSED" ||
+          q.shipmentStatus === "IN_TRANSIT",
+      );
     }
     return confirmedQuotations;
   }, [quotations, confirmedQuotations, isShipmentMode]);
+
 
   // The visible rows: the same four columns the table shows are what the search
   // reads, and each dropdown only excludes rows when it has been moved off
@@ -292,6 +300,11 @@ export default function RetailShipmentsHistory({ viewMode = "quotes" }) {
     try {
       await decideQuoteInStore(quoteNo, decision);
       if (selectedQuote) setSelectedQuote((prev) => ({ ...prev, status: decision }));
+      try {
+        const bc = new BroadcastChannel("freight_quote_sync");
+        bc.postMessage({ type: "QUOTE_ACCEPTED", quoteNo });
+        bc.close();
+      } catch (e) {}
     } catch (err) {
       setWorkflowError(err.message || `Could not record your ${decision.toLowerCase()}.`);
     } finally {
@@ -335,10 +348,18 @@ export default function RetailShipmentsHistory({ viewMode = "quotes" }) {
           : "Declined. You can now choose another company for this shipment.",
       );
       setTimeout(() => setWorkflowNotice(""), 8000);
+
+      try {
+        const bc = new BroadcastChannel("freight_quote_sync");
+        bc.postMessage({ type: "BOOKING_CONFIRMED", selectionRef: m4.selectionReference });
+        bc.close();
+      } catch (e) {}
+
       // Re-read the quote so both this record and the list behind it show
       // Booked, rather than the state the modal opened with.
       await reloadQuotes();
     } catch (err) {
+
       setFinalError(err.message || "Could not record your decision.");
     } finally {
       setFinalBusy(false);

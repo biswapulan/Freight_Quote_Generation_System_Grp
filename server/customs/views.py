@@ -106,11 +106,19 @@ def _sync_quote_customs_analysis(shipment_id, check):
         check.status = "NEEDS_REVIEW" if verified == len(items) else "NEEDS_DOCUMENTS"
         check.save(update_fields=["readiness_score", "status"])
 
-    for quote in Quote.objects.filter(shipment_id=shipment_id):
+    from django.db.models import Q
+    quotes = Quote.objects.filter(
+        Q(shipment_id=shipment_id) |
+        Q(id=shipment_id) |
+        Q(id=getattr(check, "quote_id", None)) |
+        Q(shipment_id=getattr(check, "quote_id", None))
+    ).distinct()
+
+    for quote in quotes:
         analysis = quote.analysis or {}
         customs = analysis.get("customs")
         if not isinstance(customs, dict):
-            continue
+            customs = {}
 
         customs["status"] = check.status
         customs["readiness_score"] = check.readiness_score
@@ -126,6 +134,7 @@ def _sync_quote_customs_analysis(shipment_id, check):
         analysis["customs"] = customs
         quote.analysis = analysis
         quote.save(update_fields=["analysis", "updated_at"])
+
 
 
 class CustomsValidateView(APIView):
@@ -276,6 +285,34 @@ class CustomsSignOffView(APIView):
         # dashboards read. Without this a signed-off consignment stayed in the
         # officer's pending queue forever.
         _sync_quote_customs_analysis(check.shipment_id, check)
+
+        # Synchronize any linked M4 CustomsClearance and QuoteSelection
+        try:
+            from booking.models import CustomsClearance, QuoteSelection
+            from booking import lifecycle
+            from django.utils import timezone as _tz
+            from django.db.models import Q as _Q
+
+            clearances = CustomsClearance.objects.filter(
+                _Q(selection__shipment_id=check.shipment_id) |
+                _Q(selection__quote_id=check.shipment_id) |
+                _Q(selection__quote_id=getattr(check, "quote_id", None))
+            )
+            for cl in clearances:
+                if cl.status == "PENDING":
+                    cl.status = "CLEARED" if check.status == "APPROVED" else "REJECTED"
+                    cl.officer_email = data.get("officer_name") or "Customs Officer"
+                    cl.reason = data.get("comments", "") or "Trade documents inspected and verified by Customs Officer."
+                    cl.decided_at = _tz.now()
+                    cl.save(update_fields=["status", "officer_email", "reason", "decided_at", "updated_at"])
+                    if cl.selection and cl.selection.status == lifecycle.PENDING_CUSTOMS_REVIEW:
+                        cl.selection.status = (
+                            lifecycle.CUSTOMS_CLEARED if check.status == "APPROVED" else lifecycle.CUSTOMS_REJECTED
+                        )
+                        cl.selection.save(update_fields=["status", "updated_at"])
+        except Exception:
+            pass
+
 
         # Tell the customer. Sign-off notified the agent only, so the customer
         # never learned that their shipment had cleared customs, or been held.
