@@ -50,6 +50,19 @@ def _normalize_doc_name(name):
     return "".join(ch for ch in (name or "").lower() if ch.isalnum())
 
 
+def _doc_category(name):
+    clean = "".join(ch for ch in (name or "").lower() if ch.isalnum() or ch.isspace())
+    if "lading" in clean or "waybill" in clean or "bl" in clean.split() or "b/l" in (name or "").lower():
+        return "bill_of_lading"
+    if "invoice" in clean:
+        return "commercial_invoice"
+    if "packing" in clean:
+        return "packing_list"
+    if "origin" in clean or "coo" in clean.split() or "(coo)" in (name or "").lower():
+        return "certificate_of_origin"
+    return None
+
+
 def _match_checklist_item(check, document_type):
     """Find the checklist requirement a document satisfies, by name.
 
@@ -61,10 +74,13 @@ def _match_checklist_item(check, document_type):
     """
     if not check:
         return None
+    cat = _doc_category(document_type)
     target = _normalize_doc_name(document_type)
-    if not target:
+    if not target and not cat:
         return None
     for item in check.checklist_items.all():
+        if cat and _doc_category(item.item_name) == cat:
+            return item
         if _normalize_doc_name(item.item_name) == target:
             return item
     return None

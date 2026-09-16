@@ -33,9 +33,26 @@ def required_names(quote):
     return names or list(customs.get("missing_documents") or [])
 
 
+def _doc_category(name):
+    clean = "".join(ch for ch in (name or "").lower() if ch.isalnum() or ch.isspace())
+    if "lading" in clean or "waybill" in clean or "bl" in clean.split() or "b/l" in (name or "").lower():
+        return "bill_of_lading"
+    if "invoice" in clean:
+        return "commercial_invoice"
+    if "packing" in clean:
+        return "packing_list"
+    if "origin" in clean or "coo" in clean.split() or "(coo)" in (name or "").lower():
+        return "certificate_of_origin"
+    return None
+
+
 def _matches(document, name):
-    # Customers name uploads in their own words ("Bill of Lading" for
-    # "Bill of Lading / Sea Waybill (B/L)"), so match loosely.
+    # Customers name uploads in their own words ("Bill of Lading Draft" for
+    # "Bill of Lading / Sea Waybill (B/L)"), so match canonically and loosely.
+    upload_cat = _doc_category(document.document_type)
+    wanted_cat = _doc_category(name)
+    if upload_cat and wanted_cat and upload_cat == wanted_cat:
+        return True
     upload, wanted = _key(document.document_type), _key(name)
     return bool(upload) and (upload in wanted or wanted in upload)
 

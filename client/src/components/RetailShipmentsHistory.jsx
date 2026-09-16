@@ -277,7 +277,14 @@ export default function RetailShipmentsHistory({ viewMode = "quotes" }) {
     loadShipmentDocs();
   }, [loadShipmentDocs]);
 
-  const normalizeDocName = (name) => (name || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+  const normalizeDocName = (name) => {
+    const clean = (name || "").toLowerCase().replace(/[^a-z0-9 ]/g, "");
+    if (clean.includes("lading") || clean.includes("waybill") || clean.includes("b/l") || clean.split(" ").includes("bl")) return "bill_of_lading";
+    if (clean.includes("invoice")) return "commercial_invoice";
+    if (clean.includes("packing")) return "packing_list";
+    if (clean.includes("origin") || clean.includes("coo")) return "certificate_of_origin";
+    return clean.replace(/\s+/g, "");
+  };
 
   /** Effective status of one checklist item, from real uploads. */
   function checklistStatus(doc) {

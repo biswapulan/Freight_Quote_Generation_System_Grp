@@ -121,7 +121,14 @@ const FOUR_TRADE_DOCS = [
   },
 ];
 
-const normalizeDocName = (name) => (name || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+const normalizeDocName = (name) => {
+  const clean = (name || "").toLowerCase().replace(/[^a-z0-9 ]/g, "");
+  if (clean.includes("lading") || clean.includes("waybill") || clean.includes("b/l") || clean.split(" ").includes("bl")) return "bill_of_lading";
+  if (clean.includes("invoice")) return "commercial_invoice";
+  if (clean.includes("packing")) return "packing_list";
+  if (clean.includes("origin") || clean.includes("coo")) return "certificate_of_origin";
+  return clean.replace(/\s+/g, "");
+};
 
 function money(amount, currency) {
   const value = Number(amount || 0);
