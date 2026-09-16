@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import {
-  Search,
   Download,
   X,
   Copy,
@@ -39,6 +38,8 @@ import {
 import { listShipmentDocuments, uploadShipmentDocument, submitFinalDecision } from "../api/workflow";
 import { useAuth } from "../context/AuthContext";
 import QuoteWorkflowStepper from "./QuoteWorkflowStepper";
+import ListFilterBar from "./ListFilterBar";
+import { filterRows } from "../utils/listFilters";
 import "./RetailShipmentsHistory.css";
 
 const MODE_CLASS = { ocean_fcl: "ocean-fcl", air: "air-freight", ocean_lcl: "ocean-lcl", ocean: "ocean-fcl" };
@@ -70,6 +71,27 @@ const M4_WITH_COMPANY = new Set([
   "UNDER_VERIFICATION",
   "ESCALATED",
 ]);
+
+// The toolbar's dropdown contents. They were inline in the JSX; the wording of
+// every option is unchanged.
+const HISTORY_FILTER_OPTIONS = {
+  mode: [
+    { value: "ocean", label: "Ocean Freight" },
+    { value: "air", label: "Air Freight" },
+    { value: "road", label: "Road Freight" },
+    { value: "rail", label: "Rail Freight" },
+  ],
+  shipmentStatus: ["DRAFT", "SUBMITTED", "PROCESSING", "ANALYZED", "QUOTED", "CLOSED", "CANCELLED"].map(
+    (status) => ({ value: status, label: status }),
+  ),
+  quoteStatus: ["DRAFT", "GENERATED", "PENDING_REVIEW", "APPROVED", "SENT", "ACCEPTED", "REJECTED", "EXPIRED"].map(
+    (status) => ({ value: status, label: status }),
+  ),
+  date: [
+    { value: "30days", label: "Last 30 days" },
+    { value: "thisMonth", label: "This Month" },
+  ],
+};
 
 /** One line tying a quote to its company workflow: "Maersk · Booked · BK-2026-10009". */
 function m4Line(m4) {
@@ -115,10 +137,16 @@ export default function RetailShipmentsHistory({ viewMode = "quotes" }) {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
 
-  const laneOptions = useMemo(() => [
-    { value: "all", label: "All lanes" },
-    ...Array.from(new Set(quotations.map((quote) => quote.laneCode).filter(Boolean))).map((lane) => ({ value: lane, label: lane })),
-  ], [quotations]);
+  // The toolbar's own "All lanes" entry, so the options here are the real lanes
+  // only — ListFilterBar renders the "everything" option from the filter label.
+  // Order is the order the quotes arrive in, as it always was.
+  const laneOptions = useMemo(
+    () =>
+      Array.from(new Set(quotations.map((quote) => quote.laneCode).filter(Boolean))).map(
+        (lane) => ({ value: lane, label: lane }),
+      ),
+    [quotations],
+  );
 
   // My Quotes lists quotes that have been sent for review. A quote gets here
   // only when the customer picks a carrier in the Request Quote flow's final
@@ -140,38 +168,43 @@ export default function RetailShipmentsHistory({ viewMode = "quotes" }) {
     return confirmedQuotations;
   }, [quotations, confirmedQuotations, isShipmentMode]);
 
+  // The visible rows: the same four columns the table shows are what the search
+  // reads, and each dropdown only excludes rows when it has been moved off
+  // "all". The rules themselves live in utils/listFilters so every desk shares
+  // them; this keeps the exact behaviour the toolbar always had.
   const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
     const now = new Date();
     const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-
-    return baseList.filter((item) => {
-      const matchesSearch =
-        !q ||
-        (item.quoteNo && item.quoteNo.toLowerCase().includes(q)) ||
-        (item.customerName && item.customerName.toLowerCase().includes(q)) ||
-        (item.laneCode && item.laneCode.toLowerCase().includes(q)) ||
-        (item.destination && item.destination.toLowerCase().includes(q));
-      const matchesLane = laneFilter === "all" || item.laneCode === laneFilter;
-      const matchesMode = modeFilter === "all" || item.mode === modeFilter;
-      const effectiveStatus = isShipmentMode
-        ? (item.shipmentStatus ? normalizeShipmentStatus(item.shipmentStatus) : getShipmentStatusFromQuoteStatus(item.status))
+    const effectiveStatusOf = (item) =>
+      isShipmentMode
+        ? item.shipmentStatus
+          ? normalizeShipmentStatus(item.shipmentStatus)
+          : getShipmentStatusFromQuoteStatus(item.status)
         : normalizeWorkflowStatus(item.status);
-      const matchesStatus = statusFilter === "all" || effectiveStatus === statusFilter;
 
-      let matchesDate = true;
-      if (item.createdAt) {
-        const itemDate = new Date(item.createdAt);
-        if (dateFilter === "30days") {
-          matchesDate = itemDate >= thirtyDaysAgo;
-        } else if (dateFilter === "thisMonth") {
-          matchesDate = itemDate.getMonth() === now.getMonth() && itemDate.getFullYear() === now.getFullYear();
-        }
-      }
-
-      return matchesSearch && matchesLane && matchesMode && matchesStatus && matchesDate;
+    return filterRows(baseList, {
+      search,
+      fields: ["quoteNo", "customerName", "laneCode", "destination"],
+      filters: [
+        { value: laneFilter, matches: (item, lane) => item.laneCode === lane },
+        { value: modeFilter, matches: (item, mode) => item.mode === mode },
+        { value: statusFilter, matches: (item, status) => effectiveStatusOf(item) === status },
+        {
+          value: dateFilter,
+          matches: (item, range) => {
+            // A row with no created date is never hidden by a date choice.
+            if (!item.createdAt) return true;
+            const itemDate = new Date(item.createdAt);
+            if (range === "30days") return itemDate >= thirtyDaysAgo;
+            if (range === "thisMonth") {
+              return itemDate.getMonth() === now.getMonth() && itemDate.getFullYear() === now.getFullYear();
+            }
+            return true;
+          },
+        },
+      ],
     });
-  }, [baseList, search, laneFilter, modeFilter, statusFilter, dateFilter]);
+  }, [baseList, search, laneFilter, modeFilter, statusFilter, dateFilter, isShipmentMode]);
 
   function clearFilters() {
     setSearch("");
@@ -493,69 +526,33 @@ export default function RetailShipmentsHistory({ viewMode = "quotes" }) {
         )}
       </div>
 
-      <div className="filter-card">
-        <div className="filter-controls">
-          <div className="search-input-wrap">
-            <Search />
-            <input
-              type="text"
-              className="form-input"
-              placeholder={isShipmentMode ? "Tracking no, vessel, lane..." : "Quote no, customer, lane..."}
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
-          </div>
-          <select className="form-select" style={{ width: "auto" }} value={laneFilter} onChange={(e) => setLaneFilter(e.target.value)}>
-            {laneOptions.map((o) => (
-              <option key={o.value} value={o.value}>
-                {o.label}
-              </option>
-            ))}
-          </select>
-          <select className="form-select" style={{ width: "auto" }} value={modeFilter} onChange={(e) => setModeFilter(e.target.value)}>
-            <option value="all">All modes</option>
-            <option value="ocean">Ocean Freight</option>
-            <option value="air">Air Freight</option>
-            <option value="road">Road Freight</option>
-            <option value="rail">Rail Freight</option>
-          </select>
-          <select className="form-select" style={{ width: "auto" }} value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
-            <option value="all">All statuses</option>
-            {isShipmentMode ? (
-              <>
-                <option value="DRAFT">DRAFT</option>
-                <option value="SUBMITTED">SUBMITTED</option>
-                <option value="PROCESSING">PROCESSING</option>
-                <option value="ANALYZED">ANALYZED</option>
-                <option value="QUOTED">QUOTED</option>
-                <option value="CLOSED">CLOSED</option>
-                <option value="CANCELLED">CANCELLED</option>
-              </>
-            ) : (
-              <>
-                <option value="DRAFT">DRAFT</option>
-                <option value="GENERATED">GENERATED</option>
-                <option value="PENDING_REVIEW">PENDING_REVIEW</option>
-                <option value="APPROVED">APPROVED</option>
-                <option value="SENT">SENT</option>
-                <option value="ACCEPTED">ACCEPTED</option>
-                <option value="REJECTED">REJECTED</option>
-                <option value="EXPIRED">EXPIRED</option>
-              </>
-            )}
-          </select>
-          <select className="form-select" style={{ width: "auto" }} value={dateFilter} onChange={(e) => setDateFilter(e.target.value)}>
-            <option value="all">All Time</option>
-            <option value="30days">Last 30 days</option>
-            <option value="thisMonth">This Month</option>
-          </select>
-          <button type="button" className="btn-secondary-light" onClick={clearFilters}>
-            Clear
-          </button>
-
-          <span className="results-count">{filtered.length} {isShipmentMode ? "shipments" : "quotes"}</span>
-        </div>
-
+      <ListFilterBar
+        search={search}
+        onSearch={setSearch}
+        searchLabel={isShipmentMode ? "Search shipments" : "Search quotes"}
+        searchPlaceholder={isShipmentMode ? "Tracking no, vessel, lane..." : "Quote no, customer, lane..."}
+        filters={[
+          { key: "lane", label: "All lanes", ariaLabel: "Filter by lane", value: laneFilter, options: laneOptions },
+          { key: "mode", label: "All modes", ariaLabel: "Filter by mode", value: modeFilter, options: HISTORY_FILTER_OPTIONS.mode },
+          {
+            key: "status",
+            label: "All statuses",
+            ariaLabel: "Filter by status",
+            value: statusFilter,
+            options: isShipmentMode ? HISTORY_FILTER_OPTIONS.shipmentStatus : HISTORY_FILTER_OPTIONS.quoteStatus,
+          },
+          { key: "date", label: "All Time", ariaLabel: "Filter by date", value: dateFilter, options: HISTORY_FILTER_OPTIONS.date },
+        ]}
+        onFilterChange={(key, value) => {
+          if (key === "lane") setLaneFilter(value);
+          else if (key === "mode") setModeFilter(value);
+          else if (key === "status") setStatusFilter(value);
+          else if (key === "date") setDateFilter(value);
+        }}
+        onClear={clearFilters}
+        resultCount={filtered.length}
+        resultNoun={isShipmentMode ? "shipments" : "quotes"}
+      >
         <div className="table-container">
           {error && <p className="dashboard-error">{error}</p>}
           <table className="dash-table">
@@ -753,7 +750,7 @@ export default function RetailShipmentsHistory({ viewMode = "quotes" }) {
             <button type="button" className="btn-page">Next &rarr;</button>
           </div>
         </div>
-      </div>
+      </ListFilterBar>
 
       {/* Professional Shipment Details Modal */}
       {selectedQuote && (

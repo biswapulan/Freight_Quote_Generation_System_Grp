@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { FaUsers, FaUserTie, FaBuilding, FaUserCheck, FaPlus, FaSearch, FaUserShield, FaCheck } from "react-icons/fa";
+import { FaUsers, FaUserTie, FaBuilding, FaUserCheck, FaPlus, FaUserShield, FaCheck } from "react-icons/fa";
 import { useAuth } from "../context/AuthContext";
 import { listUsers, createUser, updateUser, deactivateUser } from "../api/admin";
+import ListFilterBar from "./ListFilterBar";
+import { filterRows } from "../utils/listFilters";
 import "./AdminUsers.css";
 
 const ROLE_LABELS = { admin: "Admin", agent: "Freight Agent", business: "Business", retail: "Retail", customs: "Customs Officer" };
@@ -101,8 +103,8 @@ export default function AdminUsers({ scope = "roles-and-permissions" }) {
   const [successMsg, setSuccessMsg] = useState("");
 
   const [search, setSearch] = useState("");
-  const [roleFilter, setRoleFilter] = useState("");
-  const [statusFilter, setStatusFilter] = useState("");
+  const [roleFilter, setRoleFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("all");
 
   const [showCreate, setShowCreate] = useState(false);
   const [createForm, setCreateForm] = useState(blankForm);
@@ -159,25 +161,27 @@ export default function AdminUsers({ scope = "roles-and-permissions" }) {
     [users, scopeRoles]
   );
 
-  const filteredUsers = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    return scopedUsers.filter((u) => {
-      const matchesSearch =
-        !q ||
-        u.full_name?.toLowerCase().includes(q) ||
-        u.email?.toLowerCase().includes(q) ||
-        u.company_name?.toLowerCase().includes(q);
-      const matchesRole = !roleFilter || roleOf(u) === roleFilter;
-      const matchesStatus =
-        !statusFilter ||
-        (statusFilter === "active" ? u.is_active !== false : u.is_active === false);
-      return matchesSearch && matchesRole && matchesStatus;
-    });
-  }, [scopedUsers, search, roleFilter, statusFilter]);
+  // Name, email and company are what the table prints, so they are what the
+  // search reads. "all" on either dropdown excludes nothing.
+  const filteredUsers = useMemo(
+    () =>
+      filterRows(scopedUsers, {
+        search,
+        fields: ["full_name", "email", "company_name"],
+        filters: [
+          { value: roleFilter, matches: (u, role) => roleOf(u) === role },
+          {
+            value: statusFilter,
+            matches: (u, status) =>
+              status === "active" ? u.is_active !== false : u.is_active === false,
+          },
+        ],
+      }),
+    [scopedUsers, search, roleFilter, statusFilter]
+  );
 
-  function handleFilterSubmit(e) {
-    e.preventDefault();
-  }
+  const userNarrowed =
+    Boolean(search.trim()) || roleFilter !== "all" || statusFilter !== "all";
 
   async function handleCreateSubmit(e) {
     e.preventDefault();
@@ -373,32 +377,49 @@ export default function AdminUsers({ scope = "roles-and-permissions" }) {
         )}
 
         {/* Search & Filter Bar */}
-        <form onSubmit={handleFilterSubmit} style={{ display: "flex", gap: "12px", flexWrap: "wrap", marginBottom: "20px", marginTop: "12px" }}>
-          <input
-            type="text"
-            className="desk-select"
-            style={{ flex: 1, minWidth: "200px" }}
-            placeholder="Search by name, company or email..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
+        <div style={{ marginTop: "12px" }}>
+          <ListFilterBar
+            search={search}
+            onSearch={setSearch}
+            searchLabel={`Search ${cfg.noun.toLowerCase()} accounts`}
+            searchPlaceholder="Search by name, company or email..."
+            filters={[
+              // A page scoped to one role has nothing to choose between.
+              ...(scopeRoles.length > 1
+                ? [
+                    {
+                      key: "role",
+                      label: "All Roles",
+                      ariaLabel: "Filter by role",
+                      value: roleFilter,
+                      options: scopeRoles.map((r) => ({ value: r, label: ROLE_LABELS[r] })),
+                    },
+                  ]
+                : []),
+              {
+                key: "status",
+                label: "All Statuses",
+                ariaLabel: "Filter by account status",
+                value: statusFilter,
+                options: [
+                  { value: "active", label: "Active" },
+                  { value: "inactive", label: "Inactive" },
+                ],
+              },
+            ]}
+            onFilterChange={(key, value) => {
+              if (key === "role") setRoleFilter(value);
+              else if (key === "status") setStatusFilter(value);
+            }}
+            onClear={() => {
+              setSearch("");
+              setRoleFilter("all");
+              setStatusFilter("all");
+            }}
+            resultCount={filteredUsers.length}
+            resultNoun={`${cfg.noun.toLowerCase()} account${filteredUsers.length === 1 ? "" : "s"}`}
           />
-          {scopeRoles.length > 1 && (
-            <select className="desk-select" style={{ width: "160px" }} value={roleFilter} onChange={(e) => setRoleFilter(e.target.value)}>
-              <option value="">All Roles</option>
-              {scopeRoles.map((r) => (
-                <option key={r} value={r}>{ROLE_LABELS[r]}</option>
-              ))}
-            </select>
-          )}
-          <select className="desk-select" style={{ width: "140px" }} value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
-            <option value="">All Statuses</option>
-            <option value="active">Active</option>
-            <option value="inactive">Inactive</option>
-          </select>
-          <button type="submit" className="agent-btn-sm" style={{ padding: "0 16px" }}>
-            <FaSearch style={{ marginRight: "4px" }} /> Search
-          </button>
-        </form>
+        </div>
 
         {/* Add User Modal Overlay */}
         {showCreate && (
@@ -522,7 +543,9 @@ export default function AdminUsers({ scope = "roles-and-permissions" }) {
               {!loading && filteredUsers.length === 0 && (
                 <tr>
                   <td colSpan={5} style={{ textAlign: "center", color: "#64748b", padding: "28px 0" }}>
-                    No {cfg.noun.toLowerCase()} accounts found.
+                    {userNarrowed
+                      ? "No accounts match your search."
+                      : `No ${cfg.noun.toLowerCase()} accounts found.`}
                   </td>
                 </tr>
               )}

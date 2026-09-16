@@ -1,5 +1,7 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { FaCheckCircle, FaDownload } from "react-icons/fa";
+import ListFilterBar from "./ListFilterBar";
+import { filterRows, optionsFrom } from "../utils/listFilters";
 import "./AgentShipmentDispatch.css";
 
 const INITIAL_SHIPMENTS = [
@@ -56,9 +58,39 @@ const CARRIERS_LIST = [
 
 const MILESTONES = ["Booked", "Dispatched", "In-Transit", "Customs Cleared", "Out for Delivery", "Delivered"];
 
+/** What the dispatch search reads: the same columns the table prints. */
+const DISPATCH_SEARCH_FIELDS = [
+  "id",
+  "trackingNo",
+  "client",
+  "carrier",
+  "origin",
+  "destination",
+  "vessel",
+  "containerNo",
+];
+
 export default function AgentShipmentDispatch() {
   const [shipments, setShipments] = useState(INITIAL_SHIPMENTS);
   const [selectedShipment, setSelectedShipment] = useState(INITIAL_SHIPMENTS[0]);
+  const [search, setSearch] = useState("");
+  const [milestoneFilter, setMilestoneFilter] = useState("all");
+  const [carrierFilter, setCarrierFilter] = useState("all");
+
+  const milestoneOptions = useMemo(
+    () => optionsFrom(shipments, (s) => s.currentMilestone),
+    [shipments],
+  );
+  const carrierOptions = useMemo(() => optionsFrom(shipments, (s) => s.carrier), [shipments]);
+
+  const visibleShipments = filterRows(shipments, {
+    search,
+    fields: DISPATCH_SEARCH_FIELDS,
+    filters: [
+      { value: milestoneFilter, matches: (s, milestone) => s.currentMilestone === milestone },
+      { value: carrierFilter, matches: (s, carrier) => s.carrier === carrier },
+    ],
+  });
 
   function handleMilestoneChange(shipmentId, newMilestone) {
     setShipments((prev) =>
@@ -103,6 +135,28 @@ export default function AgentShipmentDispatch() {
             <h2 className="agent-panel-title">Active Managed Dispatches</h2>
           </div>
 
+          <ListFilterBar
+            search={search}
+            onSearch={setSearch}
+            searchLabel="Search dispatches"
+            searchPlaceholder="Shipment ref, tracking no, client, carrier, lane..."
+            filters={[
+              { key: "milestone", label: "All milestones", ariaLabel: "Filter by milestone", value: milestoneFilter, options: milestoneOptions },
+              { key: "carrier", label: "All carriers", ariaLabel: "Filter by carrier", value: carrierFilter, options: carrierOptions },
+            ]}
+            onFilterChange={(key, value) => {
+              if (key === "milestone") setMilestoneFilter(value);
+              else if (key === "carrier") setCarrierFilter(value);
+            }}
+            onClear={() => {
+              setSearch("");
+              setMilestoneFilter("all");
+              setCarrierFilter("all");
+            }}
+            resultCount={visibleShipments.length}
+            resultNoun="dispatches"
+          />
+
           <div className="agent-table-wrap">
             <table className="agent-table">
               <thead>
@@ -116,7 +170,14 @@ export default function AgentShipmentDispatch() {
                 </tr>
               </thead>
               <tbody>
-                {shipments.map((s) => (
+                {visibleShipments.length === 0 && (
+                  <tr>
+                    <td colSpan={6} style={{ textAlign: "center", padding: "24px", color: "#64748b" }}>
+                      No dispatches match your search.
+                    </td>
+                  </tr>
+                )}
+                {visibleShipments.map((s) => (
                   <tr
                     key={s.id}
                     style={{

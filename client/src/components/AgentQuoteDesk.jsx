@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   AlertTriangle,
@@ -30,7 +30,26 @@ import {
 import { useAuth } from "../context/AuthContext";
 import { usePlatformQuotes } from "../hooks/usePlatformQuotes";
 import QuoteWorkflowStepper from "./QuoteWorkflowStepper";
+import ListFilterBar from "./ListFilterBar";
+import { filterRows, optionsFrom } from "../utils/listFilters";
 import "./AgentQuoteDesk.css";
+
+/**
+ * What the queue and activity searches read: the quote's identity, the client
+ * on it and the lane it runs on — the same things the cards print.
+ */
+const QUOTE_SEARCH_FIELDS = [
+  "id",
+  "quoteNo",
+  "customerName",
+  "client",
+  "customerEmail",
+  "clientEmail",
+  "origin",
+  "destination",
+  "laneCode",
+  "cargoType",
+];
 
 /** Freight Agent dashboard cards (PDF section 6), derived from the live quotes. */
 function buildDeskStats(quotes) {
@@ -64,6 +83,39 @@ export default function AgentQuoteDesk() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
   const [activeTab, setActiveTab] = useState("queue"); // "queue" | "activity" | "messages" | "table"
+
+  /**
+   * Lane and mode for the queue and activity toolbars.
+   *
+   * Those two dropdowns only exist on those two tabs, so they are cleared when
+   * the agent moves to another tab — a lane left set with no control on screen
+   * would hide rows for no visible reason. The search box is shared with the
+   * header and stays visible on every tab.
+   */
+  const [laneFilter, setLaneFilter] = useState("all");
+  const [modeFilter, setModeFilter] = useState("all");
+
+  useEffect(() => {
+    setLaneFilter("all");
+    setModeFilter("all");
+  }, [activeTab]);
+
+  const laneFilterOptions = useMemo(() => optionsFrom(quotes, (q) => q.laneCode), [quotes]);
+
+  const modeFilterOptions = useMemo(() => {
+    const byMode = new Map();
+    quotes.forEach((q) => {
+      if (q.mode && !byMode.has(q.mode)) byMode.set(q.mode, q.modeLabel || q.mode);
+    });
+    return Array.from(byMode, ([value, label]) => ({ value, label })).sort((a, b) =>
+      a.label.localeCompare(b.label),
+    );
+  }, [quotes]);
+
+  const cardFilters = [
+    { value: laneFilter, matches: (q, lane) => q.laneCode === lane },
+    { value: modeFilter, matches: (q, mode) => q.mode === mode },
+  ];
 
   const [activeModalQuote, setActiveModalQuote] = useState(null);
   const [marginPct, setMarginPct] = useState(10);
@@ -276,6 +328,42 @@ export default function AgentQuoteDesk() {
     return routeData?.approvalSequence?.agentReview === "APPROVED" || ["APPROVED", "SENT", "ACCEPTED", "REJECTED"].includes(norm);
   });
 
+  // The two card lists, after their toolbar. An empty search returns the list
+  // exactly as it was; nothing is added or dropped by the filters themselves.
+  const visibleReviewQueue = filterRows(reviewQueueQuotes, {
+    search,
+    fields: QUOTE_SEARCH_FIELDS,
+    filters: cardFilters,
+  });
+  const visibleActivity = filterRows(myActivityQuotes, {
+    search,
+    fields: QUOTE_SEARCH_FIELDS,
+    filters: cardFilters,
+  });
+
+  /** The toolbar the two card lists share. */
+  const cardToolbar = (
+    <ListFilterBar
+      search={search}
+      onSearch={setSearch}
+      searchLabel="Search quotations"
+      searchPlaceholder="Quote no, client, port, lane..."
+      filters={[
+        { key: "lane", label: "All lanes", ariaLabel: "Filter by lane", value: laneFilter, options: laneFilterOptions },
+        { key: "mode", label: "All modes", ariaLabel: "Filter by transport mode", value: modeFilter, options: modeFilterOptions },
+      ]}
+      onFilterChange={(key, value) => {
+        if (key === "lane") setLaneFilter(value);
+        else if (key === "mode") setModeFilter(value);
+      }}
+      onClear={() => {
+        setSearch("");
+        setLaneFilter("all");
+        setModeFilter("all");
+      }}
+    />
+  );
+
   return (
     <div className="agent-quote-desk">
       <div className="desk-header">
@@ -402,14 +490,17 @@ export default function AgentQuoteDesk() {
       {/* TAB 1: REVIEW QUEUE (Cards matching Mentor Screenshot 3) */}
       {activeTab === "queue" && (
         <div className="desk-queue-list">
+          {cardToolbar}
           {reviewQueueQuotes.length === 0 ? (
             <div className="desk-empty-queue">
               <CheckCircle2 size={36} style={{ color: "#059669", margin: "0 auto 12px", display: "block" }} />
               <strong>All caught up!</strong>
               <p style={{ margin: "6px 0 0 0", color: "#64748b" }}>No quotations awaiting commercial review in your queue.</p>
             </div>
+          ) : visibleReviewQueue.length === 0 ? (
+            <div className="desk-empty-queue">No quotations in this queue match your search.</div>
           ) : (
-            reviewQueueQuotes.map((q) => {
+            visibleReviewQueue.map((q) => {
               const qId = q.id || q.quoteNo;
               const finalCost = q.totalNum || calculateFinalCost(q);
               const routeData = getQuoteRouteData(qId, q);
@@ -490,10 +581,13 @@ export default function AgentQuoteDesk() {
       {/* TAB 2: MY ACTIVITY */}
       {activeTab === "activity" && (
         <div className="desk-queue-list">
+          {cardToolbar}
           {myActivityQuotes.length === 0 ? (
             <div className="desk-empty-queue">No recent activity found.</div>
+          ) : visibleActivity.length === 0 ? (
+            <div className="desk-empty-queue">No activity matches your search.</div>
           ) : (
-            myActivityQuotes.map((q) => {
+            visibleActivity.map((q) => {
               const qId = q.id || q.quoteNo;
               const finalCost = q.totalNum || calculateFinalCost(q);
               const routeData = getQuoteRouteData(qId, q);

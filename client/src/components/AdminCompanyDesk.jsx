@@ -23,6 +23,8 @@ import {
   updateCompany,
   updateCompanyAgent,
 } from "../api/workflow";
+import ListFilterBar from "./ListFilterBar";
+import { filterRows, optionsFrom } from "../utils/listFilters";
 import "./AdminCompanyDesk.css";
 
 /**
@@ -116,6 +118,114 @@ export default function AdminCompanyDesk({ initialTab = "companies" }) {
   }, [initialTab]);
 
   const overdue = useMemo(() => requests.filter((r) => r.isOverdue), [requests]);
+
+  /**
+   * Search and dropdown state for the tab toolbar.
+   *
+   * Cleared when the administrator changes tab: each tab's rows and fields are
+   * different, so a filter left over from another tab would empty the new list
+   * with nothing on screen to explain it.
+   */
+  const [search, setSearch] = useState("");
+  const [listFilters, setListFilters] = useState({});
+
+  useEffect(() => {
+    setSearch("");
+    setListFilters({});
+  }, [tab]);
+
+  const setListFilter = (key, value) => setListFilters((prev) => ({ ...prev, [key]: value }));
+  const clearListFilters = () => {
+    setSearch("");
+    setListFilters({});
+  };
+
+  /**
+   * The visible rows for one tab.
+   *
+   * Every dropdown the desk can show is applied; a tab that does not render a
+   * given dropdown leaves its value unset, so it excludes nothing. An empty
+   * search returns the rows exactly as they were.
+   */
+  const applyListFilters = useCallback(
+    (rows, fields) =>
+      filterRows(rows, {
+        search,
+        fields,
+        filters: [
+          { value: listFilters.status, matches: (row, status) => row.status === status },
+          { value: listFilters.role, matches: (row, role) => row.role === role },
+          {
+            value: listFilters.sla,
+            matches: (row, sla) => {
+              if (sla === "overdue") return Boolean(row.isOverdue);
+              if (sla === "met") return Boolean(row.decidedAt) && !row.isOverdue;
+              if (sla === "running") return !row.decidedAt && !row.isOverdue;
+              return true;
+            },
+          },
+        ],
+      }),
+    [search, listFilters],
+  );
+
+  const visibleCompanies = useMemo(
+    () => applyListFilters(companies, ["name", "code", "serviceName"]),
+    [applyListFilters, companies],
+  );
+  const visibleAgents = useMemo(
+    () =>
+      applyListFilters(agents, [
+        "userEmail",
+        "displayName",
+        "companyName",
+        (agent) => (agent.isActive ? "ACTIVE" : "DISABLED"),
+      ]),
+    [applyListFilters, agents],
+  );
+  const visibleSelections = useMemo(
+    () => applyListFilters(selections, ["reference", "shipmentId", "customer_email", "companyName"]),
+    [applyListFilters, selections],
+  );
+  const visibleRequests = useMemo(
+    () =>
+      applyListFilters(requests, [
+        "reference",
+        "companyName",
+        "assignedAgent",
+        (request) => request.selection?.reference,
+        (request) => request.selection?.customer_email,
+      ]),
+    [applyListFilters, requests],
+  );
+  const visiblePerformance = useMemo(
+    () => applyListFilters(performance, ["companyName"]),
+    [applyListFilters, performance],
+  );
+
+  // The choices are the values present on this desk, so no option can select
+  // nothing.
+  const statusFilterOptions = useMemo(() => {
+    const rows = { companies, agents, selections, monitor: requests, performance }[tab] || [];
+    return optionsFrom(
+      rows,
+      (row) => (tab === "agents" ? (row.isActive ? "ACTIVE" : "DISABLED") : row.status),
+      (status) => STATUS_WORDS[status] || status,
+    );
+  }, [tab, companies, agents, selections, requests, performance]);
+
+  const roleFilterOptions = useMemo(() => optionsFrom(agents, (a) => a.role), [agents]);
+
+  const visibleCount = {
+    companies: visibleCompanies.length,
+    agents: visibleAgents.length,
+    selections: visibleSelections.length,
+    monitor: visibleRequests.length,
+    performance: visiblePerformance.length,
+  }[tab];
+
+  const narrowed =
+    Boolean(search.trim()) || Object.values(listFilters).some((v) => v && v !== "all");
 
   async function toggleCompany(company) {
     setBusy(true);
@@ -260,33 +370,122 @@ export default function AdminCompanyDesk({ initialTab = "companies" }) {
 
       {loading ? (
         <div className="acd-empty">Loading...</div>
-      ) : tab === "companies" ? (
-        <Companies companies={companies} busy={busy} onToggle={toggleCompany} onRule={saveRule} />
-      ) : tab === "agents" ? (
-        <Agents
-          agents={agents}
-          companies={companies}
-          newAgent={newAgent}
-          setNewAgent={setNewAgent}
-          onAdd={addAgent}
-          onRole={changeRole}
-          onRevoke={revoke}
-          busy={busy}
-        />
-      ) : tab === "selections" ? (
-        <Selections selections={selections} summary={summary} />
-      ) : tab === "monitor" ? (
-        <Monitor requests={requests} />
       ) : (
-        <Performance rows={performance} />
+        <>
+          <ListFilterBar
+            search={search}
+            onSearch={setSearch}
+            searchLabel="Search this register"
+            searchPlaceholder={
+              tab === "companies" || tab === "performance"
+                ? "Search by company name or code..."
+                : tab === "agents"
+                ? "Search by email, name or company..."
+                : tab === "selections"
+                ? "Selection ref, customer, company, shipment..."
+                : "Request ref, company, assigned agent..."
+            }
+            filters={[
+              ...(tab === "agents"
+                ? [
+                    {
+                      key: "role",
+                      label: "All roles",
+                      ariaLabel: "Filter by company role",
+                      value: listFilters.role || "all",
+                      options: roleFilterOptions,
+                    },
+                  ]
+                : []),
+              {
+                key: "status",
+                label: "All statuses",
+                ariaLabel: tab === "monitor" ? "Filter by request status" : "Filter by status",
+                value: listFilters.status || "all",
+                options: statusFilterOptions,
+              },
+              ...(tab === "monitor"
+                ? [
+                    {
+                      key: "sla",
+                      label: "All SLA states",
+                      ariaLabel: "Filter by response-time state",
+                      value: listFilters.sla || "all",
+                      options: [
+                        { value: "overdue", label: "Overdue" },
+                        { value: "met", label: "Met" },
+                        { value: "running", label: "Still running" },
+                      ],
+                    },
+                  ]
+                : []),
+            ]}
+            onFilterChange={setListFilter}
+            onClear={clearListFilters}
+            resultCount={visibleCount}
+            resultNoun={
+              tab === "companies"
+                ? "companies"
+                : tab === "agents"
+                ? "company agents"
+                : tab === "selections"
+                ? "selections"
+                : tab === "monitor"
+                ? "requests"
+                : "companies"
+            }
+          />
+
+          {tab === "companies" ? (
+            <Companies
+              companies={visibleCompanies}
+              busy={busy}
+              onToggle={toggleCompany}
+              onRule={saveRule}
+              emptyLabel={narrowed ? "No companies match your search." : undefined}
+            />
+          ) : tab === "agents" ? (
+            <Agents
+              agents={visibleAgents}
+              companies={companies}
+              newAgent={newAgent}
+              setNewAgent={setNewAgent}
+              onAdd={addAgent}
+              onRole={changeRole}
+              onRevoke={revoke}
+              busy={busy}
+              emptyLabel={narrowed ? "No company agents match your search." : undefined}
+            />
+          ) : tab === "selections" ? (
+            <Selections
+              selections={visibleSelections}
+              summary={summary}
+              emptyLabel={narrowed ? "No selections match your search." : undefined}
+            />
+          ) : tab === "monitor" ? (
+            <Monitor
+              requests={visibleRequests}
+              emptyLabel={narrowed ? "No verification requests match your search." : undefined}
+            />
+          ) : (
+            <Performance
+              rows={visiblePerformance}
+              emptyLabel={narrowed ? "No companies match your search." : undefined}
+            />
+          )}
+        </>
       )}
     </div>
   );
 }
 
-function Companies({ companies, busy, onToggle, onRule }) {
+function Companies({ companies, busy, onToggle, onRule, emptyLabel }) {
   if (!companies.length)
-    return <div className="acd-empty">No freight companies registered yet.</div>;
+    return (
+      <div className="acd-empty">
+        {emptyLabel || "No freight companies registered yet."}
+      </div>
+    );
 
   return (
     <div className="acd-card">
@@ -423,7 +622,7 @@ function ManagerRule({ company, busy, onSave }) {
   );
 }
 
-function Agents({ agents, companies, newAgent, setNewAgent, onAdd, onRole, onRevoke, busy }) {
+function Agents({ agents, companies, newAgent, setNewAgent, onAdd, onRole, onRevoke, busy, emptyLabel }) {
   return (
     <>
       <form className="acd-card acd-form" onSubmit={onAdd}>
@@ -496,6 +695,13 @@ function Agents({ agents, companies, newAgent, setNewAgent, onAdd, onRole, onRev
             </tr>
           </thead>
           <tbody>
+            {agents.length === 0 && (
+              <tr>
+                <td colSpan={6} className="acd-muted" style={{ textAlign: "center", padding: "22px" }}>
+                  {emptyLabel || "No company agents have been mapped yet."}
+                </td>
+              </tr>
+            )}
             {agents.map((a) => (
               <tr key={a.id}>
                 <td>
@@ -553,7 +759,7 @@ function Agents({ agents, companies, newAgent, setNewAgent, onAdd, onRole, onRev
   );
 }
 
-function Selections({ selections, summary }) {
+function Selections({ selections, summary, emptyLabel }) {
   return (
     <>
       {summary && (
@@ -578,6 +784,13 @@ function Selections({ selections, summary }) {
             </tr>
           </thead>
           <tbody>
+            {selections.length === 0 && (
+              <tr>
+                <td colSpan={6} className="acd-muted" style={{ textAlign: "center", padding: "22px" }}>
+                  {emptyLabel || "No customer selections on the platform yet."}
+                </td>
+              </tr>
+            )}
             {selections.map((s) => (
               <tr key={s.id}>
                 <td>
@@ -605,12 +818,16 @@ function Selections({ selections, summary }) {
   );
 }
 
-function Monitor({ requests }) {
+function Monitor({ requests, emptyLabel }) {
   const sorted = [...requests].sort(
     (a, b) => Number(b.isOverdue) - Number(a.isOverdue),
   );
   if (!sorted.length)
-    return <div className="acd-empty">No verification requests on the platform yet.</div>;
+    return (
+      <div className="acd-empty">
+        {emptyLabel || "No verification requests on the platform yet."}
+      </div>
+    );
 
   return (
     <div className="acd-card">
@@ -659,7 +876,7 @@ function Monitor({ requests }) {
   );
 }
 
-function Performance({ rows }) {
+function Performance({ rows, emptyLabel }) {
   return (
     <div className="acd-card">
       <table className="acd-table">
@@ -677,6 +894,13 @@ function Performance({ rows }) {
           </tr>
         </thead>
         <tbody>
+          {rows.length === 0 && (
+            <tr>
+              <td colSpan={9} className="acd-muted" style={{ textAlign: "center", padding: "22px" }}>
+                {emptyLabel || "No company performance recorded yet."}
+              </td>
+            </tr>
+          )}
           {rows.map((r) => (
             <tr key={r.companyId}>
               <td>

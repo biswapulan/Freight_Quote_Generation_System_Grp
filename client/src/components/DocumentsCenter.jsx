@@ -6,7 +6,6 @@ import {
   CheckCircle2,
   AlertTriangle,
   Clock,
-  Search,
   Filter,
   Eye,
   FileCheck,
@@ -19,11 +18,21 @@ import {
 import { deleteShipmentDocument, listShipmentDocuments, uploadShipmentDocument } from "../api/workflow";
 import { usePlatformQuotes } from "../hooks/usePlatformQuotes";
 import { useAuth } from "../context/AuthContext";
+import ListFilterBar from "./ListFilterBar";
+import { filterRows } from "../utils/listFilters";
 import "./DocumentsCenter.css";
 
 // INITIAL_DOCUMENTS used to seed this screen with invented shipments/documents so the
 // UI looked populated before any real data existed. The screen now renders
 // live platform records, so the fixture has been removed.
+
+
+// The vault's status tabs became a dropdown; the same three states, one row each.
+const DOC_STATUS_BY_FILTER = {
+  verified: "VERIFIED",
+  review: "UNDER_REVIEW",
+  action: "ACTION_REQUIRED",
+};
 
 
 /**
@@ -209,20 +218,26 @@ export default function DocumentsCenter() {
     }
   };
 
-  const filteredDocs = documents.filter((doc) => {
-    const docNameStr = (doc.name || doc.fileName || "").toLowerCase();
-    const docRefStr = `${doc.shipmentRef || ""} ${doc.quoteNo || ""}`.toLowerCase();
-    const docTypeStr = (doc.type || "").toLowerCase();
-    const matchesSearch =
-      docNameStr.includes(searchTerm.toLowerCase()) ||
-      docRefStr.includes(searchTerm.toLowerCase()) ||
-      docTypeStr.includes(searchTerm.toLowerCase());
-
-    if (filterStatus === "verified") return matchesSearch && doc.status === "VERIFIED";
-    if (filterStatus === "review") return matchesSearch && doc.status === "UNDER_REVIEW";
-    if (filterStatus === "action") return matchesSearch && doc.status === "ACTION_REQUIRED";
-    return matchesSearch;
-  });
+  /**
+   * The vault as the toolbar leaves it.
+   *
+   * The search reads what each row prints — the file, the shipment and quote it
+   * belongs to, the type, the customer and the route. "all" shows everything.
+   */
+  const filteredDocs = useMemo(
+    () =>
+      filterRows(documents, {
+        search: searchTerm,
+        fields: ["name", "fileName", "shipmentRef", "quoteNo", "type", "customer", "route"],
+        filters: [
+          {
+            value: filterStatus,
+            matches: (doc, status) => doc.status === DOC_STATUS_BY_FILTER[status],
+          },
+        ],
+      }),
+    [documents, searchTerm, filterStatus],
+  );
 
   /**
    * Documents grouped by the quote they belong to.
@@ -294,51 +309,43 @@ export default function DocumentsCenter() {
       )}
 
       {/* Search & Filter Bar */}
-      <div className="doc-controls">
-        <div className="doc-search-wrap">
-          <Search size={18} className="doc-search-icon" />
-          <input
-            type="text"
-            placeholder="Search by filename, shipment ID, document type..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="doc-search-input"
-          />
-        </div>
-
-        <div className="doc-filter-buttons">
-          <button
-            className={`doc-filter-btn ${filterStatus === "all" ? "active" : ""}`}
-            onClick={() => setFilterStatus("all")}
-          >
-            All ({documents.length})
-          </button>
-          <button
-            className={`doc-filter-btn ${filterStatus === "verified" ? "active" : ""}`}
-            onClick={() => setFilterStatus("verified")}
-          >
-            Verified ({documents.filter((d) => d.status === "VERIFIED").length})
-          </button>
-          <button
-            className={`doc-filter-btn ${filterStatus === "review" ? "active" : ""}`}
-            onClick={() => setFilterStatus("review")}
-          >
-            Under Review ({documents.filter((d) => d.status === "UNDER_REVIEW").length})
-          </button>
-          <button
-            className={`doc-filter-btn ${filterStatus === "action" ? "active" : ""}`}
-            onClick={() => setFilterStatus("action")}
-          >
-            Action Needed ({documents.filter((d) => d.status === "ACTION_REQUIRED").length})
-          </button>
-        </div>
-      </div>
+      <ListFilterBar
+        search={searchTerm}
+        onSearch={setSearchTerm}
+        searchLabel="Search your documents"
+        searchPlaceholder="Search by filename, shipment ID, document type..."
+        filters={[
+          {
+            key: "status",
+            label: "All documents",
+            ariaLabel: "Filter by document status",
+            value: filterStatus,
+            // The counts the old status tabs carried are kept in the options.
+            options: [
+              { value: "verified", label: `Verified (${documents.filter((d) => d.status === "VERIFIED").length})` },
+              { value: "review", label: `Under Review (${documents.filter((d) => d.status === "UNDER_REVIEW").length})` },
+              { value: "action", label: `Action Needed (${documents.filter((d) => d.status === "ACTION_REQUIRED").length})` },
+            ],
+          },
+        ]}
+        onFilterChange={(key, value) => {
+          if (key === "status") setFilterStatus(value);
+        }}
+        onClear={() => {
+          setSearchTerm("");
+          setFilterStatus("all");
+        }}
+        resultCount={filteredDocs.length}
+        resultNoun="documents"
+      />
 
       {/* Documents grouped by the quote they belong to */}
       <div className="doc-groups">
         {docGroups.length === 0 ? (
           <div className="doc-empty-cell" style={{ padding: "34px", textAlign: "center" }}>
-            No documents found in vault. Click &quot;Upload Document&quot; to add one.
+            {documents.length === 0
+              ? 'No documents found in vault. Click "Upload Document" to add one.'
+              : "No documents match your search."}
           </div>
         ) : (
           docGroups.map((group) => {

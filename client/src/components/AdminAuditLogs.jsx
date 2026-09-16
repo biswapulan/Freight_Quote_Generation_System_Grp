@@ -1,8 +1,10 @@
-import { useCallback, useEffect, useState } from "react";
-import { AlertTriangle, RefreshCw, ScrollText, Search } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { AlertTriangle, RefreshCw, ScrollText } from "lucide-react";
 
 import { listAuditLogs } from "../api/workflow";
 import { useAuth } from "../context/AuthContext";
+import ListFilterBar from "./ListFilterBar";
+import { filterRows, optionsFrom } from "../utils/listFilters";
 import "./AdminAuditLogs.css";
 
 /**
@@ -14,11 +16,23 @@ import "./AdminAuditLogs.css";
  * test scenario 9).
  */
 
+// "all" is the toolbar's own value for "no restriction"; the API wants the
+// filter left off entirely.
 const ENTITY_FILTERS = [
-  { value: "", label: "All records" },
   { value: "QUOTE", label: "Quotes" },
   { value: "SHIPMENT", label: "Shipments" },
   { value: "CUSTOMS_CHECK", label: "Customs checks" },
+];
+
+// What the table prints, which is what the search reads.
+const AUDIT_SEARCH_FIELDS = [
+  "action",
+  "entity_id",
+  "entity_type",
+  "actor_email",
+  "actor_id",
+  "actor_role",
+  "reason",
 ];
 
 const ACTION_TONE = {
@@ -52,17 +66,23 @@ export default function AdminAuditLogs() {
   const { token } = useAuth();
   const [rows, setRows] = useState([]);
   const [total, setTotal] = useState(0);
-  const [entityType, setEntityType] = useState("");
+  const [entityType, setEntityType] = useState("all");
   const [search, setSearch] = useState("");
+  const [roleFilter, setRoleFilter] = useState("all");
+  const [dateFilter, setDateFilter] = useState("all");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+
+  // The record type is the one filter the server applies; the rest narrow what
+  // is already on screen.
+  const serverEntityType = entityType === "all" ? "" : entityType;
 
   const load = useCallback(async () => {
     if (!token) return;
     setLoading(true);
     setError("");
     try {
-      const data = await listAuditLogs(token, { entityType, limit: 200 });
+      const data = await listAuditLogs(token, { entityType: serverEntityType, limit: 200 });
       setRows(data.results || []);
       setTotal(data.count || 0);
     } catch (err) {
@@ -71,20 +91,49 @@ export default function AdminAuditLogs() {
     } finally {
       setLoading(false);
     }
-  }, [token, entityType]);
+  }, [token, serverEntityType]);
 
   useEffect(() => {
     load();
   }, [load]);
 
-  const term = search.trim().toLowerCase();
-  const filtered = term
-    ? rows.filter((row) =>
-        [row.action, row.entity_id, row.actor_email, row.actor_role, row.reason]
-          .filter(Boolean)
-          .some((value) => value.toLowerCase().includes(term)),
-      )
-    : rows;
+  /**
+   * The visible trail: what was typed, who acted, and how long ago.
+   *
+   * An empty search shows every record; a row with no timestamp is never
+   * hidden by a date choice.
+   */
+  const filtered = useMemo(() => {
+    const now = Date.now();
+    const days = dateFilter === "7days" ? 7 : dateFilter === "30days" ? 30 : 0;
+    const cutoff = days ? now - days * 24 * 60 * 60 * 1000 : 0;
+
+    return filterRows(rows, {
+      search,
+      fields: AUDIT_SEARCH_FIELDS,
+      filters: [
+        { value: roleFilter, matches: (row, role) => row.actor_role === role },
+        {
+          value: dateFilter,
+          matches: (row) => {
+            if (!cutoff || !row.created_at) return true;
+            return new Date(row.created_at).getTime() >= cutoff;
+          },
+        },
+      ],
+    });
+  }, [rows, search, roleFilter, dateFilter]);
+
+  const roleFilterOptions = useMemo(
+    () => optionsFrom(rows, (row) => row.actor_role),
+    [rows],
+  );
+
+  const narrowed =
+    Boolean(search.trim()) ||
+    entityType !== "all" ||
+    roleFilter !== "all" ||
+    dateFilter !== "all";
 
   return (
     <div className="aal-container">
@@ -103,27 +152,51 @@ export default function AdminAuditLogs() {
         </button>
       </div>
 
-      <div className="aal-controls">
-        <div className="aal-search">
-          <Search size={15} />
-          <input
-            type="text"
-            placeholder="Search action, record id, actor or reason…"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-        </div>
-        <select value={entityType} onChange={(e) => setEntityType(e.target.value)}>
-          {ENTITY_FILTERS.map((f) => (
-            <option key={f.value} value={f.value}>
-              {f.label}
-            </option>
-          ))}
-        </select>
-        <span className="aal-count">
-          {filtered.length} of {total} record{total === 1 ? "" : "s"}
-        </span>
-      </div>
+      <ListFilterBar
+        search={search}
+        onSearch={setSearch}
+        searchLabel="Search the audit trail"
+        searchPlaceholder="Search action, record id, actor or reason…"
+        filters={[
+          {
+            key: "entity",
+            label: "All records",
+            ariaLabel: "Filter by record type",
+            value: entityType,
+            options: ENTITY_FILTERS,
+          },
+          {
+            key: "role",
+            label: "All roles",
+            ariaLabel: "Filter by the actor's role",
+            value: roleFilter,
+            options: roleFilterOptions,
+          },
+          {
+            key: "date",
+            label: "All Time",
+            ariaLabel: "Filter by date",
+            value: dateFilter,
+            options: [
+              { value: "7days", label: "Last 7 days" },
+              { value: "30days", label: "Last 30 days" },
+            ],
+          },
+        ]}
+        onFilterChange={(key, value) => {
+          if (key === "entity") setEntityType(value);
+          else if (key === "role") setRoleFilter(value);
+          else if (key === "date") setDateFilter(value);
+        }}
+        onClear={() => {
+          setSearch("");
+          setEntityType("all");
+          setRoleFilter("all");
+          setDateFilter("all");
+        }}
+        resultCount={filtered.length}
+        resultNoun={`of ${total} record${total === 1 ? "" : "s"}`}
+      />
 
       {error && (
         <div className="aal-error">
@@ -187,7 +260,9 @@ export default function AdminAuditLogs() {
                     ? "Loading the audit trail…"
                     : error
                     ? "The audit trail could not be loaded."
-                    : "No audit records match this filter."}
+                    : narrowed
+                    ? "No audit records match your search."
+                    : "No audit records on file yet."}
                 </td>
               </tr>
             )}

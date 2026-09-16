@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   ShieldCheck,
@@ -19,6 +19,8 @@ import {
   submitFinalDecision,
   uploadShipmentDocument,
 } from "../api/workflow";
+import ListFilterBar from "./ListFilterBar";
+import { filterRows, optionsFrom } from "../utils/listFilters";
 import "./CustomerSelections.css";
 
 /**
@@ -239,6 +241,52 @@ export default function CustomerSelections() {
 
   const needsYou = selections.filter((s) => s.awaitingYou);
 
+  /**
+   * Search and dropdown state for the list toolbar.
+   *
+   * The search reads what each card prints — the company, the selection and
+   * shipment references, and the customs reference once there is one. An empty
+   * search shows every selection, as before.
+   */
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [actionFilter, setActionFilter] = useState("all");
+
+  const visibleSelections = useMemo(
+    () =>
+      filterRows(selections, {
+        search,
+        fields: [
+          "reference",
+          "companyName",
+          "shipmentId",
+          "quoteId",
+          "customer_email",
+          (s) => s.customs?.reference,
+        ],
+        filters: [
+          { value: statusFilter, matches: (s, status) => s.status === status },
+          {
+            value: actionFilter,
+            matches: (s, action) => (action === "yours") === Boolean(s.awaitingYou),
+          },
+        ],
+      }),
+    [selections, search, statusFilter, actionFilter],
+  );
+
+  const statusFilterOptions = useMemo(
+    () =>
+      optionsFrom(
+        selections,
+        (s) => s.status,
+        (status) => status.replaceAll("_", " "),
+      ),
+    [selections],
+  );
+
+  const narrowed = Boolean(search.trim()) || statusFilter !== "all" || actionFilter !== "all";
+
   return (
     <div className="csel-page">
       <header className="csel-header">
@@ -280,7 +328,51 @@ export default function CustomerSelections() {
         </div>
       ) : (
         <div className="csel-list">
-          {selections.map((s) => {
+          <ListFilterBar
+            search={search}
+            onSearch={setSearch}
+            searchLabel="Search your selected companies"
+            searchPlaceholder="Selection ref, company, shipment, quote..."
+            filters={[
+              {
+                key: "status",
+                label: "All statuses",
+                ariaLabel: "Filter by status",
+                value: statusFilter,
+                options: statusFilterOptions,
+              },
+              {
+                key: "action",
+                label: "Everything",
+                ariaLabel: "Filter by what is waiting on you",
+                value: actionFilter,
+                options: [
+                  { value: "yours", label: "Needs your response" },
+                  { value: "theirs", label: "Waiting on the company" },
+                ],
+              },
+            ]}
+            onFilterChange={(key, value) => {
+              if (key === "status") setStatusFilter(value);
+              else if (key === "action") setActionFilter(value);
+            }}
+            onClear={() => {
+              setSearch("");
+              setStatusFilter("all");
+              setActionFilter("all");
+            }}
+            resultCount={visibleSelections.length}
+            resultNoun="selections"
+          />
+
+          {visibleSelections.length === 0 ? (
+            <div className="csel-empty">
+              {narrowed
+                ? "No selections match your search."
+                : "Nothing to show for this selection yet."}
+            </div>
+          ) : (
+            visibleSelections.map((s) => {
             const booking = bookingFor(s.reference);
             const tone = TONE[s.status] || "active";
             return (
@@ -429,7 +521,8 @@ export default function CustomerSelections() {
                 )}
               </article>
             );
-          })}
+            })
+          )}
         </div>
       )}
 

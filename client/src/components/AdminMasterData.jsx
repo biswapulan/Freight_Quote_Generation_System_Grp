@@ -4,7 +4,6 @@ import {
   FaShip,
   FaBoxes,
   FaFileContract,
-  FaSearch,
   FaPlus,
   FaEdit,
   FaToggleOn,
@@ -14,6 +13,8 @@ import {
   FaTrash,
   FaFileImport,
 } from "react-icons/fa";
+import ListFilterBar from "./ListFilterBar";
+import { filterRows } from "../utils/listFilters";
 import "./AdminMasterData.css";
 
 // 100% Comprehensive Seed Datasets matching the 19 PDF Collections
@@ -220,6 +221,7 @@ export default function AdminMasterData() {
     }
   });
   const [searchTerm, setSearchTerm] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
   const [selectedRecord, setSelectedRecord] = useState(null);
   const [showJsonModal, setShowJsonModal] = useState(false);
   const [showFormModal, setShowFormModal] = useState(false);
@@ -230,13 +232,24 @@ export default function AdminMasterData() {
   const currentCategoryObj = CATEGORIES.find((c) => c.id === activeCategory);
   const rawList = collections[activeCollection] || [];
 
-  const query = searchTerm.trim().toLowerCase();
-  const filteredList = !query
-    ? rawList
-    : rawList.filter((item) => {
-        const jsonStr = JSON.stringify(item).toLowerCase();
-        return jsonStr.includes(query);
-      });
+  /**
+   * The visible records.
+   *
+   * Every collection has a different schema, so the search reads the whole
+   * record as text — which covers the id and name columns each table prints.
+   * Active/Inactive is the one state every collection shares.
+   */
+  const filteredList = filterRows(rawList, {
+    search: searchTerm,
+    fields: [(item) => JSON.stringify(item)],
+    filters: [
+      {
+        value: statusFilter,
+        matches: (item, status) =>
+          status === "active" ? item.isActive !== false : item.isActive === false,
+      },
+    ],
+  });
 
   function updateCollections(updater) {
     setCollections((prev) => {
@@ -378,16 +391,6 @@ export default function AdminMasterData() {
           </div>
 
           <div className="md-header-actions">
-            <div className="md-search-box">
-              <FaSearch />
-              <input
-                type="text"
-                placeholder={`Search in ${activeCollection}...`}
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-              />
-            </div>
-
             {activeCollection === "rateCards" && (
               <button
                 type="button"
@@ -408,6 +411,35 @@ export default function AdminMasterData() {
             </button>
           </div>
         </div>
+
+        {/* Search & Filter Bar */}
+        <ListFilterBar
+          search={searchTerm}
+          onSearch={setSearchTerm}
+          searchLabel={`Search the ${activeCollection} collection`}
+          searchPlaceholder={`Search in ${activeCollection}...`}
+          filters={[
+            {
+              key: "status",
+              label: "All statuses",
+              ariaLabel: "Filter by active status",
+              value: statusFilter,
+              options: [
+                { value: "active", label: "Active" },
+                { value: "inactive", label: "Inactive" },
+              ],
+            },
+          ]}
+          onFilterChange={(key, value) => {
+            if (key === "status") setStatusFilter(value);
+          }}
+          onClear={() => {
+            setSearchTerm("");
+            setStatusFilter("all");
+          }}
+          resultCount={filteredList.length}
+          resultNoun={`of ${rawList.length} record${rawList.length === 1 ? "" : "s"}`}
+        />
 
         {/* Dynamic Schema Table Component */}
         <div className="agent-table-wrap">

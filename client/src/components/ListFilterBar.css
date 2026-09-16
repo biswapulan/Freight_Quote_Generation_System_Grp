@@ -1,0 +1,148 @@
+/* ==========================================================================
+   ListFilterBar — the shared search / filter toolbar for every list page.
+
+   The values here are lifted verbatim from the toolbar that used to live inside
+   RetailShipmentsHistory.css so a page wired onto this component looks exactly
+   like the customer's My Quotes toolbar. Nothing here is page-specific.
+   ========================================================================== */
+
+.list-filter-bar {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  padding: 20px 24px;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.03);
+  margin-bottom: 24px;
+  box-sizing: border-box;
+}
+
+.filter-card.list-filter-bar,
+.list-filter-bar * {
+  box-sizing: border-box;
+}
+
+.list-filter-bar .filter-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 0;
+}
+
+/* The reference toolbar sits above a table inside the same card, which needs
+   the gap; a standalone bar would otherwise carry 18px of dead space. */
+.list-filter-bar .filter-controls.filter-controls--stacked {
+  margin-bottom: 18px;
+}
+
+.list-filter-bar .form-input,
+.list-filter-bar .form-select {
+  padding: 10px 14px;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  color: #0f172a;
+  outline: none;
+  transition: all 0.2s ease;
+}
+
+.list-filter-bar .form-input:focus,
+.list-filter-bar .form-select:focus {
+  border-color: #ff9800;
+  box-shadow: 0 0 0 3px rgba(255, 152, 0, 0.15);
+}
+
+.list-filter-bar .search-input-wrap {
+  position: relative;
+  flex: 1;
+  min-width: 240px;
+}
+
+.list-filter-bar .search-input-wrap svg {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #94a3b8;
+  width: 16px;
+  height: 16px;
+  pointer-events: none;
+}
+
+.list-filter-bar .search-input-wrap input {
+  width: 100%;
+  padding-left: 36px;
+}
+
+.list-filter-bar .list-filter-field {
+  position: relative;
+  display: inline-flex;
+}
+
+.list-filter-bar .btn-secondary-light {
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  color: #0f172a;
+  padding: 8px 18px;
+  border-radius: 8px;
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.list-filter-bar .btn-secondary-light:hover {
+  background: #f1f5f9;
+  border-color: #94a3b8;
+}
+
+.list-filter-bar .results-count {
+  margin-left: auto;
+  font-size: 12px;
+  color: #94a3b8;
+  font-weight: 600;
+}
+
+/* A real <label> for every control, kept out of the visual layout so the
+   toolbar looks unchanged while screen readers still announce what each
+   control searches or filters. */
+.list-filter-bar .list-filter-label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+@media (max-width: 768px) {
+  .list-filter-bar {
+    padding: 16px 14px;
+    border-radius: 12px;
+  }
+
+  .list-filter-bar .filter-controls {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .list-filter-bar .filter-controls select,
+  .list-filter-bar .filter-controls button {
+    width: 100% !important;
+  }
+
+  .list-filter-bar .search-input-wrap,
+  .list-filter-bar .list-filter-field {
+    width: 100%;
+  }
+}

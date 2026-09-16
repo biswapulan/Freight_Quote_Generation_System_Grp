@@ -1,4 +1,4 @@
-import { useCallback, useState, useEffect, useMemo } from "react";
+import { useCallback, useState, useEffect, useMemo, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   ShieldCheck,
@@ -35,7 +35,9 @@ import {
   updateQuoteStatusInStore,
   syncQuoteDocumentsToVault,
 } from "../utils/quoteWorkflow";
+import { filterRows, optionsFrom } from "../utils/listFilters";
 import DocumentViewer from "./DocumentViewer";
+import ListFilterBar from "./ListFilterBar";
 import "./CustomsOfficerPortal.css";
 
 export function resolveDocumentFileUrl(doc) {
@@ -90,10 +92,87 @@ export function resolveDocumentFileUrl(doc) {
 // live platform records, so the fixture has been removed.
 
 
+/**
+ * Words used wherever the platform holds no value.
+ *
+ * Vessel and berth assignment is not modelled by the platform at all, so those
+ * two places say so in words. Everything else that is merely missing shows a
+ * dash. Nothing here is a substitute for real data: an invented vessel, berth
+ * or duty figure reads as fact on a customs desk, which is why the fallbacks
+ * that used to sit inline in the JSX have been removed.
+ */
+const VESSEL_NOT_RECORDED = "Not provided by the carrier";
+const BERTH_NOT_ASSIGNED = "Berth not assigned by the terminal";
+const NOT_RECORDED = "—";
+
+// Wording for the tab toolbars' dropdowns, matching the badges in the tables.
+const CUSTOMS_MODE_LABELS = {
+  ocean: "Ocean Freight",
+  air: "Air Freight",
+  road: "Road Freight",
+  rail: "Rail Freight",
+};
+
+const CUSTOMS_STAGE_OPTIONS = [
+  { value: "cleared", label: "Cleared For Dispatch" },
+  { value: "hold", label: "Terminal Gate Hold" },
+  { value: "custody", label: "Under Customs Custody" },
+];
+
+const CUSTOMS_DOC_STATE_OPTIONS = [
+  { value: "verified", label: "All verified" },
+  { value: "pending", label: "Some pending" },
+  { value: "rejected", label: "Has a rejected paper" },
+];
+
+/** The port-custody state the manifest table shows for a consignment. */
+function customsStageOf(shipment) {
+  if (shipment.status === "APPROVED") return "cleared";
+  if (shipment.status === "FLAGGED") return "hold";
+  return "custody";
+}
+
+/**
+ * What the shipment tabs' search reads: the identity of the consignment and
+ * the parties on it, which is what an officer has in hand when they are
+ * looking for a file. The lane is origin -> destination, which is how these
+ * tabs display a route.
+ */
+const CUSTOMS_SHIPMENT_SEARCH_FIELDS = [
+  "id",
+  "quoteNo",
+  "shipmentId",
+  "customer",
+  "customerEmail",
+  "consignee",
+  "origin",
+  "destination",
+  "laneCode",
+  "cargoType",
+  "hsCode",
+];
+
+/**
+ * What the document desk's search reads. A consignment is also found by the
+ * name of any paper inside it, since that is often all the officer knows.
+ */
+const CUSTOMS_DOC_GROUP_SEARCH_FIELDS = [
+  "quoteNo",
+  "shipmentId",
+  "customer",
+  "route",
+  "hsCode",
+  "cargoType",
+  (group) => group.docs.map((doc) => doc.docType),
+  (group) => group.docs.map((doc) => doc.fileName),
+];
+
 function getOcrComplianceNote(docType, hsCode) {
   switch (docType) {
     case "Commercial Invoice":
-      return `HS Code ${hsCode || "8471.30"} line item matches Customs Manifest valuation.`;
+      return hsCode
+        ? `HS Code ${hsCode} line item matches Customs Manifest valuation.`
+        : "Line item valuation checked against the customs manifest.";
     case "Packing List":
       return "Gross weight and container tare verified against terminal weighbridge scale.";
     case "Bill of Lading Draft":
@@ -177,6 +256,12 @@ export default function CustomsOfficerPortal({ initialTab = "pending-reviews" })
           quoteNo: q.id,
           shipmentId: q.shipmentId,
           customer: q.customerName,
+          // Consignor's account and lane, carried so the tab toolbars can
+          // search and filter by them. Nothing here is rendered on its own.
+          customerEmail: q.customerEmail || "",
+          laneCode: q.laneCode || "",
+          mode: q.mode || "",
+          modeLabel: q.modeLabel || q.mode || "",
           consignee: q.destination ? `${q.destination} consignee` : "—",
           origin: q.origin,
           destination: q.destination,
@@ -222,6 +307,21 @@ export default function CustomsOfficerPortal({ initialTab = "pending-reviews" })
   const [reviewModalOpen, setReviewModalOpen] = useState(false);
   const [manifestModalOpen, setManifestModalOpen] = useState(false);
   const [selectedManifest, setSelectedManifest] = useState(null);
+  /**
+   * The papers actually attached to the consignment the manifest modal is
+   * showing, straight from the customs documents API.
+   *
+   * The modal used to list `selectedManifest.documents`, which is the M3
+   * compliance checklist mapped off the quote. That checklist stays PENDING
+   * forever, so the manifest reported documents as unverified moments after
+   * the officer had verified them on the Document Verification tab. `null`
+   * means "still reading", so the modal can say so instead of rendering empty.
+   */
+  const [manifestDocs, setManifestDocs] = useState(null);
+  const [manifestDocsError, setManifestDocsError] = useState("");
+  /** Shipment whose documents were requested last, so a slow reply for a
+   *  previous row cannot overwrite the modal that is now open. */
+  const manifestRequestRef = useRef(null);
   const [previewDocModalOpen, setPreviewDocModalOpen] = useState(false);
   const [previewDoc, setPreviewDoc] = useState(null);
   const [docViewMode, setDocViewMode] = useState("paper"); // "paper" | "pdf" | "ocr"
@@ -253,6 +353,155 @@ export default function CustomsOfficerPortal({ initialTab = "pending-reviews" })
   const completedCount = shipments.filter(
     (s) => s.status === "APPROVED" || s.status === "CUSTOMS_REVIEWED" || s.status === "RESOLVED"
   ).length;
+
+  /**
+   * Search and dropdown state for the tab toolbars.
+   *
+   * One toolbar serves whichever tab is open, and switching tab clears it: each
+   * tab looks at different fields, so a lane chosen on the manifest desk would
+   * otherwise silently hide rows on the risk desk with nothing on screen to
+   * explain the empty table.
+   */
+  const [listSearch, setListSearch] = useState("");
+  const [listFilters, setListFilters] = useState({});
+
+  useEffect(() => {
+    setListSearch("");
+    setListFilters({});
+  }, [activeTab]);
+
+  const setListFilter = (key, value) => setListFilters((prev) => ({ ...prev, [key]: value }));
+  const clearListFilters = () => {
+    setListSearch("");
+    setListFilters({});
+  };
+
+  // The queues the tabs render, before the toolbar narrows them. These are the
+  // same rows the counts above are taken from.
+  const pendingQueue = useMemo(
+    () => shipments.filter((s) => s.status === "PENDING_REVIEW" || s.status === "AI_ANALYZED"),
+    [shipments],
+  );
+  const riskQueue = useMemo(
+    () => shipments.filter((s) => s.status === "FLAGGED" || s.riskLevel === "HIGH"),
+    [shipments],
+  );
+  const completedQueue = useMemo(
+    () => shipments.filter((s) => s.status === "APPROVED" || s.status === "CUSTOMS_REVIEWED"),
+    [shipments],
+  );
+
+  /**
+   * Narrow consignments by whatever the toolbar offers.
+   *
+   * Every dropdown the desk can show is applied here. A tab that does not
+   * render a given dropdown leaves its value unset, which excludes nothing —
+   * so one function serves all five tabs. An empty search returns the rows
+   * exactly as they were.
+   */
+  const applyListFilters = useCallback(
+    (rows) =>
+      filterRows(rows, {
+        search: listSearch,
+        fields: CUSTOMS_SHIPMENT_SEARCH_FIELDS,
+        filters: [
+          { value: listFilters.stage, matches: (s, stage) => customsStageOf(s) === stage },
+          { value: listFilters.risk, matches: (s, risk) => s.riskLevel === risk },
+          { value: listFilters.lane, matches: (s, lane) => s.laneCode === lane },
+          { value: listFilters.mode, matches: (s, mode) => s.mode === mode },
+        ],
+      }),
+    [listSearch, listFilters],
+  );
+
+  const visiblePending = useMemo(() => applyListFilters(pendingQueue), [applyListFilters, pendingQueue]);
+  const visibleRisk = useMemo(() => applyListFilters(riskQueue), [applyListFilters, riskQueue]);
+  const visibleCompleted = useMemo(
+    () => applyListFilters(completedQueue),
+    [applyListFilters, completedQueue],
+  );
+  const visibleAssigned = useMemo(() => applyListFilters(shipments), [applyListFilters, shipments]);
+
+  // The dropdown choices are the values actually present on this desk, so no
+  // option can select nothing.
+  const laneFilterOptions = useMemo(() => optionsFrom(shipments, (s) => s.laneCode), [shipments]);
+  const modeFilterOptions = useMemo(
+    () => optionsFrom(shipments, (s) => s.mode, (mode) => CUSTOMS_MODE_LABELS[mode] || mode),
+    [shipments],
+  );
+  const riskFilterOptions = useMemo(() => optionsFrom(shipments, (s) => s.riskLevel), [shipments]);
+
+  /**
+   * The one toolbar that sits above the open tab.
+   *
+   * Each tab shows different rows, so each gets its own search wording and its
+   * own dropdowns: a tab that already pins its rows to one status (the sign-off
+   * queue) offers risk, lane and mode instead of a status it has no choice
+   * about. A dropdown a tab does not show is left unset, so it excludes nothing.
+   */
+  function toolbarFor(tabKey) {
+    const lane = { key: "lane", label: "All lanes", ariaLabel: "Filter by lane", value: listFilters.lane || "all", options: laneFilterOptions };
+    const mode = { key: "mode", label: "All modes", ariaLabel: "Filter by transport mode", value: listFilters.mode || "all", options: modeFilterOptions };
+    const risk = { key: "risk", label: "All risk levels", ariaLabel: "Filter by risk level", value: listFilters.risk || "all", options: riskFilterOptions };
+
+    switch (tabKey) {
+      case "document-verification":
+        return {
+          searchLabel: "Search consignments and their documents",
+          searchPlaceholder: "Quote / shipment ref, consignor, route, document...",
+          filters: [
+            { key: "docState", label: "All verification states", ariaLabel: "Filter by document verification state", value: listFilters.docState || "all", options: CUSTOMS_DOC_STATE_OPTIONS },
+          ],
+        };
+      case "assigned-shipments":
+        return {
+          searchLabel: "Search consignments by quote, shipment, consignor or consignee",
+          searchPlaceholder: "Quote / shipment ref, consignor, consignee, lane...",
+          filters: [
+            { key: "stage", label: "All custody states", ariaLabel: "Filter by port custody status", value: listFilters.stage || "all", options: CUSTOMS_STAGE_OPTIONS },
+            risk,
+            lane,
+            mode,
+          ],
+        };
+      case "customs-risk-flags":
+        return {
+          searchLabel: "Search the enforcement queue by quote, shipment, consignor or consignee",
+          searchPlaceholder: "Quote / shipment ref, consignor, consignee, lane...",
+          filters: [lane, mode],
+        };
+      case "completed-reviews":
+        return {
+          searchLabel: "Search cleared consignments by certificate, quote, shipment, consignor or consignee",
+          searchPlaceholder: "Certificate, quote / shipment ref, shipper, lane...",
+          filters: [lane, mode],
+        };
+      case "pending-reviews":
+      default:
+        return {
+          searchLabel: "Search the sign-off queue by quote, shipment, consignor or consignee",
+          searchPlaceholder: "Quote / shipment ref, consignor, consignee, lane...",
+          filters: [risk, lane, mode],
+        };
+    }
+  }
+
+  /** How many rows the open tab is showing after the toolbar, and what to call them. */
+  function visibleTotals(tabKey) {
+    switch (tabKey) {
+      case "document-verification":
+        return { count: visibleDocumentGroups.length, noun: "consignments" };
+      case "assigned-shipments":
+        return { count: visibleAssigned.length, noun: "consignments" };
+      case "customs-risk-flags":
+        return { count: visibleRisk.length, noun: "alerts" };
+      case "completed-reviews":
+        return { count: visibleCompleted.length, noun: "clearances" };
+      case "pending-reviews":
+      default:
+        return { count: visiblePending.length, noun: "consignments" };
+    }
+  }
 
   // Real uploaded files, keyed by shipment. The checklist tells us which
   // documents are *required*; this tells us which have actually arrived and
@@ -487,6 +736,33 @@ export default function CustomsOfficerPortal({ initialTab = "pending-reviews" })
       .sort((a, b) => b.pending - a.pending);
   }, [allDocumentsToVerify]);
 
+  /**
+   * The consignments the document desk shows, after its toolbar.
+   *
+   * The state filter follows the same three states the row's own pill shows —
+   * every paper verified, some still pending, or one rejected — so the filter
+   * and the pill can never disagree.
+   */
+  const visibleDocumentGroups = useMemo(
+    () =>
+      filterRows(documentGroups, {
+        search: listSearch,
+        fields: CUSTOMS_DOC_GROUP_SEARCH_FIELDS,
+        filters: [
+          {
+            value: listFilters.docState,
+            matches: (group, state) => {
+              if (state === "verified") return group.allVerified;
+              if (state === "rejected") return group.rejected > 0;
+              if (state === "pending") return !group.allVerified && group.rejected === 0;
+              return true;
+            },
+          },
+        ],
+      }),
+    [documentGroups, listSearch, listFilters.docState],
+  );
+
   const [openGroup, setOpenGroup] = useState(null);
   const [docBusy, setDocBusy] = useState(null);
   const [docNotice, setDocNotice] = useState(null);
@@ -565,9 +841,41 @@ export default function CustomsOfficerPortal({ initialTab = "pending-reviews" })
     setReviewModalOpen(true);
   }
 
+  /**
+   * Open the port manifest for one consignment and read its real paperwork.
+   *
+   * The documents already loaded for the desk seed the list so the modal does
+   * not flash empty, then the server is asked again: a verdict given a moment
+   * ago in the viewer must show here immediately.
+   */
   function openManifestModal(shipment) {
     setSelectedManifest(shipment);
     setManifestModalOpen(true);
+
+    const shipmentId = shipment.shipmentId;
+    const cached = shipmentId ? uploadedDocs[shipmentId] : null;
+    manifestRequestRef.current = shipmentId || null;
+    setManifestDocsError("");
+    setManifestDocs(cached || null);
+
+    if (!token || !shipmentId) {
+      // No shipment id means no document record to read: say so, list nothing.
+      setManifestDocs(cached || []);
+      return;
+    }
+
+    listShipmentDocuments(token, shipmentId)
+      .then((data) => {
+        if (manifestRequestRef.current !== shipmentId) return;
+        setManifestDocs(data.results || []);
+      })
+      .catch((err) => {
+        if (manifestRequestRef.current !== shipmentId) return;
+        setManifestDocs([]);
+        setManifestDocsError(
+          err.message || "Could not load the documents attached to this shipment.",
+        );
+      });
   }
 
   /**
@@ -834,6 +1142,19 @@ export default function CustomsOfficerPortal({ initialTab = "pending-reviews" })
         </button>
       </div>
 
+      {/* One toolbar for whichever tab is open, above that tab's card. */}
+      <ListFilterBar
+        search={listSearch}
+        onSearch={setListSearch}
+        searchLabel={toolbarFor(activeTab).searchLabel}
+        searchPlaceholder={toolbarFor(activeTab).searchPlaceholder}
+        filters={toolbarFor(activeTab).filters}
+        onFilterChange={setListFilter}
+        onClear={clearListFilters}
+        resultCount={visibleTotals(activeTab).count}
+        resultNoun={visibleTotals(activeTab).noun}
+      />
+
       {/* ========================================================================= */}
       {/* 1. DOCUMENT VERIFICATION DESK (DISTINCT DOCUMENT-LEVEL AUDIT VIEW)       */}
       {/* ========================================================================= */}
@@ -844,7 +1165,7 @@ export default function CustomsOfficerPortal({ initialTab = "pending-reviews" })
               <FileCheck size={20} color="#0284c7" />
               Document Audit &amp; Official Stamp Station
               <span className="cop-view-badge-count">
-                {documentGroups.length} consignment{documentGroups.length === 1 ? "" : "s"}
+                {visibleDocumentGroups.length} consignment{visibleDocumentGroups.length === 1 ? "" : "s"}
               </span>
             </div>
             <div style={{ fontSize: "12.5px", color: "#64748b" }}>
@@ -852,15 +1173,18 @@ export default function CustomsOfficerPortal({ initialTab = "pending-reviews" })
             </div>
           </div>
 
+
           {docNotice && (
             <div className={`cop-doc-notice ${docNotice.type}`}>{docNotice.text}</div>
           )}
 
           {documentGroups.length === 0 ? (
             <div className="cop-doc-empty">No documents have been uploaded yet.</div>
+          ) : visibleDocumentGroups.length === 0 ? (
+            <div className="cop-doc-empty">No consignments match your search.</div>
           ) : (
             <div className="cop-doc-groups">
-              {documentGroups.map((group) => {
+              {visibleDocumentGroups.map((group) => {
                 const isOpen = openGroup === group.key;
                 return (
                   <div
@@ -1014,12 +1338,13 @@ export default function CustomsOfficerPortal({ initialTab = "pending-reviews" })
             <div className="cop-view-title">
               <Ship size={20} color="#0284c7" />
               Assigned Consignment Logistics &amp; Port Manifest
-              <span className="cop-view-badge-count">{shipments.length} Consignments</span>
+              <span className="cop-view-badge-count">{visibleAssigned.length} Consignments</span>
             </div>
             <div style={{ fontSize: "12.5px", color: "#64748b" }}>
               Carrier vessels, terminal berths, container TEUs, and customs custody records.
             </div>
           </div>
+
 
           <div className="cop-table-wrap">
             <table className="cop-table">
@@ -1036,27 +1361,34 @@ export default function CustomsOfficerPortal({ initialTab = "pending-reviews" })
                 </tr>
               </thead>
               <tbody>
-                {shipments.map((s) => (
+                {visibleAssigned.length === 0 && (
+                  <tr>
+                    <td colSpan={8} className="cop-doc-empty">
+                      No consignments match your search.
+                    </td>
+                  </tr>
+                )}
+                {visibleAssigned.map((s) => (
                   <tr key={s.id}>
                     <td>
                       <strong style={{ color: "#0f172a" }}>{s.id}</strong>
                       <div style={{ fontSize: "12px", color: "#475569", marginTop: "2px" }}>{s.customer}</div>
                     </td>
                     <td>
-                      <div style={{ fontWeight: 600, color: "#1e293b" }}>{s.consignee || "Registered Importer"}</div>
+                      <div style={{ fontWeight: 600, color: "#1e293b" }}>{s.consignee || NOT_RECORDED}</div>
                       <div style={{ fontSize: "11px", color: "#64748b" }}>{s.destination}</div>
                     </td>
                     <td>
-                      <div style={{ fontWeight: 700, color: "#0284c7" }}>{s.vessel || "MSC Paloma V.24"}</div>
-                      <div className="cop-manifest-spec">{s.berth || "Terminal Gate Berth"}</div>
+                      <div style={{ fontWeight: 700, color: "#0284c7" }}>{s.vessel || VESSEL_NOT_RECORDED}</div>
+                      <div className="cop-manifest-spec">{s.berth || BERTH_NOT_ASSIGNED}</div>
                     </td>
                     <td>
-                      <span style={{ fontWeight: 600, color: "#334155" }}>{s.containers || "1 × 40HC (18,000 kg)"}</span>
+                      <span style={{ fontWeight: 600, color: "#334155" }}>{s.containers || NOT_RECORDED}</span>
                       <div style={{ fontSize: "11px", color: "#64748b" }}>HS: {s.hsCode}</div>
                     </td>
                     <td>
-                      <div className="cop-val-tag">{s.declaredValue || "₹ 1,48,500"}</div>
-                      <div className="cop-duty-sub">Assessed Duty: {s.dutyEstimate || "7.5% BCD"}</div>
+                      <div className="cop-val-tag">{s.declaredValue || NOT_RECORDED}</div>
+                      <div className="cop-duty-sub">Assessed Duty: {s.dutyEstimate || NOT_RECORDED}</div>
                     </td>
                     <td>
                       {s.status === "APPROVED" ? (
@@ -1098,12 +1430,13 @@ export default function CustomsOfficerPortal({ initialTab = "pending-reviews" })
             <div className="cop-view-title">
               <ClipboardList size={20} color="#d97706" />
               Statutory Review &amp; Officer Sign-off Queue
-              <span className="cop-view-badge-count">{pendingCount} Action Required</span>
+              <span className="cop-view-badge-count">{visiblePending.length} Action Required</span>
             </div>
             <div style={{ fontSize: "12.5px", color: "#64748b" }}>
               Consignments awaiting compliance sign-off. Click <strong>Inspect &amp; Sign-off</strong> to approve or flag.
             </div>
           </div>
+
 
           <div className="cop-table-wrap">
             <table className="cop-table">
@@ -1119,18 +1452,30 @@ export default function CustomsOfficerPortal({ initialTab = "pending-reviews" })
                 </tr>
               </thead>
               <tbody>
-                {shipments
-                  .filter((s) => s.status === "PENDING_REVIEW" || s.status === "AI_ANALYZED")
+                {visiblePending.length === 0 && (
+                  <tr>
+                    <td colSpan={7} className="cop-doc-empty">
+                      No consignments match your search.
+                    </td>
+                  </tr>
+                )}
+                {visiblePending
                   .map((s) => (
                     <tr key={s.id}>
                       <td>
                         {s.slaUrgent ? (
-                          <span className="cop-sla-urgent">
-                            <Clock size={12} /> {s.slaRemaining || "Urgent · 2h SLA"}
+                          <span
+                            className="cop-sla-urgent"
+                            title="Priority follows the consignment's risk score. No review deadline is recorded for it."
+                          >
+                            <Clock size={12} /> {s.slaRemaining || "High-risk priority"}
                           </span>
                         ) : (
-                          <span className="cop-sla-normal">
-                            <Clock size={12} /> {s.slaRemaining || "Normal · 6h SLA"}
+                          <span
+                            className="cop-sla-normal"
+                            title="Priority follows the consignment's risk score. No review deadline is recorded for it."
+                          >
+                            <Clock size={12} /> {s.slaRemaining || "Standard priority"}
                           </span>
                         )}
                       </td>
@@ -1206,12 +1551,13 @@ export default function CustomsOfficerPortal({ initialTab = "pending-reviews" })
             <div className="cop-view-title">
               <AlertOctagon size={20} color="#dc2626" />
               Red-Lane Enforcement Holds &amp; Tariff Discrepancies
-              <span className="cop-view-badge-count">{highRiskCount} Alerts</span>
+              <span className="cop-view-badge-count">{visibleRisk.length} Alerts</span>
             </div>
             <div style={{ fontSize: "12.5px", color: "#64748b" }}>
               Consignments intercepted for hazardous gaps, missing compliance certificates, or tariff under-valuation.
             </div>
           </div>
+
 
           <div className="cop-table-wrap">
             <table className="cop-table">
@@ -1227,9 +1573,14 @@ export default function CustomsOfficerPortal({ initialTab = "pending-reviews" })
                 </tr>
               </thead>
               <tbody>
-                {shipments
-                  .filter((s) => s.status === "FLAGGED" || s.riskLevel === "HIGH")
-                  .map((s) => (
+                {visibleRisk.length === 0 && (
+                  <tr>
+                    <td colSpan={7} className="cop-doc-empty">
+                      No consignments match your search.
+                    </td>
+                  </tr>
+                )}
+                {visibleRisk.map((s) => (
                     <tr key={s.id}>
                       <td>
                         <span className="cop-badge critical">
@@ -1247,7 +1598,7 @@ export default function CustomsOfficerPortal({ initialTab = "pending-reviews" })
                       </td>
                       <td>
                         <div className="cop-hold-reason">
-                          {s.holdReason || "Missing mandatory statutory hazardous certificate (SDS) or tariff verification."}
+                          {s.holdReason || "No hold reason recorded by the customs analysis."}
                         </div>
                       </td>
                       <td>
@@ -1257,7 +1608,7 @@ export default function CustomsOfficerPortal({ initialTab = "pending-reviews" })
                       </td>
                       <td>
                         <span style={{ fontSize: "12px", color: "#64748b", fontWeight: 600 }}>
-                          {s.berth || "Terminal Hazmat Yard Bay 2"}
+                          {s.berth || "No inspection bay assigned"}
                         </span>
                       </td>
                       <td>
@@ -1289,12 +1640,13 @@ export default function CustomsOfficerPortal({ initialTab = "pending-reviews" })
             <div className="cop-view-title">
               <CheckCircle size={20} color="#059669" />
               Completed Customs Clearances &amp; Legal Gate Passes
-              <span className="cop-view-badge-count">{completedCount} Approved</span>
+              <span className="cop-view-badge-count">{visibleCompleted.length} Approved</span>
             </div>
             <div style={{ fontSize: "12.5px", color: "#64748b" }}>
               Legally certified Out-of-Charge export/import records and stamped clearance certificates.
             </div>
           </div>
+
 
           <div className="cop-table-wrap">
             <table className="cop-table">
@@ -1310,13 +1662,18 @@ export default function CustomsOfficerPortal({ initialTab = "pending-reviews" })
                 </tr>
               </thead>
               <tbody>
-                {shipments
-                  .filter((s) => s.status === "APPROVED" || s.status === "CUSTOMS_REVIEWED")
-                  .map((s) => (
+                {visibleCompleted.length === 0 && (
+                  <tr>
+                    <td colSpan={7} className="cop-doc-empty">
+                      No clearances match your search.
+                    </td>
+                  </tr>
+                )}
+                {visibleCompleted.map((s) => (
                     <tr key={s.id}>
                       <td>
                         <span className="cop-clearance-cert">
-                          {s.clearanceCertNo || `CC-IN-2026-${String(s.id).slice(-4)}`}
+                          {s.clearanceCertNo || "Not issued"}
                         </span>
                       </td>
                       <td>
@@ -1324,7 +1681,7 @@ export default function CustomsOfficerPortal({ initialTab = "pending-reviews" })
                       </td>
                       <td>
                         <div style={{ fontWeight: 600 }}>{s.customer}</div>
-                        <div style={{ fontSize: "11px", color: "#64748b" }}>&rarr; {s.consignee || "Consignee"}</div>
+                        <div style={{ fontSize: "11px", color: "#64748b" }}>&rarr; {s.consignee || NOT_RECORDED}</div>
                       </td>
                       <td>
                         <div>{s.cargoType}</div>
@@ -1346,8 +1703,10 @@ export default function CustomsOfficerPortal({ initialTab = "pending-reviews" })
                           onClick={() =>
                             alert(
                               `Official Customs Clearance Certificate for ${s.id}:\n\nCertificate No: ${
-                                s.clearanceCertNo || `CC-IN-2026-${String(s.id).slice(-4)}`
-                              }\nShipper: ${s.customer}\nAssigned Officer: ${s.assignedOfficer}\nStatus: APPROVED & CLEARED FOR EXPORT`
+                                s.clearanceCertNo || "Not issued"
+                              }\nShipper: ${s.customer}\nAssigned Officer: ${
+                                s.assignedOfficer || "Unassigned"
+                              }\nStatus: APPROVED & CLEARED FOR EXPORT`
                             )
                           }
                         >
@@ -1370,7 +1729,8 @@ export default function CustomsOfficerPortal({ initialTab = "pending-reviews" })
               <div>
                 <h3>Port Logistics Manifest: {selectedManifest.id}</h3>
                 <p className="cop-modal-sub">
-                  Vessel: <strong>{selectedManifest.vessel}</strong> &bull; {selectedManifest.berth}
+                  Vessel: <strong>{selectedManifest.vessel || VESSEL_NOT_RECORDED}</strong> &bull;{" "}
+                  {selectedManifest.berth || BERTH_NOT_ASSIGNED}
                 </p>
               </div>
               <button
@@ -1414,12 +1774,35 @@ export default function CustomsOfficerPortal({ initialTab = "pending-reviews" })
                   Attached Clearance Documents:
                 </h4>
                 <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-                  {selectedManifest.documents.map((d, i) => (
-                    <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 12px", background: "#f1f5f9", borderRadius: "8px", fontSize: "12.5px" }}>
-                      <span><strong>{d.name}</strong> {d.fileName && <span style={{ color: "#0284c7" }}>({d.fileName})</span>}</span>
-                      <span className={`cop-doc-badge ${(d.status || "").toLowerCase()}`}>{d.status}</span>
+                  {manifestDocsError && (
+                    <div className="cop-doc-notice warning">
+                      Could not read this consignment&apos;s documents: {manifestDocsError}
                     </div>
-                  ))}
+                  )}
+
+                  {manifestDocs === null ? (
+                    <div className="cop-doc-empty">Loading this consignment&apos;s documents…</div>
+                  ) : manifestDocs.length === 0 ? (
+                    <div className="cop-doc-empty">
+                      No trade documents have been uploaded for {selectedManifest.id} yet.
+                    </div>
+                  ) : (
+                    // The uploaded papers themselves, with the verdict customs
+                    // recorded against each one — the same records the Document
+                    // Verification tab reads.
+                    manifestDocs.map((d) => {
+                      const status = d.verification_status || "PENDING";
+                      return (
+                        <div key={d.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 12px", background: "#f1f5f9", borderRadius: "8px", fontSize: "12.5px" }}>
+                          <span>
+                            <strong>{d.document_type}</strong>{" "}
+                            {d.file_name && <span style={{ color: "#0284c7" }}>({d.file_name})</span>}
+                          </span>
+                          <span className={`cop-doc-badge ${status.toLowerCase()}`}>{status}</span>
+                        </div>
+                      );
+                    })
+                  )}
                 </div>
               </div>
             </div>
@@ -1535,7 +1918,7 @@ export default function CustomsOfficerPortal({ initialTab = "pending-reviews" })
                               dutyEstimate: selectedShipment.dutyEstimate,
                               docType: doc.name,
                               fileName: foundDocInVerify?.fileName || doc.fileName || `${doc.name.replace(/\s+/g, "_")}.pdf`,
-                              fileSize: foundDocInVerify?.fileSize || doc.fileSize || "1.2 MB",
+                              fileSize: foundDocInVerify?.fileSize || doc.fileSize || NOT_RECORDED,
                               fileDataUrl: foundDocInVerify?.fileDataUrl || doc.fileDataUrl || null,
                               fileType: foundDocInVerify?.fileType || doc.fileType || "application/pdf",
                               uploaded: foundDocInVerify?.uploaded || Boolean(doc.fileDataUrl || doc.fileName),
@@ -1759,7 +2142,7 @@ export default function CustomsOfficerPortal({ initialTab = "pending-reviews" })
                 <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
                   <span>Document: <strong>{previewDoc.docType}</strong></span>
                   <span style={{ color: "#94a3b8" }}>&bull;</span>
-                  <span>HS Code: <strong>{previewDoc.hsCode || "8517.12"}</strong></span>
+                  <span>HS Code: <strong>{previewDoc.hsCode || NOT_RECORDED}</strong></span>
                   <span style={{ color: "#94a3b8" }}>&bull;</span>
                   <span>Route: <strong>{previewDoc.route}</strong></span>
                 </div>
@@ -1920,7 +2303,7 @@ export default function CustomsOfficerPortal({ initialTab = "pending-reviews" })
                   >
                     <div style={{ padding: "8px 12px", borderRight: "1px solid #cbd5e1", borderBottom: "1px solid #cbd5e1" }}>
                       <div style={{ fontWeight: 800, color: "#475569", fontSize: "10px", textTransform: "uppercase" }}>SHIPPER:</div>
-                      <div style={{ fontWeight: 600, color: "#0f172a", marginTop: "2px" }}>{previewDoc.customer || "ABC Electronics Pvt Ltd"}</div>
+                      <div style={{ fontWeight: 600, color: "#0f172a", marginTop: "2px" }}>{previewDoc.customer || NOT_RECORDED}</div>
                       <div style={{ color: "#64748b" }}>Chennai, Tamil Nadu, India</div>
                     </div>
                     <div style={{ padding: "8px 12px", borderBottom: "1px solid #cbd5e1" }}>
@@ -1945,16 +2328,16 @@ export default function CustomsOfficerPortal({ initialTab = "pending-reviews" })
                     </div>
                     <div style={{ padding: "8px 12px", borderBottom: "1px solid #cbd5e1" }}>
                       <div style={{ fontWeight: 800, color: "#475569", fontSize: "10px", textTransform: "uppercase" }}>OCEAN VESSEL &amp; VOY NO:</div>
-                      <div style={{ fontWeight: 600, color: "#0f172a", marginTop: "2px" }}>{previewDoc.vessel || "MSC Paloma / 24E"}</div>
+                      <div style={{ fontWeight: 600, color: "#0f172a", marginTop: "2px" }}>{previewDoc.vessel || VESSEL_NOT_RECORDED}</div>
                     </div>
 
                     <div style={{ padding: "8px 12px", borderRight: "1px solid #cbd5e1" }}>
                       <div style={{ fontWeight: 800, color: "#475569", fontSize: "10px", textTransform: "uppercase" }}>PORT OF LOADING:</div>
-                      <div style={{ fontWeight: 600, color: "#0f172a", marginTop: "2px" }}>{previewDoc.origin || "Chennai Sea Port, India (INMAA)"}</div>
+                      <div style={{ fontWeight: 600, color: "#0f172a", marginTop: "2px" }}>{previewDoc.origin || NOT_RECORDED}</div>
                     </div>
                     <div style={{ padding: "8px 12px" }}>
                       <div style={{ fontWeight: 800, color: "#475569", fontSize: "10px", textTransform: "uppercase" }}>PORT OF DISCHARGE:</div>
-                      <div style={{ fontWeight: 600, color: "#0f172a", marginTop: "2px" }}>{previewDoc.destination || "Port of Rotterdam, Netherlands (NLRTM)"}</div>
+                      <div style={{ fontWeight: 600, color: "#0f172a", marginTop: "2px" }}>{previewDoc.destination || NOT_RECORDED}</div>
                     </div>
                   </div>
 
@@ -1975,12 +2358,17 @@ export default function CustomsOfficerPortal({ initialTab = "pending-reviews" })
                           ABC-ROT-2026<br />01 to 24
                         </td>
                         <td style={{ padding: "10px", borderRight: "1px solid #cbd5e1", verticalAlign: "top", color: "#334155" }}>
-                          {previewDoc.containers || "24 Pallets (2x40HC FCL)"}
+                          {previewDoc.containers || NOT_RECORDED}
                         </td>
                         <td style={{ padding: "10px", borderRight: "1px solid #cbd5e1", verticalAlign: "top", color: "#1e293b" }}>
-                          <div>Said to Contain: Commercial {previewDoc.cargoType || "Telecommunication & Electronic Hardware"} Modules</div>
+                          <div>
+                            Said to Contain:{" "}
+                            {previewDoc.cargoType
+                              ? `Commercial ${previewDoc.cargoType} Modules`
+                              : "Commercial cargo (type not recorded)"}
+                          </div>
                           <div style={{ fontSize: "10.5px", color: "#64748b", marginTop: "4px" }}>
-                            Tariff HS Code: <strong>{previewDoc.hsCode || "8517.12"}</strong> &bull; Condition: Sound &amp; Sealed
+                            Tariff HS Code: <strong>{previewDoc.hsCode || NOT_RECORDED}</strong> &bull; Condition: Sound &amp; Sealed
                           </div>
                         </td>
                         <td style={{ padding: "10px", borderRight: "1px solid #cbd5e1", verticalAlign: "top", textAlign: "right", fontWeight: 600, color: "#0f172a" }}>
@@ -2080,12 +2468,12 @@ export default function CustomsOfficerPortal({ initialTab = "pending-reviews" })
                     <div style={{ background: "#f8fafc", padding: "12px", borderRadius: "6px", border: "1px solid #e2e8f0" }}>
                       <div style={{ fontWeight: 700, color: "#64748b", marginBottom: "4px" }}>PORT &amp; CARRIER ROUTING:</div>
                       <div style={{ color: "#0f172a", fontWeight: 600 }}>{previewDoc.route}</div>
-                      <div style={{ color: "#64748b" }}>Assigned Vessel: {previewDoc.vessel || "MSC Paloma / 24E"}</div>
+                      <div style={{ color: "#64748b" }}>Assigned Vessel: {previewDoc.vessel || VESSEL_NOT_RECORDED}</div>
                     </div>
                   </div>
 
                   <div style={{ fontSize: "12px", border: "1px solid #e2e8f0", borderRadius: "8px", padding: "14px", background: "#f8fafc", lineHeight: "1.7" }}>
-                    <div>&bull; Extracted Harmonized Tariff Code: <strong>{previewDoc.hsCode || "8517.12"}</strong> (WCO Harmonized Standard)</div>
+                    <div>&bull; Extracted Harmonized Tariff Code: <strong>{previewDoc.hsCode || NOT_RECORDED}</strong> (WCO Harmonized Standard)</div>
                     <div>&bull; Regulatory OCR Analysis: <em style={{ color: "#0369a1" }}>"{previewDoc.ocrSummary}"</em></div>
                     <div>&bull; Declared Packaging: Standard ISO Maritime Containers (Payload secured &amp; sealed)</div>
                     <div>&bull; SHA-256 Digital Fingerprint: <code>e8b91a27f901c0d48109bf21a784d12a9e34b1790184c7</code></div>

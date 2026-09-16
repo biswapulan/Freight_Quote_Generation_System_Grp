@@ -25,7 +25,9 @@ import {
   submitVerificationDecision,
 } from "../api/workflow";
 import DocumentViewer from "./DocumentViewer";
+import ListFilterBar from "./ListFilterBar";
 import { alertText } from "../utils/alerts";
+import { filterRows, optionsFrom } from "../utils/listFilters";
 import "./CompanyAgentPortal.css";
 
 /**
@@ -85,6 +87,45 @@ const TABS = [
   { key: "waiting", label: "Waiting on customer" },
   { key: "settled", label: "Approved & rejected" },
   { key: "bookings", label: "Bookings" },
+];
+
+/**
+ * The lane a row is on, spelled the way the queue shows it: origin → destination.
+ *
+ * A request carries its route on the nested shipment; a booking carries it
+ * flat, because that is how the two APIs return them.
+ */
+function rowLane(row) {
+  const origin = row?.origin ?? row?.shipment?.origin;
+  const destination = row?.destination ?? row?.shipment?.destination;
+  if (!origin && !destination) return "";
+  return `${origin || ""} → ${destination || ""}`.trim();
+}
+
+/** The transport mode a request is on; bookings do not carry one. */
+function rowMode(row) {
+  return row?.shipment?.transportMode || "";
+}
+
+// What the queue tables actually show, which is what their search reads.
+const REQUEST_SEARCH_FIELDS = [
+  "reference",
+  (r) => r.selection?.reference,
+  (r) => r.selection?.customer_email,
+  (r) => r.selection?.shipmentId,
+  (r) => r.selection?.quoteId,
+  (r) => r.shipment?.origin,
+  (r) => r.shipment?.destination,
+  (r) => r.shipment?.cargoType,
+  (r) => r.shipment?.hsCode,
+];
+
+const BOOKING_SEARCH_FIELDS = [
+  "reference",
+  "customer_email",
+  "origin",
+  "destination",
+  "status",
 ];
 
 function money(amount, currency) {
@@ -170,6 +211,112 @@ export default function CompanyAgentPortal({ initialTab = "incoming" }) {
     );
     return { incoming, verifying, manager, waiting, settled };
   }, [requests]);
+
+  /**
+   * Search and dropdown state for the queue toolbar.
+   *
+   * Cleared when the agent changes queue: each queue holds different statuses,
+   * so a status left over from the previous one would silently empty the next
+   * list with nothing on screen to explain why.
+   */
+  const [listSearch, setListSearch] = useState("");
+  const [listFilters, setListFilters] = useState({});
+
+  useEffect(() => {
+    setListSearch("");
+    setListFilters({});
+  }, [activeTab]);
+
+  const setListFilter = (key, value) => setListFilters((prev) => ({ ...prev, [key]: value }));
+  const clearListFilters = () => {
+    setListSearch("");
+    setListFilters({});
+  };
+
+  /**
+   * The rows the open queue shows, after the toolbar.
+   *
+   * A dropdown a queue does not render stays unset, so it excludes nothing.
+   * An empty search returns the queue untouched.
+   */
+  const applyListFilters = useCallback(
+    (rows, fields) =>
+      filterRows(rows, {
+        search: listSearch,
+        fields,
+        filters: [
+          { value: listFilters.status, matches: (row, status) => row.status === status },
+          { value: listFilters.lane, matches: (row, lane) => rowLane(row) === lane },
+          { value: listFilters.mode, matches: (row, mode) => rowMode(row) === mode },
+        ],
+      }),
+    [listSearch, listFilters],
+  );
+
+  // The choices are the values present in this agent's own queues, so no option
+  // can be selected that matches nothing.
+  const laneFilterOptions = useMemo(
+    () => optionsFrom([...requests, ...bookings], rowLane),
+    [requests, bookings],
+  );
+
+  const modeFilterOptions = useMemo(
+    () =>
+      optionsFrom(
+        requests,
+        rowMode,
+        (mode) => mode.charAt(0).toUpperCase() + mode.slice(1),
+      ),
+    [requests],
+  );
+
+  const statusFilterOptions = useMemo(() => {
+    const seen = new Map();
+    [...requests, ...bookings].forEach((row) => {
+      if (!row.status || seen.has(row.status)) return;
+      seen.set(row.status, STATUS_LABELS[row.status] || row.status);
+    });
+    return Array.from(seen, ([value, label]) => ({ value, label })).sort((a, b) =>
+      a.label.localeCompare(b.label),
+    );
+  }, [requests, bookings]);
+
+  // The queue the open tab shows, before the toolbar narrows it.
+  //
+  // Declared above the rows it feeds on purpose: a `const` sits in its temporal
+  // dead zone until its own line runs, so reading `visible` from the memo below
+  // (whose dependency array is evaluated immediately) crashed the whole desk
+  // with "Cannot access 'visible' before initialization".
+  const visible = useMemo(
+    () =>
+      activeTab === "incoming"
+        ? buckets.incoming
+        : activeTab === "verifying"
+        ? buckets.verifying
+        : activeTab === "manager"
+        ? buckets.manager
+        : activeTab === "waiting"
+        ? buckets.waiting
+        : activeTab === "settled"
+        ? buckets.settled
+        : [],
+    [activeTab, buckets],
+  );
+
+  const visibleRequests = useMemo(
+    () => applyListFilters(visible, REQUEST_SEARCH_FIELDS),
+    [applyListFilters, visible],
+  );
+
+  const visibleBookings = useMemo(
+    () => applyListFilters(bookings, BOOKING_SEARCH_FIELDS),
+    [applyListFilters, bookings],
+  );
+
+  /** True when the toolbar is narrowing the list at all. */
+  const listNarrowed =
+    Boolean(listSearch.trim()) ||
+    Object.values(listFilters).some((value) => value && value !== "all");
 
   const stats = useMemo(() => {
     const today = new Date().toDateString();
@@ -330,19 +477,6 @@ export default function CompanyAgentPortal({ initialTab = "incoming" }) {
     }
   }
 
-  const visible =
-    activeTab === "incoming"
-      ? buckets.incoming
-      : activeTab === "verifying"
-      ? buckets.verifying
-      : activeTab === "manager"
-      ? buckets.manager
-      : activeTab === "waiting"
-      ? buckets.waiting
-      : activeTab === "settled"
-      ? buckets.settled
-      : [];
-
   return (
     <div className="cap-page">
       <header className="cap-header">
@@ -399,15 +533,71 @@ export default function CompanyAgentPortal({ initialTab = "incoming" }) {
         })}
       </div>
 
+      <ListFilterBar
+        search={listSearch}
+        onSearch={setListSearch}
+        searchLabel={
+          activeTab === "bookings" ? "Search bookings" : "Search this request queue"
+        }
+        searchPlaceholder={
+          activeTab === "bookings"
+            ? "Booking ref, customer, lane..."
+            : "Request / selection ref, customer, lane, shipment..."
+        }
+        filters={[
+          {
+            key: "status",
+            label: "All statuses",
+            ariaLabel: "Filter by status",
+            value: listFilters.status || "all",
+            options: statusFilterOptions,
+          },
+          {
+            key: "lane",
+            label: "All lanes",
+            ariaLabel: "Filter by lane",
+            value: listFilters.lane || "all",
+            options: laneFilterOptions,
+          },
+          // Bookings carry no transport mode, so the option list would be empty
+          // and the dropdown would do nothing.
+          ...(activeTab === "bookings"
+            ? []
+            : [
+                {
+                  key: "mode",
+                  label: "All modes",
+                  ariaLabel: "Filter by transport mode",
+                  value: listFilters.mode || "all",
+                  options: modeFilterOptions,
+                },
+              ]),
+        ]}
+        onFilterChange={setListFilter}
+        onClear={clearListFilters}
+        resultCount={activeTab === "bookings" ? visibleBookings.length : visibleRequests.length}
+        resultNoun={activeTab === "bookings" ? "bookings" : "requests"}
+      />
+
       {activeTab === "bookings" ? (
-        <BookingsTable bookings={bookings} loading={loading} />
+        <BookingsTable
+          bookings={visibleBookings}
+          loading={loading}
+          emptyLabel={
+            listNarrowed
+              ? "No bookings match your search."
+              : "No bookings yet. Approving a request creates one."
+          }
+        />
       ) : (
         <RequestsTable
-          rows={visible}
+          rows={visibleRequests}
           loading={loading}
           onOpen={openRequest}
           emptyLabel={
-            activeTab === "incoming"
+            listNarrowed
+              ? "No requests match your search."
+              : activeTab === "incoming"
               ? "No new requests. When a customer picks your company, it lands here."
               : activeTab === "manager"
               ? managerOf.length
@@ -533,10 +723,14 @@ function RequestsTable({ rows, loading, onOpen, emptyLabel }) {
   );
 }
 
-function BookingsTable({ bookings, loading }) {
+function BookingsTable({ bookings, loading, emptyLabel }) {
   if (loading) return <div className="cap-empty">Loading...</div>;
   if (!bookings.length)
-    return <div className="cap-empty">No bookings yet. Approving a request creates one.</div>;
+    return (
+      <div className="cap-empty">
+        {emptyLabel || "No bookings yet. Approving a request creates one."}
+      </div>
+    );
 
   return (
     <div className="cap-card">
