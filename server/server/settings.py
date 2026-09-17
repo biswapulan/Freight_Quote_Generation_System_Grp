@@ -32,7 +32,7 @@ SECRET_KEY = config('SECRET_KEY')
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = config('DEBUG', default=False, cast=bool)
 
-ALLOWED_HOSTS = csv_config('ALLOWED_HOSTS')
+ALLOWED_HOSTS = ['*']
 
 
 # Application definition
@@ -169,13 +169,9 @@ ORCHESTRATOR_WEATHER_SAMPLES = config('ORCHESTRATOR_WEATHER_SAMPLES', default=3,
 # the test suite turns it on explicitly.
 ALLOW_HEADER_ROLE_AUTH = config('ALLOW_HEADER_ROLE_AUTH', default=False, cast=bool)
 
-# Allow the local React/Vite dev server to call this API.
-CORS_ALLOWED_ORIGINS = csv_config(
-    'CORS_ALLOWED_ORIGINS',
-    default='http://localhost:5173,http://localhost:5174,http://127.0.0.1:5173,http://127.0.0.1:5174',
-)
-
-CSRF_TRUSTED_ORIGINS = csv_config('CSRF_TRUSTED_ORIGINS')
+CORS_ALLOW_ALL_ORIGINS = True
+CORS_ALLOW_CREDENTIALS = True
+CSRF_TRUSTED_ORIGINS = ['https://*.trycloudflare.com', 'https://*.vercel.app', 'https://*.onrender.com', 'http://localhost:5173', 'http://127.0.0.1:5173']
 
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 
