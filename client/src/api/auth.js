@@ -4,7 +4,7 @@ const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL ||
   (typeof window !== "undefined" && (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1")
     ? "http://localhost:8000/api"
-    : "https://freight-quote-generation-system-grp.onrender.com/api");
+    : "/api");
 
 const AUTH_URL = `${API_BASE_URL.replace(/\/$/, "")}/auth`;
 
@@ -21,7 +21,9 @@ let wakeRequest = null;
  */
 export function wakeServer() {
   if (!wakeRequest) {
-    const root = API_BASE_URL.replace(/\/api\/?$/, "/");
+    const root = API_BASE_URL.startsWith("http")
+      ? API_BASE_URL.replace(/\/api\/?$/, "/")
+      : "/api/";
     wakeRequest = fetch(root, { mode: "no-cors", cache: "no-store" }).catch(() => null);
   }
   return wakeRequest;
