@@ -26,6 +26,7 @@ jobs:
     steps:
       - name: Ping the backend health check
         run: |
+          nslookup freight-quote-generation-system-grp.onrender.com || true
           # A sleeping server can take up to a minute to answer, so allow for
           # that and retry before calling the run a failure.
           for attempt in 1 2 3; do
