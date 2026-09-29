@@ -83,7 +83,6 @@ const STATUS_TONE = {
 const TABS = [
   { key: "incoming", label: "Incoming requests" },
   { key: "verifying", label: "Being checked" },
-  { key: "manager", label: "With manager" },
   { key: "waiting", label: "Waiting on customer" },
   { key: "settled", label: "Approved & rejected" },
   { key: "bookings", label: "Bookings" },
@@ -191,16 +190,16 @@ export default function CompanyAgentPortal({ initialTab = "incoming" }) {
   }, [load]);
 
   useEffect(() => {
-    setActiveTab(initialTab);
+    setActiveTab(initialTab === "manager" ? "incoming" : initialTab || "incoming");
   }, [initialTab]);
 
   const buckets = useMemo(() => {
     const incoming = requests.filter(
       (r) => r.status === "PENDING_COMPANY_VERIFICATION",
     );
-    const verifying = requests.filter((r) => r.status === "UNDER_VERIFICATION");
-    // Escalated requests wait for a manager, so they get a list of their own.
-    const manager = requests.filter((r) => r.status === "ESCALATED");
+    const verifying = requests.filter(
+      (r) => r.status === "UNDER_VERIFICATION" || r.status === "ESCALATED",
+    );
     const waiting = requests.filter((r) =>
       ["AWAITING_CUSTOMER_INFO", "REVISION_PENDING_CUSTOMER"].includes(r.status),
     );
@@ -209,7 +208,7 @@ export default function CompanyAgentPortal({ initialTab = "incoming" }) {
        "CUSTOMS_CLEARED", "CUSTOMS_REJECTED", "BOOKING_CONFIRMED",
        "BOOKING_CANCELLED", "RESELECT_QUOTE"].includes(r.status),
     );
-    return { incoming, verifying, manager, waiting, settled };
+    return { incoming, verifying, waiting, settled };
   }, [requests]);
 
   /**
@@ -293,8 +292,6 @@ export default function CompanyAgentPortal({ initialTab = "incoming" }) {
         ? buckets.incoming
         : activeTab === "verifying"
         ? buckets.verifying
-        : activeTab === "manager"
-        ? buckets.manager
         : activeTab === "waiting"
         ? buckets.waiting
         : activeTab === "settled"
@@ -526,7 +523,7 @@ export default function CompanyAgentPortal({ initialTab = "incoming" }) {
               className={`cap-tab${activeTab === t.key ? " active" : ""}`}
               onClick={() => setActiveTab(t.key)}
             >
-              {t.key === "manager" && managerOf.length ? "Needs your approval" : t.label}
+              {t.label}
               <span className="cap-tab-count">{count}</span>
             </button>
           );
@@ -599,10 +596,6 @@ export default function CompanyAgentPortal({ initialTab = "incoming" }) {
               ? "No requests match your search."
               : activeTab === "incoming"
               ? "No new requests. When a customer picks your company, it lands here."
-              : activeTab === "manager"
-              ? managerOf.length
-                ? "Nothing is waiting for your approval."
-                : "No requests are with a manager. High-value and high-risk approvals go here."
               : "Nothing in this list right now."
           }
         />
@@ -997,11 +990,8 @@ function RequestDetail(props) {
                     ["APPROVE", "Approve", "ok"],
                     ["MODIFY", "Revise terms", "warn"],
                     ["REQUEST_INFO", "Request info", "info"],
-                    ["ESCALATE", "Escalate", "info"],
                     ["REJECT", "Reject", "bad"],
                   ]
-                    // A manager settles an escalation; it cannot be escalated again.
-                    .filter(([value]) => !escalated || ["APPROVE", "MODIFY", "REJECT"].includes(value))
                     .map(([value, label, tone]) => (
                     <button
                       key={value}

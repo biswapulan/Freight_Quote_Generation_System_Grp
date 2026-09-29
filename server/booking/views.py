@@ -73,7 +73,7 @@ def _viewer_rights(vr, actor):
     return {
         "viewerIsManager": manager,
         "canCheck": member and actionable,
-        "canDecide": member and actionable and (vr.status != lifecycle.ESCALATED or manager),
+        "canDecide": member and actionable,
     }
 
 
@@ -356,14 +356,6 @@ class VerificationDecisionView(APIView):
             )
 
         action = request.data.get("action")
-        # Once escalated, the request is a manager's to decide, whichever way:
-        # approving, revising or rejecting. That is the point of escalating.
-        if vr.status == lifecycle.ESCALATED and not is_manager_of(
-            actor["email"], vr.company_id
-        ):
-            raise PermissionDenied(
-                "This request was escalated and needs a company manager to decide."
-            )
 
         try:
             vr, revision = submit_decision(

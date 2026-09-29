@@ -68,7 +68,6 @@ const AGENT_SECTIONS = [
   "Dashboard",
   "Incoming Requests",
   "Pending Verification",
-  "Manager Approvals",
   "Booking Management",
   "Shipment Requests",
   "All Shipments",
@@ -141,6 +140,7 @@ const ROLE_LABELS = {
  */
 const SECTION_ALIASES = {
   "generate-quote": "request-quote",
+  "manager-approvals": "incoming-requests",
 };
 
 function slugify(label) {

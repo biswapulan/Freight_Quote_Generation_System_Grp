@@ -354,35 +354,8 @@ class DecisionError(ValueError):
 def manager_approval_reason(request_obj, actor, *, amount=None):
     """Why this commitment needs a company manager, or "" if the agent may make it.
 
-    The company decides what counts as special (M4 roles: "optional approval
-    for special/high-value cases"): a value above which a manager must approve,
-    and whether high-risk shipments need one. A manager is never stopped, nor
-    is a request already with a manager. A company with no active manager is
-    not stopped either, because escalating would strand the request.
+    Currently disabled: a single company agent's approval is sufficient for all commitments.
     """
-    if request_obj.status == lifecycle.ESCALATED:
-        return ""
-    company = request_obj.company
-    managers = managers_for(company)
-    if not managers.exists():
-        return ""
-    if managers.filter(user_email__iexact=actor.get("email", "")).exists():
-        return ""
-
-    selection = request_obj.selection
-    value = amount if amount is not None else selection.selected_total_price
-    limit = company.manager_approval_threshold
-    currency = selection.selected_currency
-    if limit and value and value > limit:
-        return (
-            f"{currency} {value:,.0f} is above {company.name}'s manager approval "
-            f"limit of {currency} {limit:,.0f}."
-        )
-
-    offer = selection.company_quote
-    risk = ((offer.risk_level if offer else "") or "").upper()
-    if company.manager_approval_high_risk and risk in ("HIGH", "CRITICAL"):
-        return f"The shipment is assessed {risk} risk."
     return ""
 
 
