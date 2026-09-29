@@ -209,6 +209,53 @@ class QuoteRevisionSerializer(serializers.ModelSerializer):
         ]
 
 
+def _doc_category_key(doc_type, file_name):
+    f = (file_name or "").lower()
+    t = (doc_type or "").lower()
+    if "origin" in f or "coo" in f:
+        return "certificate_of_origin"
+    if "lading" in f or "waybill" in f or "bl" in f or "b_l" in f or "b/l" in f:
+        return "bill_of_lading"
+    if "invoice" in f or "inv" in f:
+        return "commercial_invoice"
+    if "packing" in f or "pl" in f:
+        return "packing_list"
+    if "origin" in t or "coo" in t:
+        return "certificate_of_origin"
+    if "lading" in t or "waybill" in t or "b/l" in t:
+        return "bill_of_lading"
+    if "invoice" in t:
+        return "commercial_invoice"
+    if "packing" in t:
+        return "packing_list"
+    return (t or f).strip()
+
+
+def _score_doc(doc, category):
+    f = (doc.file_name or "").lower()
+    t = (doc.document_type or "").lower()
+    score = 0
+    if category == "bill_of_lading" and ("lading" in f or "waybill" in f or "bl" in f):
+        score += 10
+    elif category == "certificate_of_origin" and ("origin" in f or "coo" in f):
+        score += 10
+    elif category == "commercial_invoice" and ("invoice" in f or "inv" in f):
+        score += 10
+    elif category == "packing_list" and ("packing" in f or "pl" in f):
+        score += 10
+
+    if "lading" in t and ("origin" in f or "coo" in f or "invoice" in f or "packing" in f):
+        score -= 20
+    if "origin" in t and ("lading" in f or "invoice" in f or "packing" in f):
+        score -= 20
+
+    if doc.agent_status == "VERIFIED":
+        score += 5
+    if doc.file:
+        score += 2
+    return score
+
+
 def shipment_documents(selection):
     """What the customer has uploaded for this selection's shipment."""
     from customs.models import ShipmentDocument
@@ -217,6 +264,22 @@ def shipment_documents(selection):
         shipment_id=selection.shipment_id
     ).order_by("-uploaded_at")
     company = selection.company.code
+
+    category_best = {}
+    seen_files = set()
+    for doc in docs:
+        cat = _doc_category_key(doc.document_type, doc.file_name)
+        score = _score_doc(doc, cat)
+        if cat not in category_best or score > category_best[cat][1]:
+            category_best[cat] = (doc, score)
+
+    unique_docs = []
+    for doc, _ in category_best.values():
+        f = (doc.file_name or "").lower()
+        if f not in seen_files:
+            seen_files.add(f)
+            unique_docs.append(doc)
+
     return [
         {
             "id": str(doc.id),
@@ -234,7 +297,7 @@ def shipment_documents(selection):
             "customsRemarks": doc.rejection_reason,
             "uploadedAt": doc.uploaded_at,
         }
-        for doc in docs
+        for doc in unique_docs
     ]
 
 

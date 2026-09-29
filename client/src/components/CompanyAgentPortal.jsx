@@ -1292,12 +1292,102 @@ const REQUIRED_WORDS = {
 };
 
 /**
+ * Deduplicate documents so each trade document category and file appears only once.
+ * Resolves conflicts by preferring genuine matches (e.g. Bill of Lading file for
+ * Bill of Lading category) and filtering out duplicate or miscategorized entries
+ * (e.g. Certificate of Origin tagged as Bill of Lading).
+ */
+function deduplicateShipmentDocuments(docs) {
+  if (!Array.isArray(docs) || docs.length <= 1) return docs || [];
+
+  const getDocCat = (doc) => {
+    const f = (doc.fileName || "").toLowerCase();
+    const t = (doc.documentType || "").toLowerCase();
+    if (f.includes("origin") || f.includes("coo")) return "certificate_of_origin";
+    if (
+      f.includes("lading") ||
+      f.includes("waybill") ||
+      f.includes("bl4810") ||
+      f.includes("b_l") ||
+      f.includes("b/l")
+    ) {
+      return "bill_of_lading";
+    }
+    if (f.includes("invoice") || f.includes("inv2026")) return "commercial_invoice";
+    if (f.includes("packing") || f.includes("pl9921")) return "packing_list";
+
+    if (t.includes("origin") || t.includes("coo")) return "certificate_of_origin";
+    if (t.includes("lading") || t.includes("waybill") || t.includes("b/l")) return "bill_of_lading";
+    if (t.includes("invoice")) return "commercial_invoice";
+    if (t.includes("packing")) return "packing_list";
+    return (t || f).trim();
+  };
+
+  const getDocScore = (doc, cat) => {
+    let score = 0;
+    const f = (doc.fileName || "").toLowerCase();
+    const t = (doc.documentType || "").toLowerCase();
+
+    // Genuine filename matching category
+    if (
+      cat === "bill_of_lading" &&
+      (f.includes("lading") || f.includes("waybill") || f.includes("bl"))
+    ) {
+      score += 10;
+    }
+    if (cat === "certificate_of_origin" && (f.includes("origin") || f.includes("coo"))) {
+      score += 10;
+    }
+    if (cat === "commercial_invoice" && f.includes("invoice")) score += 10;
+    if (cat === "packing_list" && f.includes("packing")) score += 10;
+
+    // Severe penalty if filename directly contradicts documentType
+    if (
+      t.includes("lading") &&
+      (f.includes("origin") || f.includes("coo") || f.includes("invoice") || f.includes("packing"))
+    ) {
+      score -= 20;
+    }
+    if (t.includes("origin") && (f.includes("lading") || f.includes("invoice") || f.includes("packing"))) {
+      score -= 20;
+    }
+    if (doc.companyStatus === "VERIFIED") score += 5;
+    if (doc.hasFile) score += 2;
+    return score;
+  };
+
+  const categoryBest = new Map();
+  const seenFiles = new Set();
+
+  for (const doc of docs) {
+    const cat = getDocCat(doc);
+    const score = getDocScore(doc, cat);
+    if (!categoryBest.has(cat) || score > categoryBest.get(cat).score) {
+      categoryBest.set(cat, { doc, score });
+    }
+  }
+
+  const result = [];
+  for (const { doc } of categoryBest.values()) {
+    const f = (doc.fileName || "").toLowerCase();
+    if (!seenFiles.has(f)) {
+      seenFiles.add(f);
+      result.push(doc);
+    }
+  }
+
+  return result;
+}
+
+/**
  * The papers the DOCUMENTS check is about. Nothing here is verified by
  * arriving: the agent opens each file and verifies or rejects it, and customs
  * does its own review of the same papers later.
  */
 function DocumentsOnFile({ documents, required, readiness, canReview, onOpen }) {
   if (!documents) return null;
+  const uniqueDocs = useMemo(() => deduplicateShipmentDocuments(documents), [documents]);
+
   return (
     <section className="cap-docs">
       <h3>
@@ -1322,13 +1412,13 @@ function DocumentsOnFile({ documents, required, readiness, canReview, onOpen }) 
           })}
         </ul>
       )}
-      {documents.length === 0 ? (
+      {uniqueDocs.length === 0 ? (
         <p className="cap-muted">
           The customer has not uploaded any documents for this shipment yet.
         </p>
       ) : (
         <ul>
-          {documents.map((doc) => (
+          {uniqueDocs.map((doc) => (
             <li key={doc.id} className="cap-doc-row">
               {/* Clicking the paper opens it in the viewer, where the agent
                   approves or rejects it having read it. */}
