@@ -9,7 +9,6 @@ import {
   ShieldCheck,
   Clock,
   Filter,
-  Trash2,
   ExternalLink,
   ChevronRight,
   Info,
@@ -95,7 +94,17 @@ export default function NotificationsCenter() {
     try {
       setError("");
       const data = await listNotifications(token, { limit: 50 });
-      setNotifications((data.results || []).map(presentNotification));
+      const raw = (data.results || []).map(presentNotification);
+      const seen = new Set();
+      const unique = [];
+      for (const item of raw) {
+        const key = item.id ? String(item.id) : `${item.title}::${item.message}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          unique.push(item);
+        }
+      }
+      setNotifications(unique);
       setUnreadCount(data.unread_count || 0);
     } catch (err) {
       setError(err.message || "Could not load notifications.");
@@ -134,10 +143,6 @@ export default function NotificationsCenter() {
     }
   };
 
-  // Notifications are an audit-relevant server record, so the UI marks them read
-  // rather than deleting them outright.
-  const clearAll = markAllAsRead;
-
   const filtered = notifications.filter((n) => {
     if (filter === "unread") return !n.read;
     if (filter === "quotes") return n.category === "quotes" || n.category === "pricing";
@@ -165,11 +170,6 @@ export default function NotificationsCenter() {
           {unreadCount > 0 && (
             <button className="notif-btn-secondary" onClick={markAllAsRead}>
               <CheckCircle2 size={16} /> Mark all read
-            </button>
-          )}
-          {notifications.length > 0 && (
-            <button className="notif-btn-ghost" onClick={clearAll}>
-              <Trash2 size={16} /> Mark all read
             </button>
           )}
         </div>
