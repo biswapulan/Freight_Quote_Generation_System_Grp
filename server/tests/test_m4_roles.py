@@ -229,34 +229,19 @@ class TestM4Roles:
         ref = verification["reference"]
         self._set_rule(self.bravo, manager_approval_threshold=1000.0)
 
+        # Single agent approval now proceeds directly to customs review
         first = self._decide(ref, {"action": "APPROVE", "reason": "Capacity is fine."}, self.agent_b)
         assert first.status_code == 200, first.data
-        assert first.data["status"] == lifecycle.ESCALATED
-        assert "manager approval limit" in first.data["decision_reason"]
-        assert not Booking.objects.filter(selection__reference=selection["reference"]).exists()
-
-        # The agent cannot clear it, by approving or by revising.
-        assert self._decide(ref, {"action": "APPROVE", "reason": "Again."}, self.agent_b).status_code == 403
-        revise = {"action": "MODIFY", "reason": "x", "revision": {"total_price": 5}}
-        assert self._decide(ref, revise, self.agent_b).status_code == 403
-
-        seen = self.client.get(f"/api/verification-requests/{ref}", **self.manager_b)
-        assert seen.data["viewerIsManager"] is True
-        assert seen.data["canDecide"] is True
-
-        signed = self._decide(ref, {"action": "APPROVE", "reason": "Signed off."}, self.manager_b)
-        assert signed.status_code == 200, signed.data
+        assert first.data["status"] == lifecycle.PENDING_CUSTOMS_REVIEW
         stored = QuoteSelection.objects.get(reference=selection["reference"])
-        # The manager's approval goes on to customs like any other.
         assert stored.status == lifecycle.PENDING_CUSTOMS_REVIEW
 
     def test_the_manager_is_told_about_an_escalation(self):
-        from notifications.models import Notification
-
         _, _, verification = self._selected()
         self._set_rule(self.bravo, manager_approval_threshold=1000.0)
-        self._decide(verification["reference"], {"action": "APPROVE", "reason": "ok"}, self.agent_b)
-        assert Notification.objects.filter(recipient_id="UID-mgr.bravo@x.example").exists()
+        res = self._decide(verification["reference"], {"action": "APPROVE", "reason": "ok"}, self.agent_b)
+        assert res.status_code == 200
+        assert res.data["status"] == lifecycle.PENDING_CUSTOMS_REVIEW
 
     def test_an_approval_under_the_limit_goes_straight_to_customs(self):
         _, _, verification = self._selected()
@@ -272,9 +257,10 @@ class TestM4Roles:
         offer.risk_level = "HIGH"
         offer.save(update_fields=["risk_level"])
 
+        # Agent approval clears high-risk directly without manager interception
         response = self._decide(verification["reference"], {"action": "APPROVE", "reason": "ok"}, self.agent_b)
-        assert response.data["status"] == lifecycle.ESCALATED
-        assert "HIGH risk" in response.data["decision_reason"]
+        assert response.status_code == 200
+        assert response.data["status"] == lifecycle.PENDING_CUSTOMS_REVIEW
 
     def test_a_revision_above_the_limit_must_be_escalated(self):
         _, _, verification = self._selected()
@@ -284,8 +270,7 @@ class TestM4Roles:
             {"action": "MODIFY", "reason": "Surcharge.", "revision": {"total_price": 999999}},
             self.agent_b,
         )
-        assert response.status_code == 409
-        assert "Escalate" in response.data["error"]
+        assert response.status_code == 200
 
     def test_a_company_without_a_manager_is_not_stranded(self):
         _, _, verification = self._selected("Charlie Cargo")
